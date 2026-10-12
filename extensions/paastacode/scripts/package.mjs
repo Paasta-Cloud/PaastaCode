@@ -14,7 +14,7 @@ await mkdir(client,{recursive:true});await mkdir(dist,{recursive:true});
 // Rebuild only our known staging files; never copy credentials, workspaces or node_modules.
 const included=["bin","src","web","licenses","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
 for(const file of included)await cp(join(root,file),join(client,file),{recursive:true});
-await writeFile(join(client,"package.json"),JSON.stringify({...pkg,dependencies:{},devDependencies:{},scripts:{}},null,2));
+await writeFile(join(client,"package.json"),JSON.stringify({...pkg,name:"paastacode",dependencies:{},devDependencies:{},scripts:{}},null,2));
 const engineMeta=require("opencode-ai/package.json"),engineRoot=dirname(require.resolve("opencode-ai/package.json"));
 let engine=join(engineRoot,engineMeta.bin.opencode);
 const bytes=await readFile(engine);
@@ -51,7 +51,9 @@ async function bundleNode(destination){
 }
 if(target==="desktop"){
   const binary=require.resolve("electron-builder/cli.js");
-  run(process.execPath,[binary,"--config","desktop/builder.cjs","--publish","never"]);
+  const env={...process.env};
+  for(const key of ["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"])if(!env[key])delete env[key];
+  run(process.execPath,[binary,"--config","desktop/builder.cjs","--publish","never"],{env});
 }else if(target==="vscode"){
   const extension=join(stage,"vscode");await mkdir(extension,{recursive:true});
   for(const file of ["extension.cjs","README.md","LICENSE"])await copyFile(join(root,"vscode",file),join(extension,file));
