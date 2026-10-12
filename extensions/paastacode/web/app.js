@@ -52,7 +52,7 @@ async function sessions(){
         session=null;$("permissions").replaceChildren();$("composer").hidden=true;$("save").disabled=true;$("empty").hidden=true;
         $("save-state").textContent="ذخیره‌شده در حساب";
         const viewGeneration=generation;
-        $("messages").append(cloudActions({saved,api,run,notice,isCurrent:()=>generation===viewGeneration&&mode==="cloud",onDeleted:async()=>{generation++;$("messages").replaceChildren();$("save-state").textContent="نسخهٔ حساب حذف شد";$("empty").hidden=false;await sessions();}}));
+        $("messages").append(cloudActions({saved,api,run,notice,getState:()=>state,isCurrent:()=>generation===viewGeneration&&mode==="cloud",onDeleted:async()=>{generation++;$("messages").replaceChildren();$("save-state").textContent="نسخهٔ حساب حذف شد";$("empty").hidden=false;await sessions();}}));
         const actions=document.createElement("div");actions.className="suggestions";
         const restore=document.createElement("button");restore.textContent="ادامه در این پروژه";
         restore.onclick=()=>run(restore,async()=>{

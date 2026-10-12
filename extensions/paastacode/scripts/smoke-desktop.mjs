@@ -9,13 +9,14 @@ const candidates=process.platform==="win32"?["dist/win-unpacked/PaastaCode.exe"]
 const binary=candidates.map(path=>resolve(path)).find(path=>existsSync(path));
 if(!binary)throw new Error("Packaged desktop executable not found; Linux acceptance requires installing the built deb first.");
 const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:join(qa,"capture")};
-let output="";
+let output="",diagnostic="";
 await new Promise((done,reject)=>{
   const child=spawn(binary,["--workspace="+qa,"--user-data-dir="+join(qa,"user-data")],{env,windowsHide:true,stdio:["ignore","pipe","pipe"]});
   const timeout=setTimeout(()=>{child.kill();reject(new Error("Packaged desktop did not finish its isolated acceptance check."));},90000);
-  child.stdout.on("data",chunk=>{output=(output+chunk).slice(-8192);});child.stderr.resume();
+  child.stdout.on("data",chunk=>{output=(output+chunk).slice(-8192);});
+  child.stderr.on("data",chunk=>{diagnostic=(diagnostic+chunk).slice(-8192);});
   child.once("error",error=>{clearTimeout(timeout);reject(error);});
-  child.once("exit",code=>{clearTimeout(timeout);if(code===0&&output.includes("PaastaCode desktop smoke passed"))done();else reject(new Error("Packaged desktop acceptance failed ("+code+")."));});
+  child.once("exit",code=>{clearTimeout(timeout);if(code===0&&output.includes("PaastaCode desktop smoke passed"))done();else reject(new Error("Packaged desktop acceptance failed ("+code+"): "+diagnostic.replace(/paasta(?:_ai)?_[A-Za-z0-9_-]{43}/g,"[redacted]").replaceAll(qa,"[QA profile]")));});
 });
 const png=await readFile(join(qa,"capture/desktop.png"));
 if(png.subarray(0,8).toString("hex")!=="89504e470d0a1a0a"||(await stat(join(qa,"capture/desktop.png"))).size<10000)throw new Error("Desktop capture missing or invalid");
