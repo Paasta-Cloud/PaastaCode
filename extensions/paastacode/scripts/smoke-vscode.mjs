@@ -13,8 +13,9 @@ assert.equal(release.version,pkg.version);assert.equal(release.platform,process.
 const expected=release.files.find(file=>file.name===vsix.split(/[\\/]/).at(-1));assert(expected,"VSIX must appear in the native release manifest");
 const bytes=await readFile(vsix);assert.equal(bytes.length,expected.bytes);assert.equal(createHash("sha256").update(bytes).digest("hex"),expected.sha256);
 await mkdir(resolve(".artifacts"),{recursive:true});
-const root=await realpath(resolve(".artifacts"));
-const home=await mkdtemp(join(root,"vscode-installed-")),extensions=join(home,"extensions"),profile=join(home,"profile"),workspace=join(home,"workspace"),driver=join(home,"driver");
+// macOS Unix sockets reject long repository-relative user-data paths.
+const root=await realpath(process.platform==="win32"?resolve(".artifacts"):"/tmp");
+const home=await mkdtemp(join(root,"pc-vsc-")),extensions=join(home,"extensions"),profile=join(home,"profile"),workspace=join(home,"workspace"),driver=join(home,"driver");
 const output=resolve(".artifacts/vscode-acceptance");
 for(const dir of [extensions,profile,workspace,driver,output])await mkdir(dir,{recursive:true});
 await writeFile(join(driver,"package.json"),JSON.stringify({name:"paastacode-acceptance-driver",publisher:"paasta-qa",version:"1.0.0",engines:{vscode:"^1.95.0"}}));
@@ -42,6 +43,6 @@ try{
   const result=JSON.parse(await readFile(join(output,"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
   console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and Vazirmatn`);
 }finally{
-  assert((await realpath(home)).startsWith(root+sep+"vscode-installed-"));
+  assert((await realpath(home)).startsWith(root+sep+"pc-vsc-"));
   await rm(home,{recursive:true,force:true,maxRetries:10,retryDelay:200});
 }
