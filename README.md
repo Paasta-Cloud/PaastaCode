@@ -15,7 +15,7 @@ npm run desktop -- --workspace=/absolute/path/to/your/project
 
 Node.js 22+ is required. Install from the client directory; the root Bun workspace is the retained upstream source and is not needed to run this client. See the [Persian setup guide](extensions/paastacode/README.md), [API contract](extensions/paastacode/API.md), [roadmap](extensions/paastacode/ROADMAP.md), and [licences and attribution](extensions/paastacode/THIRD_PARTY_NOTICES.md).
 
-**Local development alpha:** Paasta's new account endpoints still require backend deployment and real-account acceptance. Public source does not mean a live hosted workspace or signed installer is available. Paasta's hosted account/billing service is external to this repository. The commercial Yekan Bakh font is not redistributed; point `PAASTACODE_YEKAN_FONT` at your licensed local TTF file, or use the system-font fallback.
+**Local development alpha:** Paasta's account backend is deployed; isolated synthetic accounts have verified live device login, model access, encrypted conversation save/readback and revocation. Paid-inference and end-user acceptance remain. Public source does not mean a live hosted workspace or signed installer is available. Paasta's hosted account/billing service is external to this repository. The commercial Yekan Bakh font is not redistributed; point `PAASTACODE_YEKAN_FONT` at your licensed local TTF file, or use the system-font fallback.
 
 Paasta additions are MIT-licensed. The original OpenCode MIT licence is preserved below and in the repository root; third-party assets and trademarks retain their own terms.
 
