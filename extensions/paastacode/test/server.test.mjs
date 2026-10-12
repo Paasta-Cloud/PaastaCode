@@ -5,7 +5,7 @@ import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 process.env.PAASTACODE_HOME=resolve(".artifacts/server-state");
 const {startServer}=await import("../src/server.mjs");
-const {PaastaAccount}=await import("../src/account.mjs");
+const {PaastaAccount,writePrivate,readPrivate}=await import("../src/account.mjs");
 
 test("expired credentials can be cleared while transport failures retain retry state",async()=>{
   const account=new PaastaAccount("https://example.test",resolve(".artifacts/expired-account"));
@@ -13,6 +13,30 @@ test("expired credentials can be cleared while transport failures retain retry s
   await account.logout();assert.equal(account.credentials,null);
   account.credentials={token:"synthetic"};account.request=async()=>{throw new Error("network unavailable");};
   await assert.rejects(account.logout());assert.equal(account.credentials.token,"synthetic");
+});
+
+test("clearing an old grant cannot delete a newer login written by another client",async()=>{
+  const home=resolve(".artifacts/account-replacement-"+process.pid),account=new PaastaAccount("https://example.test",home);
+  account.credentials={origin:account.origin,token:"synthetic-old"};
+  await writePrivate(account.path,{origin:account.origin,token:"synthetic-new",aiKey:"synthetic-new-key"});
+  account.request=async()=>{const error=new Error("old grant already revoked");error.status=401;throw error;};
+  await account.logout();assert.equal(account.credentials,null);assert.equal((await readPrivate(account.path)).token,"synthetic-new");
+});
+
+test("a stale window cannot revoke the account that a newer window just logged into",async()=>{
+  let logouts=0;
+  const account={credentials:{token:"synthetic-a"},context:async()=>({account:{id:"user",tenantId:"tenant"},models:[]}),
+    async poll(){this.credentials={token:"synthetic-b"};return {pending:false};},async logout(){logouts++;this.credentials=null;}};
+  const app=await startServer({account,runtime:{async stop(){}},deployment:{async disconnect(){}}});
+  const headers={Authorization:"Bearer "+app.capability};
+  try{
+    const old=await (await fetch(app.url+"/api/state",{headers})).json();
+    assert.equal((await fetch(app.url+"/api/login/poll",{method:"POST",headers:{...headers,"X-PaastaCode-Account":String(old.accountRevision)}})).status,200);
+    const stale=await fetch(app.url+"/api/logout",{method:"POST",headers:{...headers,"X-PaastaCode-Account":String(old.accountRevision)}});
+    assert.equal(stale.status,409);assert.equal((await stale.json()).accountChanged,true);assert.equal(logouts,0);assert.equal(account.credentials.token,"synthetic-b");
+    const fresh=await (await fetch(app.url+"/api/state",{headers})).json();
+    assert.equal((await fetch(app.url+"/api/logout",{method:"POST",headers:{...headers,"X-PaastaCode-Account":String(fresh.accountRevision)}})).status,200);assert.equal(logouts,1);
+  }finally{await app.close();}
 });
 
 test("device broker rejects malformed IDs and only stops execution after current-grant revocation",async()=>{

@@ -21,3 +21,11 @@ await new Promise((done,reject)=>{
 const png=await readFile(join(qa,"capture/desktop.png"));
 if(png.subarray(0,8).toString("hex")!=="89504e470d0a1a0a"||(await stat(join(qa,"capture/desktop.png"))).size<10000)throw new Error("Desktop capture missing or invalid");
 console.log("Packaged desktop executed with an isolated profile; Persian RTL, Vazirmatn and preload passed on "+process.platform+"/"+process.arch);
+// Closing the actual packaged window must leave its shared workspace broker alive.
+process.env.PAASTACODE_HOME=join(qa,"account");
+const {readPrivate}=await import("../src/account.mjs"),{workspaceKey}=await import("../src/runtime.mjs");
+const connection=await readPrivate(join(qa,"account","workspace-"+workspaceKey(qa)+".json"));
+if(!connection?.daemon)throw new Error("Desktop did not start the independent workspace service");
+const headers={Authorization:"Bearer "+connection.capability};
+if(!(await fetch(connection.url+"/api/state",{headers})).ok)throw new Error("Closing the desktop stopped the shared workspace");
+await fetch(connection.url+"/api/shutdown",{method:"POST",headers});

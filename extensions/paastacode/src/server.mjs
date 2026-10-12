@@ -1,6 +1,6 @@
 import {createServer} from "node:http";
 import {randomBytes,timingSafeEqual,createHash} from "node:crypto";
-import {readFile,mkdir,rm,realpath,open} from "node:fs/promises";
+import {readFile,mkdir,rm,realpath,open,stat} from "node:fs/promises";
 import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {PaastaAccount,stateHome,readPrivate,writePrivate} from "./account.mjs";
@@ -19,7 +19,7 @@ async function body(request){
   let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>1_100_000)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
-export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false}={}){
+export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false,daemon=false}={}){
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
   await mkdir(stateHome,{recursive:true,mode:0o700});
@@ -59,7 +59,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
     starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);
-      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,engineUrl:runtime.url,enginePassword:runtime.password});
+      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
   };
@@ -84,11 +84,36 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       if(idleOnly&&!snapshot.messages.length)return null;
       return {title:session.title.slice(0,160),snapshot};
     }});
+  const credentialStamp=async()=>account.path?stat(account.path).then(value=>value.mtimeMs+":"+value.size).catch(error=>{if(error.code==="ENOENT")return "missing";throw error;}):null;
+  let accountMutations=Promise.resolve(),accountRevision=1;
+  const mutateAccount=(work,expected)=>{const result=accountMutations.then(async()=>{
+    if(expected!==undefined&&String(accountRevision)!==expected){const error=new Error("حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.");error.status=409;error.accountChanged=true;throw error;}
+    const before=account.credentials?.token+":"+account.credentials?.aiKey;accountChanging=true;
+    try{await syncManager.barrier();if(starting)await starting.catch(()=>{});return await work();}
+    finally{if(before!==account.credentials?.token+":"+account.credentials?.aiKey)accountRevision++;accountChanging=false;}
+  });accountMutations=result.catch(()=>{});return result;};
+  let lastCredentialStamp=await credentialStamp(),accountReloading=null;
+  const reloadAccount=async(force=false)=>{
+    if(!account.load||!account.path)return;
+    const stamp=await credentialStamp();if(!force&&stamp===lastCredentialStamp)return;
+    if(accountReloading)return accountReloading;
+    accountReloading=mutateAccount(async()=>{
+      const before=account.credentials?.token+":"+account.credentials?.aiKey;
+      await account.load();if(before!==account.credentials?.token+":"+account.credentials?.aiKey){await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});}lastCredentialStamp=stamp;
+    }).finally(()=>{accountReloading=null;});
+    return accountReloading;
+  };
   const json=(response,data,status=200)=>{response.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(JSON.stringify(data));};
   async function api(request,response,url){
     if(!validCapability(request.headers.authorization?.replace(/^Bearer /,""),capability)){json(response,{error:"دسترسی مجاز نیست."},401);return;}
     if(request.headers.origin&&request.headers.origin!==origin&&!(hosted&&request.headers.origin==="https://code.paasta.cloud")){json(response,{error:"مبدأ درخواست معتبر نیست."},403);return;}
     const route=request.method+" "+url.pathname;
+    if(route==="POST /api/account/reload"){await reloadAccount(true);return json(response,{ok:true});}
+    if(daemon)await reloadAccount();
+    await accountMutations;
+    const expectedAccount=request.headers["x-paastacode-account"];
+    if(request.method!=="GET"&&expectedAccount!==undefined&&String(accountRevision)!==expectedAccount)return json(response,{error:"حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.",accountChanged:true},409);
+    if(route==="POST /api/ready"){await ready();return json(response,{ok:true});}
     if(route==="POST /api/shutdown"){
       response.once("finish",()=>void close());return json(response,{ok:true});
     }
@@ -96,40 +121,32 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
       return json(response,{workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true}});
+        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon}});
     }
-    if(route==="POST /api/login")return json(response,await account.begin());
+    if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
-      if(!loginPolling)loginPolling=account.poll().finally(()=>{loginPolling=null;});
-      const result=await loginPolling;if(!result.pending){context=await account.context();}
-      return json(response,result);
+      if(!loginPolling)loginPolling=mutateAccount(async()=>{const previous=account.credentials?.token,result=await account.poll();if(!result.pending){if(previous!==account.credentials?.token){await runtime.stop();context=null;}context=await account.context();}return result;},expectedAccount).finally(()=>{loginPolling=null;});
+      return json(response,await loginPolling);
     }
-    if(route==="POST /api/connect"){const input=await body(request);const result=await account.connect(Number(input.dailyLimitToman));await ready();return json(response,result);}
+    if(route==="POST /api/connect"){const input=await body(request);return json(response,await mutateAccount(async()=>{const previous=account.credentials?.aiKey,result=await account.connect(Number(input.dailyLimitToman));if(previous!==account.credentials?.aiKey){await runtime.stop();context=null;}await ready();return result;},expectedAccount));}
     if(route==="POST /api/logout"){
-      accountChanging=true;
-      try{await syncManager.barrier();if(loginPolling)await loginPolling;await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});return json(response,{ok:true});}
-      finally{accountChanging=false;}
+      return json(response,await mutateAccount(async()=>{await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});return {ok:true};},expectedAccount));
     }
     if(route==="GET /api/devices")return json(response,await account.request("/api/paastacode/devices"));
     if(route==="DELETE /api/devices"){
       const id=url.searchParams.get("id");
       if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||""))throw new Error("اتصال معتبر نیست.");
-      if(starting)await starting;
-      if(loginPolling)await loginPolling;
+      return json(response,await mutateAccount(async()=>{
       const result=await account.request("/api/paastacode/devices?id="+encodeURIComponent(id),{method:"DELETE"});
       if(result.current){
-        accountChanging=true;
-        try{
-        await syncManager.barrier();
         await runtime.stop();
         // Remote revocation already committed. Preserve a failed deployment disconnect for retry.
         try{await deployment.disconnect();}catch{result.warning="اتصال اصلی قطع شد؛ قطع مجوز انتشار کامل نشد. پس از ورود دوباره آن را از اتصال‌های حساب قطع کنید.";}
         // The server already revoked this token. Clear locally without a second network request.
         await account.forget();context=null;
-        await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});
-        }finally{accountChanging=false;}
+        await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});
       }
-      return json(response,result);
+      return result;},expectedAccount));
     }
     if(route==="GET /api/deployment/state")return json(response,await deployment.state());
     if(route==="POST /api/deployment/login")return json(response,await deployment.begin());
@@ -232,8 +249,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
         response.setHeader("Access-Control-Allow-Origin","https://code.paasta.cloud");response.setHeader("Vary","Origin");
         if(request.method==="OPTIONS"){
           const method=request.headers["access-control-request-method"],headers=String(request.headers["access-control-request-headers"]||"").toLowerCase().split(",").map(h=>h.trim()).filter(Boolean);
-          if(!["GET","POST","DELETE"].includes(method)||headers.some(h=>!["authorization","content-type"].includes(h))){json(response,{error:"درخواست مجاز نیست."},403);return;}
-          response.writeHead(204,{"Access-Control-Allow-Methods":"GET, POST, DELETE","Access-Control-Allow-Headers":"Authorization, Content-Type","Access-Control-Allow-Private-Network":"true","Access-Control-Max-Age":"300"});response.end();return;
+          if(!["GET","POST","DELETE"].includes(method)||headers.some(h=>!["authorization","content-type","x-paastacode-account"].includes(h))){json(response,{error:"درخواست مجاز نیست."},403);return;}
+          response.writeHead(204,{"Access-Control-Allow-Methods":"GET, POST, DELETE","Access-Control-Allow-Headers":"Authorization, Content-Type, X-PaastaCode-Account","Access-Control-Allow-Private-Network":"true","Access-Control-Max-Age":"300"});response.end();return;
         }
       }
       if(url.pathname.startsWith("/api/")){await api(request,response,url);return;}
@@ -249,13 +266,14 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       response.writeHead(200,{"Content-Type":type,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",
         "Content-Security-Policy":"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; "+(embed?"":"frame-ancestors 'self'; ")+"base-uri 'none'; form-action 'none'",
         "Referrer-Policy":"no-referrer"});response.end(data);
-    }catch(error){json(response,{error:error.message||"عملیات ناموفق بود."},error.status||400);}
+    }catch(error){json(response,{error:error.message||"عملیات ناموفق بود.",...(error.accountChanged?{accountChanged:true}:{})},error.status||400);}
   });
   await new Promise((resolveListen,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolveListen);});
   origin="http://127.0.0.1:"+server.address().port;
   await mkdir(stateHome,{recursive:true,mode:0o700});
-  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});
+  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});
   syncManager.start();
-  const close=async()=>{if(closed)return;closed=true;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}};
+  const accountTimer=daemon?setInterval(()=>reloadAccount().catch(()=>{}),5000):null;accountTimer?.unref();
+  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}};
   return {url:origin,capability,runtime,close,server,ensureReady:ready,launchUrl:origin+"/#cap="+capability};
 }

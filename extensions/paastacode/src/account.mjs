@@ -1,6 +1,6 @@
 import {mkdir,readFile,writeFile,rename,rm} from "node:fs/promises";
 import {homedir} from "node:os";
-import {join} from "node:path";
+import {join,dirname} from "node:path";
 import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
 
@@ -23,7 +23,7 @@ async function protect(bytes,decode=false){
   });
 }
 export async function writePrivate(path,value){
-  await mkdir(stateHome,{recursive:true,mode:0o700});
+  await mkdir(dirname(path),{recursive:true,mode:0o700});
   const temp=path+"."+randomUUID()+".tmp";
   try {await writeFile(temp,await protect(Buffer.from(JSON.stringify(value))),{mode:0o600});await rename(temp,path);}
   finally{await rm(temp,{force:true});}
@@ -85,5 +85,9 @@ export class PaastaAccount {
     catch(error){if(![401,403].includes(error.status))throw error;}
     await this.forget();
   }
-  async forget(){await rm(this.path,{force:true});this.credentials=null;this.device=null;}
+  async forget(){
+    const token=this.credentials?.token,saved=await readPrivate(this.path);
+    if(!saved||saved.token===token)await rm(this.path,{force:true});
+    this.credentials=null;this.device=null;
+  }
 }

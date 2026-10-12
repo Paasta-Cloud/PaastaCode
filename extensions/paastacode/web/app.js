@@ -11,15 +11,15 @@ if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace"
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
 let apiOrigin="";
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
-let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false;
+let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
-  const response=await fetch(apiOrigin+"/api/"+path,{method,credentials:"omit",...(apiOrigin?{targetAddressSpace:"loopback"}:{}),headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
-  const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
+  const response=await fetch(apiOrigin+"/api/"+path,{method,credentials:"omit",...(apiOrigin?{targetAddressSpace:"loopback"}:{}),headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json",...(method!=="GET"&&state.features?.independentRuntime&&state.accountRevision?{"X-PaastaCode-Account":String(state.accountRevision)}:{})},body:body?JSON.stringify(body):undefined});
+  const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
@@ -107,7 +107,16 @@ function renderMessages(messages){
   }
 }
 async function refresh(){
-  if(refreshing||!state.configured)return;refreshing=true;
+  if(refreshing)return;refreshing=true;
+  try{
+    if(state.features?.independentRuntime&&Date.now()>=nextAccountPoll){
+      nextAccountPoll=Date.now()+5000;const next=await api("state");
+      const identity=value=>JSON.stringify([value.connected,value.configured,value.account?.id,value.account?.tenantId]);
+      if(identity(next)!==identity(state)){clearAccountView();await loadState();refreshing=false;return;}
+      state.accountRevision=next.accountRevision;
+    }
+  }catch(error){if(!error.stale)notice(error.message,true);refreshing=false;return;}
+  if(!state.configured){refreshing=false;return;}
   const selected=session,version=generation;
   try{
     if(selected){

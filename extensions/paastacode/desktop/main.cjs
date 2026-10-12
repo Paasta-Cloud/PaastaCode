@@ -11,8 +11,8 @@ async function folder(){
   return result.canceled?null:result.filePaths[0];
 }
 async function openWorkspace(workspace){
-  const {startServer}=await import("../src/server.mjs");
-  const next=await startServer({workspace});
+  const {connectWorkspace}=await import("../src/workspace-service.mjs");
+  const next=await connectWorkspace({workspace});
   if(service&&service.url!==next.url)await service.close();service=next;
   await window.loadURL(service.launchUrl);
   if(!process.env.PAASTACODE_DESKTOP_SMOKE){await fs.mkdir(path.dirname(preferences()),{recursive:true});await fs.writeFile(preferences(),JSON.stringify({workspace}),{mode:0o600});}
@@ -38,13 +38,16 @@ app.whenReady().then(async()=>{
     if(event.sender!==window.webContents||changing)return false;changing=true;
     try{
       const workspace=await folder();if(!workspace)return false;
-      const result=await dialog.showMessageBox(window,{type:"question",title:"باز کردن پروژه",message:"پروژهٔ دیگری باز شود؟",detail:"اجرای این پنجره متوقف می‌شود. گفتگوهای ذخیره‌شده باقی می‌مانند.",buttons:["بازگشت","باز کردن پروژه"],defaultId:0,cancelId:0});
+      const result=await dialog.showMessageBox(window,{type:"question",title:"باز کردن پروژه",message:"پروژهٔ دیگری باز شود؟",detail:"کار جاری پروژهٔ قبلی در اجرای مشترک ادامه می‌یابد. بستن این پنجره آن را متوقف نمی‌کند. گفتگوها و فایل‌ها باقی می‌مانند.",buttons:["بازگشت","باز کردن پروژه"],defaultId:0,cancelId:0});
       if(result.response!==1)return false;await openWorkspace(workspace);return true;
     }finally{changing=false;}
   });
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     ...(process.platform==="darwin"?[{role:"appMenu"}]:[]),
-    {label:"پروژه",submenu:[{label:"باز کردن پوشه…",accelerator:"CmdOrCtrl+O",click:()=>window.webContents.executeJavaScript("window.paastacodeDesktop.chooseWorkspace()")},{role:"quit",label:"خروج"}]},
+    {label:"پروژه",submenu:[{label:"باز کردن پوشه…",accelerator:"CmdOrCtrl+O",click:()=>window.webContents.executeJavaScript("window.paastacodeDesktop.chooseWorkspace()")},{label:"توقف اجرای محلی پروژه و خروج",click:async()=>{
+      const result=await dialog.showMessageBox(window,{type:"question",title:"توقف اجرای پروژه",message:"اجرای محلی این پروژه متوقف شود؟",detail:"ارتباط وب، CLI و افزونهٔ همین پروژه قطع می‌شود. فایل‌ها و گفتگوها باقی می‌مانند. انتشارهایی که روی پاستا شروع شده‌اند، آنجا ادامه دارند.",buttons:["بازگشت","توقف و خروج"],defaultId:0,cancelId:0});
+      if(result.response===1){await fetch(service.url+"/api/shutdown",{method:"POST",headers:{Authorization:"Bearer "+service.capability}});app.quit();}
+    }},{role:"quit",label:"بستن پنجره"}]},
     {role:"editMenu",label:"ویرایش"},{role:"viewMenu",label:"نمایش"},
     {label:"راهنما",submenu:[{label:"دریافت نسخهٔ جدید",click:()=>shell.openExternal("https://github.com/Paasta-Cloud/PaastaCode/releases")},{label:"دربارهٔ پاستاکد",click:()=>dialog.showMessageBox(window,{title:"پاستاکد",message:"PaastaCode "+app.getVersion(),detail:"Powered by OpenCode\nفورک متن‌باز با مجوز MIT\nفونت وزیرمتن با مجوز SIL OFL"})}]}
   ]));

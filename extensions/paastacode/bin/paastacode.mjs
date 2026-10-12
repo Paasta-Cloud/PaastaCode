@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
-import {join,resolve} from "node:path";
+import {resolve} from "node:path";
 import {realpath,readFile} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 import {createInterface} from "node:readline/promises";
-import {PaastaAccount,stateHome,readPrivate} from "../src/account.mjs";
-import {startServer} from "../src/server.mjs";
-import {engineCommand,workspaceKey} from "../src/runtime.mjs";
+import {PaastaAccount} from "../src/account.mjs";
+import {connectWorkspace,stopWorkspace,refreshAccounts} from "../src/workspace-service.mjs";
+import {engineCommand} from "../src/runtime.mjs";
 import {PaastaDeployment} from "../src/deployment.mjs";
 
 export function openBrowser(url){
@@ -21,7 +21,7 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode logout\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
@@ -32,9 +32,10 @@ async function main(){
     const device=await account.begin();console.log("کد ورود: "+device.code+"\n"+device.url);openBrowser(device.url);
     while((await account.poll()).pending)await new Promise(r=>setTimeout(r,3000));
     if(budgetArg){await account.connect(budget);console.log("ورود انجام شد. سقف روزانه: "+budget.toLocaleString("fa-IR")+" تومان. برای شروع paastacode cli را اجرا کنید.");}
-    else console.log("ورود انجام شد. برای انتخاب مدل و تأیید سقف مصرف، paastacode web را اجرا کنید.");return;
+    else console.log("ورود انجام شد. برای انتخاب مدل و تأیید سقف مصرف، paastacode web را اجرا کنید.");await refreshAccounts();return;
   }
-  if(command==="logout"){await account.logout();console.log("دسترسی دستگاه لغو شد.");return;}
+  if(command==="logout"){await account.logout();await refreshAccounts();console.log("دسترسی دستگاه لغو شد.");return;}
+  if(command==="stop"){const result=await stopWorkspace(workspace);console.log(result.stopped?"اجرای مشترک این پروژه متوقف شد. فایل‌ها و گفتگوها باقی می‌مانند.":"این پروژه اجرای فعالی ندارد.");return;}
   if(command==="models"){
     const context=await account.context();
     for(const model of context.models)console.log(model.id+" · "+model.name+" · "+Number(model.input_toman_per_million).toLocaleString("fa-IR")+" / "+Number(model.output_toman_per_million).toLocaleString("fa-IR")+" تومان برای هر میلیون توکن ورودی / خروجی");return;
@@ -59,31 +60,17 @@ async function main(){
     if(status.status!=="ready")throw new Error(status.error||"انتشار کامل نشد. وضعیت پروژه را در پاستا بررسی کنید.");
     console.log("پروژه آماده است: "+status.result.domain);return;
   }
-  const saved=await readPrivate(join(stateHome,"workspace-"+workspaceKey(workspace)+".json"));
-  let running;
-  if(saved){
-    try{const response=await fetch(saved.url+"/api/state",{headers:{Authorization:"Bearer "+saved.capability},signal:AbortSignal.timeout(1500)});if(response.ok)running=saved;}catch{}
-  }
   if(command==="cli"){
-    let owned;
-    if(!running){
-      if(!account.credentials?.aiKey)throw new Error("ابتدا paastacode login --daily-limit=50000 را اجرا کنید یا سقف مصرف را در رابط وب تأیید کنید.");
-      owned=await startServer({workspace,account});
-      try{await owned.ensureReady();running={engineUrl:owned.runtime.url,enginePassword:owned.runtime.password};}catch(error){await owned.close();throw error;}
-    }
-    if(!running.engineUrl){if(owned)await owned.close();throw new Error("ابتدا مدل و سقف مصرف را در رابط وب تأیید کنید.");}
-    const child=engineCommand(["attach",running.engineUrl,"--dir",workspace],{stdio:"inherit",env:{...process.env,OPENCODE_SERVER_PASSWORD:running.enginePassword}});
-    child.on("exit",async code=>{if(owned)await owned.close();process.exitCode=code||0;});
-    child.on("error",async()=>{if(owned)await owned.close();console.error("اجرای موتور کدنویسی ممکن نشد.");process.exitCode=1;});return;
+    const service=await connectWorkspace({workspace}),engine=await service.ensureReady();
+    const child=engineCommand(["attach",engine.url,"--dir",workspace],{stdio:"inherit",env:{...process.env,OPENCODE_SERVER_PASSWORD:engine.password}});
+    child.on("exit",code=>{process.exitCode=code||0;});
+    child.on("error",()=>{console.error("اجرای موتور کدنویسی ممکن نشد.");process.exitCode=1;});return;
   }
   if(command!=="web")throw new Error("دستور ناشناخته است. paastacode help را اجرا کنید.");
   const hosted=args.includes("--hosted");
   const launchUrl=app=>hosted?"https://code.paasta.cloud/#local="+encodeURIComponent(app.url)+"&cap="+app.capability:app.url+"/#cap="+app.capability;
-  if(running){if(hosted&&!running.hosted)throw new Error("اجرای محلی فعلی را ببندید و paastacode web --hosted را اجرا کنید.");console.log("پاستاکد برای این پوشه باز است.");if(!args.includes("--no-open"))openBrowser(launchUrl(running));return;}
-  const app=await startServer({workspace,account,hosted});
-  if(hosted&&app.reused&&!app.hosted)throw new Error("اجرای محلی فعلی را ببندید و paastacode web --hosted را اجرا کنید.");
-  console.log("پاستاکد: "+app.url+"\nبرای CLI مشترک: paastacode cli");
+  const app=await connectWorkspace({workspace,hosted});
+  console.log("پاستاکد: "+app.url+"\nاجرای پروژه مستقل از این پنجره ادامه دارد.\nبرای CLI مشترک: paastacode cli\nبرای توقف اجرای محلی: paastacode stop");
   if(!args.includes("--no-open"))openBrowser(launchUrl(app));
-  for(const signal of ["SIGINT","SIGTERM"])process.once(signal,()=>void app.close().then(()=>process.exit()));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href)main().catch(error=>{console.error(error.message);process.exitCode=1;});

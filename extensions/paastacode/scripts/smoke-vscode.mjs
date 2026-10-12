@@ -43,6 +43,9 @@ try{
   const result=JSON.parse(await readFile(join(output,"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
   console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and Vazirmatn`);
 }finally{
+  // Stop only this isolated QA workspace after extension-host shutdown.
+  process.env.PAASTACODE_HOME=join(home,"account");
+  const {stopWorkspace}=await import("../src/workspace-service.mjs");await stopWorkspace(workspace).catch(()=>{});
   assert((await realpath(home)).startsWith(root+sep+"pc-vsc-"));
   await rm(home,{recursive:true,force:true,maxRetries:10,retryDelay:200});
 }

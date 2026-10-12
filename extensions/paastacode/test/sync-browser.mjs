@@ -19,11 +19,17 @@ const runtime={url:"http://127.0.0.1:1",async stop(){},async call(path){
   if(path==="/session/"+sessionId+"/message")return [{info:{role:"user"},parts:[{type:"text",text},{type:"tool",tool:"read",state:{status:"completed",title:"خواندن فایل",output:"synthetic-private-tool-output"}}]}];
   if(path==="/session/status")return {};if(path==="/permission")return [];throw new Error("Unexpected synthetic route");
 }};
-const app=await startServer({account,runtime,deployment:{state:async()=>({connected:false})}});
+const hosted=process.env.PAASTACODE_SYNC_HOSTED==="true";
+const app=await startServer({account,runtime,hosted,deployment:{state:async()=>({connected:false})}});
 const browser=await chromium.launch({headless:true,channel:process.platform==="win32"?"msedge":undefined}),page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 page.on("pageerror",error=>errors.push(error.message));
 try{
-  await page.goto(app.launchUrl);await page.locator("#sessions button").click();await page.locator("#sync-open").waitFor({state:"visible"});
+  if(hosted){
+    const cdp=await page.context().newCDPSession(page),{targetInfo}=await cdp.send("Target.getTargetInfo");
+    for(const name of ["local-network-access","loopback-network"])await cdp.send("Browser.setPermission",{browserContextId:targetInfo.browserContextId,origin:"https://code.paasta.cloud",permission:{name},setting:"granted"});
+    await page.goto("https://code.paasta.cloud/#local="+encodeURIComponent(app.url)+"&cap="+app.capability);await page.locator("#workspace-connect button").click();await page.locator("#workspace-connect").waitFor({state:"hidden"});
+  }else await page.goto(app.launchUrl);
+  await page.locator("#sessions button").click();await page.locator("#sync-open").waitFor({state:"visible"});
   assert.equal(writes,0);await page.locator("#sync-open").click();await page.locator("#sync-enabled").check();await page.keyboard.press("Escape");assert.equal(writes,0);
   await page.locator("#sync-open").click();assert.equal(await page.locator("#sync-enabled").isChecked(),false);
   await page.locator("#sync-enabled").check();await page.locator('#sync-dialog button[value="apply"]').click();
