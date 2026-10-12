@@ -2,6 +2,7 @@ import {promptInput,labelDialog} from "./components.js";
 import {deploymentUI} from "./deployment.js";
 import {connectHosted,hostedOrigin} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
+import {devicesUI} from "./devices.js";
 const $=id=>document.getElementById(id);
 const resizePrompt=promptInput($("prompt"));
 for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
@@ -11,17 +12,19 @@ let apiOrigin="";
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false;
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
+const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
   const response=await fetch(apiOrigin+"/api/"+path,{method,credentials:"omit",...(apiOrigin?{targetAddressSpace:"loopback"}:{}),headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
-async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:false;}}
+async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
 async function loadState(){
   state=await api("state");$("workspace-name").textContent=state.workspace;
   deployment.updateBase(state);
+  devices.update(state);
   $("account-name").textContent=state.account?.name||"حساب پاستا";
   $("account-detail").textContent=state.account?Number(state.account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار":"هنوز وارد نشدی";
   $("logout").hidden=!state.connected;$("login").hidden=state.connected;
@@ -132,7 +135,8 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-$("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");await loadState();});
+function clearAccountView(){clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+$("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
 $("new").onclick=()=>run($("new"),async()=>{generation++;session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
   event.preventDefault();if(sending||!$("prompt").value.trim())return;

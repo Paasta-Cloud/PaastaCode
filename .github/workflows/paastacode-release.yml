@@ -78,6 +78,7 @@ jobs:
           node test/browser.mjs
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
+          node test/devices-browser.mjs
       - name: Build bundled web and CLI
         run: npm run package:portable
       - name: Test installed web and CLI

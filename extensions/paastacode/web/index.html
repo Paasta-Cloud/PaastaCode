@@ -14,6 +14,7 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
     <button id="deploy-open" class="rail-action" type="button" disabled>انتشار روی پاستا</button>
     <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
     <div id="sessions" class="sessions"><p class="muted">بعد از ورود، گفتگوها اینجا دیده میشن.</p></div>
+    <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
   <main>
@@ -83,4 +84,10 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
     <div class="dialog-actions"><button type="submit" value="cancel" autofocus>بازگشت</button><button id="cloud-delete-confirm" class="danger-action" type="submit" value="delete">حذف از حساب</button></div>
   </form>
 </dialog>
+<dialog id="devices-dialog">
+  <h2>اتصال‌های پاستاکد</h2><p>این فهرست فقط اتصال‌های خودتان را نشان می‌دهد. اتصال مدل و گفتگو و اتصال انتشار، مجوزهای جداگانه دارند.</p>
+  <div id="device-connections" class="device-connections" aria-live="polite"></div>
+  <div class="dialog-actions"><button id="devices-refresh" type="button">تازه‌سازی</button><button id="devices-close" type="button">بستن</button></div>
+</dialog>
+<dialog id="device-revoke-dialog"><form method="dialog"><h2>این اتصال قطع شود؟</h2><p>دسترسی «<bdi id="device-revoke-name"></bdi>» و کلید مدل وابسته به آن لغو می‌شود. اگر همین اتصال را قطع کنید، اجرای جاری متوقف و مجوز انتشار این دستگاه هم قطع می‌شود. برای ادامه باید دوباره وارد شوید. گفتگوها و فایل‌های پروژه باقی می‌مانند.</p><div class="dialog-actions"><button value="cancel" autofocus>بازگشت</button><button value="revoke" class="danger-action">قطع اتصال</button></div></form></dialog>
 </body></html>

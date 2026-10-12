@@ -9,7 +9,7 @@ import {codingModels} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
-const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
+const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
@@ -81,7 +81,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
       return json(response,{workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,features:{conditionalDelete:true}});
+        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,features:{conditionalDelete:true,deviceManagement:true}});
     }
     if(route==="POST /api/login")return json(response,await account.begin());
     if(route==="POST /api/login/poll"){
@@ -91,6 +91,23 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="POST /api/connect"){const input=await body(request);const result=await account.connect(Number(input.dailyLimitToman));await ready();return json(response,result);}
     if(route==="POST /api/logout"){if(loginPolling)await loginPolling;await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});return json(response,{ok:true});}
+    if(route==="GET /api/devices")return json(response,await account.request("/api/paastacode/devices"));
+    if(route==="DELETE /api/devices"){
+      const id=url.searchParams.get("id");
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id||""))throw new Error("اتصال معتبر نیست.");
+      if(starting)await starting;
+      if(loginPolling)await loginPolling;
+      const result=await account.request("/api/paastacode/devices?id="+encodeURIComponent(id),{method:"DELETE"});
+      if(result.current){
+        await runtime.stop();
+        // Remote revocation already committed. Preserve a failed deployment disconnect for retry.
+        try{await deployment.disconnect();}catch{result.warning="اتصال اصلی قطع شد؛ قطع مجوز انتشار کامل نشد. پس از ورود دوباره آن را از اتصال‌های حساب قطع کنید.";}
+        // The server already revoked this token. Clear locally without a second network request.
+        await account.forget();context=null;
+        await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});
+      }
+      return json(response,result);
+    }
     if(route==="GET /api/deployment/state")return json(response,await deployment.state());
     if(route==="POST /api/deployment/login")return json(response,await deployment.begin());
     if(route==="POST /api/deployment/login/poll"){const result=await deployment.poll();if(!result.pending&&runtime.url)await runtime.call("/mcp",{method:"POST",body:{name:"paasta",config:paastaMcpConfig(workspace)}});return json(response,result);}

@@ -83,6 +83,7 @@ export class PaastaAccount {
     this.device=null;
     try{await this.request("/api/paastacode/connection",{method:"DELETE"});}
     catch(error){if(![401,403].includes(error.status))throw error;}
-    await rm(this.path,{force:true});this.credentials=null;
+    await this.forget();
   }
+  async forget(){await rm(this.path,{force:true});this.credentials=null;this.device=null;}
 }
