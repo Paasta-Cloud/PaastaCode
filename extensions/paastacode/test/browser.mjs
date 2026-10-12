@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdir} from "node:fs/promises";
+import {mkdir,readFile} from "node:fs/promises";
 import {createRequire} from "node:module";
 import {resolve} from "node:path";
 process.env.PAASTACODE_HOME=resolve(".artifacts/browser-state-"+process.pid);
@@ -9,7 +9,7 @@ const sessionId="ses_browserSynthetic";
 const sessions=[{id:sessionId,title:"بررسی ساختار پروژه",directory:process.cwd()}];
 const messages=[{info:{role:"user"},parts:[{type:"text",text:"ساختار پروژه را بررسی کن."}]},
   {info:{role:"assistant"},parts:[{type:"text",text:"مسیرهای پروژه بررسی شدن. برای شروع، فایل ورودی را باز کن.\n\n```js\nconst message = '<script>alert(1)</script>';\nconsole.log(message);\n```"}]}];
-let grants=0,saves=0,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
+let grants=0,saves=0,deletes=0,safeDelete=true,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
 const account={origin:"https://console.paasta.cloud",credentials:null,
   async context(){return {account:{id:identity,tenantId:"synthetic-tenant",name:"حساب آزمایشی",balanceToman:100000},models:[{id:"synthetic",name:"مدل آزمایشی",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"test/kimi-k2.7-code",name:"Kimi K2.7 Code",supported_parameters:["tools"],input_toman_per_million:200,output_toman_per_million:400}]};},
   async begin(){return {url:"https://console.paasta.cloud/cli/authorize?code=TEST-TEST",code:"TEST-TEST"};},
@@ -18,7 +18,12 @@ const account={origin:"https://console.paasta.cloud",credentials:null,
   async logout(){this.credentials=null;},
   async request(_path,options={}){
     if(options.method==="PUT"){saves++;this.saved={...options.body,revision:1};return {id:this.saved.id,revision:1};}
-    if(_path.includes("?id="))return this.saved;return {sessions:this.saved?[this.saved]:[]};
+    if(options.method==="DELETE"){
+      const revision=Number(new URL(_path,this.origin).searchParams.get("revision"));
+      if(revision!==this.saved.revision)throw Object.assign(new Error("گفتگو در حساب تغییر کرده است. نسخهٔ تازه را باز کنید."),{status:409});
+      deletes++;this.saved=null;return {ok:true,deleted:true};
+    }
+    if(_path.includes("?id="))return {...this.saved,features:safeDelete?{conditionalDelete:true}:undefined};return {sessions:this.saved?[this.saved]:[]};
   }};
 let pending=true;
 const runtime={url:null,password:"synthetic",
@@ -63,6 +68,7 @@ try{
   assert.equal(await page.locator("#messages script").count(),0);
   await page.locator("#save").click();await page.locator("#confirm-save").click();
   await page.getByText("در حساب ذخیره شد",{exact:true}).waitFor();assert.equal(saves,1);
+  await page.locator("#save").click();await page.keyboard.press("Escape");await page.waitForTimeout(200);assert.equal(saves,1,"Escape must not reuse previous save consent or upload again");
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:".artifacts/conversation-desktop.png",fullPage:true});
   for(const width of [390,320]){
@@ -85,6 +91,22 @@ try{
   await page.getByText("فقط همین بار",{exact:true}).waitFor();
   await page.getByText("فقط همین بار",{exact:true}).click();assert.equal(grants,2,"cloud list must not stop local approval polling");
   busy=false;await page.locator("#sessions button").first().click();
+  safeDelete=false;await page.locator("#sessions button").first().click();await page.getByText("این سرور از حذف با بررسی نسخه پشتیبانی نمی‌کند. برای حذف امن، سرویس پاستاکد را به‌روز کنید.",{exact:true}).waitFor();assert.equal(await page.getByRole("button",{name:"حذف از حساب",exact:true}).isDisabled(),true,"old servers must not be trusted for conditional deletion");
+  safeDelete=true;await page.locator("#sessions button").first().click();await page.waitForFunction(()=>!document.querySelector(".cloud-actions .danger-action").disabled);
+  const downloadPromise=page.waitForEvent("download");await page.getByText("دریافت فایل گفتگو",{exact:true}).click();
+  const download=await downloadPromise;const exported=JSON.parse(await readFile(await download.path(),"utf8"));
+  assert.deepEqual(exported,{version:1,title:account.saved.title,messages:account.saved.snapshot.messages});
+  for(const width of [1440,320]){
+    await page.setViewportSize({width,height:900});await page.getByRole("button",{name:"حذف از حساب",exact:true}).click();
+    await page.locator("#cloud-delete-dialog").waitFor({state:"visible"});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:".artifacts/cloud-delete-"+width+".png",fullPage:true});
+    await page.keyboard.press("Escape");assert.equal(deletes,0);
+  }
+  await page.setViewportSize({width:1440,height:1000});account.saved.revision=2;
+  const deletedId=account.saved.id;
+  await page.getByRole("button",{name:"حذف از حساب",exact:true}).click();await page.locator("#cloud-delete-confirm").click();
+  await page.waitForFunction(()=>document.querySelector("#notice").textContent.includes("تغییر کرده"));assert.equal(deletes,0);assert.equal(account.saved.revision,2);
   await page.getByText("ادامه در این پروژه",{exact:true}).click();
   await page.reload();await page.locator("#sessions button").first().click();
   await page.locator("#prompt").fill("ادامه بعد از باز کردن صفحه");await page.locator("#send").click();
@@ -92,6 +114,12 @@ try{
   assert(lastParts.some(p=>p.synthetic&&p.text.includes("ساختار پروژه")),"restore context must survive reload");
   busy=false;
   await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();
+  await page.getByRole("button",{name:"حذف از حساب",exact:true}).click();await page.locator("#cloud-delete-confirm").click();
+  await page.waitForFunction(()=>document.querySelector("#save-state").textContent==="نسخهٔ حساب حذف شد");assert.equal(deletes,1);assert.equal(await page.locator("#sessions button").count(),0);
+  await page.locator("#local-tab").click();await page.locator("#sessions button").first().click();
+  await page.locator("#save").click();await page.locator("#confirm-save").click();await page.waitForFunction(()=>document.querySelector("#save-state").textContent.includes("ذخیره"));await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();
+  assert.notEqual(account.saved.id,deletedId,"an explicit fresh backup must not resurrect the deleted cloud ID");
+  await page.getByRole("button",{name:"حذف از حساب",exact:true}).click();await page.keyboard.press("Escape");assert.equal(deletes,1,"Escape must reset the previous delete consent");
   await page.getByText("ادامه در این پروژه",{exact:true}).click();
   await page.locator("#logout").click();await page.locator("#login").waitFor({state:"visible"});
   assert.equal(await page.locator("#sessions button").count(),0);identity="synthetic-account-b";

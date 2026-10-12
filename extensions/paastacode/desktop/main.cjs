@@ -48,6 +48,7 @@ app.whenReady().then(async()=>{
   ]));
   await openWorkspace(workspace);
   if(process.env.PAASTACODE_DESKTOP_SMOKE){
+    if(process.env.PAASTACODE_EXPECT_VERSION&&app.getVersion()!==process.env.PAASTACODE_EXPECT_VERSION)throw new Error("Desktop package version does not match the release being verified.");
     const result=await window.webContents.executeJavaScript("document.fonts.ready.then(()=>({rtl:document.documentElement.dir,login:!!document.getElementById('login'),font:document.fonts.check('16px Vazirmatn'),desktop:!!window.paastacodeDesktop}))");
     if(result.rtl!=="rtl"||!result.login||!result.font||!result.desktop)throw new Error("Desktop smoke failed.");
     const directory=process.env.PAASTACODE_SMOKE_OUTPUT||path.join(app.getPath("temp"),"paastacode-smoke");await fs.mkdir(directory,{recursive:true});

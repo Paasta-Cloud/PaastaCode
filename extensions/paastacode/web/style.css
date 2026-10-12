@@ -20,3 +20,5 @@ main{min-width:0;display:flex;flex-direction:column;min-height:100dvh}.topbar{di
 .hosted-connect input{width:100%;min-width:0;padding:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 .hosted-connect pre{max-width:100%;overflow:auto;padding:14px;background:var(--soft);border-radius:8px;text-align:left;unicode-bidi:isolate}
 #workspace-connect-error{color:var(--danger)}
+.cloud-actions{display:flex;flex-wrap:wrap;gap:12px;margin-block:24px}
+.danger-action{color:var(--danger)}

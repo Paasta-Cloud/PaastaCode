@@ -86,6 +86,15 @@ jobs:
         run: npm run package:vscode
       - name: Build desktop installers
         run: npm run package:desktop
+      - name: Install Linux desktop package
+        if: runner.os == 'Linux'
+        run: sudo dpkg -i dist/PaastaCode-*.deb
+      - name: Run installed Linux desktop
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/smoke-desktop.mjs
+      - name: Run packaged Windows and macOS desktop
+        if: runner.os != 'Linux'
+        run: node scripts/smoke-desktop.mjs
       - name: Generate artifact checksums
         run: node scripts/release-manifest.mjs
       - uses: actions/upload-artifact@v6

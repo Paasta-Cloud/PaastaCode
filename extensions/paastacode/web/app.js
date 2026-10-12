@@ -1,6 +1,7 @@
 import {promptInput,labelDialog} from "./components.js";
 import {deploymentUI} from "./deployment.js";
 import {connectHosted,hostedOrigin} from "./hosted.js";
+import {cloudActions} from "./cloud-actions.js";
 const $=id=>document.getElementById(id);
 const resizePrompt=promptInput($("prompt"));
 for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
@@ -50,6 +51,8 @@ async function sessions(){
         renderMessages(saved.snapshot.messages.map(m=>({info:{role:m.role},parts:[{type:"text",text:m.text}]})));
         session=null;$("permissions").replaceChildren();$("composer").hidden=true;$("save").disabled=true;$("empty").hidden=true;
         $("save-state").textContent="ذخیره‌شده در حساب";
+        const viewGeneration=generation;
+        $("messages").append(cloudActions({saved,api,run,notice,isCurrent:()=>generation===viewGeneration&&mode==="cloud",onDeleted:async()=>{generation++;$("messages").replaceChildren();$("save-state").textContent="نسخهٔ حساب حذف شد";$("empty").hidden=false;await sessions();}}));
         const actions=document.createElement("div");actions.className="suggestions";
         const restore=document.createElement("button");restore.textContent="ادامه در این پروژه";
         restore.onclick=()=>run(restore,async()=>{

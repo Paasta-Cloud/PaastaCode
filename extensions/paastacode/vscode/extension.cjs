@@ -40,7 +40,7 @@ function activate(context){
     if(connection.pid===child.pid)ownedServices.set(url.origin,connection.capability);
     const panel=vscode.window.createWebviewPanel("paastacode","پاستاکد",vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,
       portMapping:[{webviewPort:Number(url.port),extensionHostPort:Number(url.port)}]});
-    panel.webview.html='<!doctype html><html lang="fa" dir="rtl"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src '+url.origin+'; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}</style></head><body><iframe title="پاستاکد" sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox" src="'+url.origin+'/embed/'+connection.capability+'#cap='+connection.capability+'"></iframe></body></html>';
+    panel.webview.html='<!doctype html><html lang="fa" dir="rtl"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src '+url.origin+'; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}</style></head><body><iframe title="پاستاکد" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox" src="'+url.origin+'/embed/'+connection.capability+'#cap='+connection.capability+'"></iframe></body></html>';
   }));
 }
 async function deactivate(){

@@ -6,6 +6,8 @@ export function promptInput(textarea){
   resize();return resize;
 }
 export function labelDialog(dialog){
+  // Escape must never reuse consent from a previous submission of this dialog.
+  dialog.addEventListener("cancel",()=>{dialog.returnValue="cancel";});
   const title=dialog.querySelector("h2"),description=dialog.querySelector("p");
   if(title){title.id=dialog.id+"-title";dialog.setAttribute("aria-labelledby",title.id);}
   if(description){description.id=dialog.id+"-description";dialog.setAttribute("aria-describedby",description.id);}

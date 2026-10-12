@@ -76,4 +76,11 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
   <div id="deploy-jobs" class="deploy-jobs" aria-label="درخواست‌های انتشار"></div>
   <button id="deploy-disconnect" class="subtle" type="button" hidden>قطع اتصال انتشار</button>
 </dialog>
+<dialog id="cloud-delete-dialog">
+  <form method="dialog">
+    <h2>این گفتگو از حساب حذف شود؟</h2>
+    <p>نسخهٔ ذخیره‌شدهٔ «<bdi id="cloud-delete-name"></bdi>» از حساب پاستا حذف می‌شود. فایل‌های پروژه و نسخه‌های محلی گفتگو باقی می‌مانند. پیش از حذف می‌توانید فایل گفتگو را دریافت کنید.</p>
+    <div class="dialog-actions"><button type="submit" value="cancel" autofocus>بازگشت</button><button id="cloud-delete-confirm" class="danger-action" type="submit" value="delete">حذف از حساب</button></div>
+  </form>
+</dialog>
 </body></html>

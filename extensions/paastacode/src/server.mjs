@@ -9,7 +9,7 @@ import {codingModels} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
-const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
+const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
@@ -117,7 +117,18 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="GET /api/cloud")return json(response,await account.request("/api/paastacode/sessions"));
     if(route==="GET /api/cloud/session")return json(response,await account.request("/api/paastacode/sessions?id="+encodeURIComponent(url.searchParams.get("id"))));
-    if(route==="DELETE /api/cloud/session")return json(response,await account.request("/api/paastacode/sessions?id="+encodeURIComponent(url.searchParams.get("id")),{method:"DELETE"}));
+    if(route==="DELETE /api/cloud/session"){
+      const revision=url.searchParams.get("revision");
+      if(revision!==null&&!/^[1-9]\d{0,14}$/.test(revision))throw new Error("نسخهٔ گفتگو معتبر نیست؛ آن را دوباره از حساب باز کنید.");
+      const id=url.searchParams.get("id");
+      const result=await account.request("/api/paastacode/sessions?id="+encodeURIComponent(id)+(revision===null?"":"&revision="+revision),{method:"DELETE"});
+      if(result.ok&&context){
+        const prefix=accountIdentity()+":";
+        for(const [name,record] of Object.entries(sync))if(name.startsWith(prefix)&&record.id===id)delete sync[name];
+        await writePrivate(syncPath,sync);
+      }
+      return json(response,result);
+    }
     await ready();
     if(route==="GET /api/sessions"){
       const sessions=await runtime.call("/session");

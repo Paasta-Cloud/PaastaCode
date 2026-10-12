@@ -57,7 +57,8 @@ if(target==="desktop"){
 }else if(target==="vscode"){
   const extension=join(stage,"vscode");await mkdir(extension,{recursive:true});
   for(const file of ["extension.cjs","README.md","LICENSE"])await copyFile(join(root,"vscode",file),join(extension,file));
-  const manifest=JSON.parse(await readFile(join(root,"vscode/package.json"),"utf8"));manifest.version=pkg.version.replace(/-.*/,"");
+  // VS Code has its own numeric upgrade version; stripping beta suffixes would reuse 0.2.0 forever.
+  const manifest=JSON.parse(await readFile(join(root,"vscode/package.json"),"utf8"));
   await writeFile(join(extension,"package.json"),JSON.stringify(manifest,null,2));
   await cp(client,join(extension,"client"),{recursive:true});await bundleNode(join(extension,"runtime"));
   await copyFile(join(root,"desktop/icon.png"),join(extension,"icon.png"));
