@@ -20,6 +20,18 @@ try{
   await page.goto("https://code.paasta.cloud/#local="+encodeURIComponent(app.url)+"&cap="+app.capability);
   await page.locator("#workspace-connect").waitFor({state:"visible"});
   assert.equal(await page.evaluate(()=>location.hash),"");
+  for(const [name,width,height,scheme] of [["desktop",1365,900,"light"],["mobile",320,800,"light"],["dark",390,800,"dark"]]){
+    await page.setViewportSize({width,height});await page.emulateMedia({colorScheme:scheme});
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    const bounds=await page.locator("#workspace-connect").boundingBox();assert(bounds.x>=16&&bounds.x+bounds.width<=width-16);
+    const colors=await page.locator("#workspace-link").evaluate(input=>{const style=getComputedStyle(input);return {foreground:style.color,background:style.backgroundColor};});
+    assert.notEqual(colors.foreground,colors.background);
+    if(scheme==="dark")assert.equal(colors.background,"rgb(17, 21, 30)");
+    const link=await page.locator("#workspace-link").inputValue();await page.locator("#workspace-link").fill("");
+    await mkdir(".artifacts",{recursive:true});await page.screenshot({path:resolve(".artifacts/hosted-pairing-"+name+".png"),fullPage:true});
+    await page.locator("#workspace-link").fill(link);
+  }
+  await page.emulateMedia({colorScheme:"light"});await page.setViewportSize({width:1365,height:900});
   await page.locator("#workspace-connect button").click();
   try{await page.locator("#workspace-connect").waitFor({state:"hidden",timeout:15000});}catch(error){console.log(await page.locator("#workspace-connect-error").textContent());throw error;}
   await page.locator("#onboarding").waitFor({state:"visible"});

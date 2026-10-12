@@ -17,6 +17,8 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
   <main>
+    <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">فضای کاری</span><strong id="workspace-name" dir="ltr">PaastaCode</strong><button id="open-workspace" hidden>باز کردن پروژه</button></div><div class="header-actions"><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
+    <div id="notice" class="notice" role="status" hidden></div>
     <form id="workspace-connect" class="intro hosted-connect" hidden>
       <span class="intro-label">پاستاکد تحت وب</span><h1>پروژهٔ خود را باز کنید</h1>
       <p>رابط وب به فضای کاری روی دستگاه شما وصل می‌شود. برای شروع، این دستور را در پوشهٔ پروژه اجرا کنید و پنجرهٔ ترمینال را باز نگه دارید:</p>
@@ -26,8 +28,6 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
       <button class="primary" type="submit">اتصال به فضای کاری</button><p id="workspace-connect-error" role="alert"></p>
       <small>پیوند اتصال را خصوصی نگه دارید. برای ورود، مدل‌ها و ذخیرهٔ گفتگوها از حساب پاستا استفاده می‌شود.</small>
     </form>
-    <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">فضای کاری</span><strong id="workspace-name" dir="ltr">PaastaCode</strong><button id="open-workspace" hidden>باز کردن پروژه</button></div><div class="header-actions"><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
-    <div id="notice" class="notice" role="status" hidden></div>
     <section id="onboarding" class="onboarding">
       <span class="intro-label">از ایده تا تغییر در کد</span>
       <h1>از همین‌جا<br>شروع کنیم.</h1>
