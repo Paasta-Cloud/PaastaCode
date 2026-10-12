@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<body>
+<!-- PaastaCode: focused conversation, right session rail, inline changes. Operate mode.
+Inherits Paasta neutral surfaces, Yekan Bakh, blue primary action. One workspace, explicit permissions,
+clear local/account save state. Approved delegated direction: comp 2. Mobile rail becomes a drawer. -->
+<div class="workspace">
+  <button id="rail-backdrop" class="rail-backdrop" aria-label="بستن گفتگوها" tabindex="-1" hidden></button>
+  <aside id="rail" class="rail" aria-label="گفتگوها و حساب">
+    <button id="rail-close" class="mobile-menu" aria-label="بستن گفتگوها">بستن ×</button>
+    <a class="brand" href="#"><img src="/brand.png" width="32" height="32" alt=""><strong>پاستاکد</strong><span>نسخهٔ اولیه</span></a>
+    <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید</button>
+    <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
+    <div id="sessions" class="sessions"><p class="muted">بعد از ورود، گفتگوها اینجا دیده میشن.</p></div>
+    <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
+  </aside>
+  <main>
+    <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">فضای کاری</span><strong id="workspace-name" dir="ltr">PaastaCode</strong></div><div class="header-actions"><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
+    <div id="notice" class="notice" role="status" hidden></div>
+    <section id="onboarding" class="onboarding">
+      <span class="intro-label">از ایده تا تغییر در کد</span>
+      <h1>از همین‌جا<br>شروع کنیم.</h1>
+      <p>پروژه‌ات را بررسی کن، تغییرات را بساز و گفتگو را با حساب پاستا نگه دار.</p>
+      <div class="onboarding-actions"><button id="login" class="primary">ورود با پاستا <span aria-hidden="true">←</span></button><span>با همان حساب و اعتبار پاستا</span></div>
+      <div id="device" class="device" hidden><p>کد را در صفحهٔ ورود پاستا تطبیق بده:</p><strong id="device-code" dir="ltr"></strong><a id="device-link" target="_blank" rel="noopener noreferrer">باز کردن صفحهٔ تأیید</a></div>
+      <form id="budget-form" hidden><h2>سقف مصرف را تعیین کن</h2><p>هزینهٔ مدل از اعتبار پاستا کم میشه. این سقف برای اتصال همین دستگاهه.</p><label for="budget">سقف روزانه، تومان</label><div class="budget-row"><input id="budget" type="number" value="50000" min="1" max="1000000" required><button class="primary">تأیید و شروع</button></div></form>
+      <div class="intro-foot"><span>اجرا روی دستگاه؛ پردازش با مدل پاستا</span><span>تغییر فایل و اجرای دستور با تأیید تو</span></div>
+    </section>
+    <section id="conversation" class="conversation" aria-label="گفتگو" hidden>
+      <div id="empty" class="empty"><span class="intro-label">یک پروژه، یک قدم بعدی</span><h1>چه چیزی بسازیم؟</h1><p>از بررسی پروژه شروع کن یا تغییری را که در ذهن داری توضیح بده.</p><div class="suggestions"><button data-prompt="ساختار این پروژه را بررسی کن و توضیح بده از کجا شروع کنم.">پروژه را بشناس</button><button data-prompt="مسیر اصلی برنامه را بررسی کن و خطاهای احتمالی را با دلیل نشان بده. فعلاً فایلی را تغییر نده.">یک بررسی دقیق</button></div></div>
+      <div id="messages" class="messages" aria-live="polite" aria-relevant="additions"></div>
+      <div id="permissions" class="permissions"></div>
+    </section>
+    <form id="composer" class="composer" hidden>
+      <label class="sr-only" for="prompt">درخواست از پاستاکد</label><textarea id="prompt" rows="3" placeholder="چه تغییری می‌خوای؟" maxlength="50000"></textarea>
+      <div class="composer-toolbar"><label class="model-picker"><span class="sr-only">مدل پاستا</span><select id="model" aria-label="مدل پاستا"></select></label><span id="price" class="price"></span><button id="stop" type="button" hidden>توقف</button><button id="send" class="primary send" aria-label="ارسال درخواست">ارسال <span aria-hidden="true">↑</span></button></div>
+      <small class="composer-foot">قبل از اجرای دستور یا تغییر فایل، درخواست تأیید را بررسی کن.</small>
+    </form>
+    <footer class="app-footer"><span class="attribution"><a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" dir="ltr">Powered by OpenCode</a><a href="https://github.com/Paasta-Cloud/PaastaCode" target="_blank" rel="noopener noreferrer">فورک متن‌باز پاستا</a></span><span id="connection-state">اتصال محلی</span></footer>
+  </main>
+</div>
+<dialog id="save-dialog"><form method="dialog"><h2>ذخیرهٔ گفتگو در حساب پاستا</h2><p>متن درخواست‌ها و پاسخ‌ها به حساب پاستا فرستاده میشه. فایل‌های پروژه و خروجی ابزارها ذخیره نمیشن. اگر در متن گفتگو اطلاعات محرمانه داری، اول آن را بررسی کن.</p><div class="dialog-actions"><button value="cancel">بازگشت</button><button id="confirm-save" value="save" class="primary">ذخیرهٔ همین گفتگو</button></div></form></dialog>
+</body></html>

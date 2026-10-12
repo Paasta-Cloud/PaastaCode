@@ -1,3 +1,28 @@
+# PaastaCode | پاستاکد
+
+**Powered by OpenCode.** An independent, MIT-licensed fork of [anomalyco/opencode](https://github.com/anomalyco/opencode), developed by Paasta. This is not an official OpenCode product. Upstream history, source and copyright notices are retained.
+
+پاستاکد، فورک متن‌باز OpenCode با رابط فارسی و راست‌چین و اتصال به حساب و مدل‌های پاستا است.
+
+The runnable Paasta client is in [`extensions/paastacode`](extensions/paastacode). It provides a local web UI, Electron desktop shell, a shared CLI and a VS Code adapter. It currently runs the pinned **unmodified OpenCode 1.19.0 npm binary**; building a customized engine from this fork is a later milestone. Models listed on [OpenCode Go](https://opencode.ai/go) receive display priority only when available with tool support in Paasta's live catalogue. Prices and billing remain Paasta's.
+
+```sh
+git clone https://github.com/Paasta-Cloud/PaastaCode.git
+cd PaastaCode/extensions/paastacode
+npm ci
+npm run desktop -- --workspace=/absolute/path/to/your/project
+```
+
+Node.js 22+ is required. Install from the client directory; the root Bun workspace is the retained upstream source and is not needed to run this client. See the [Persian setup guide](extensions/paastacode/README.md), [API contract](extensions/paastacode/API.md), [roadmap](extensions/paastacode/ROADMAP.md), and [licences and attribution](extensions/paastacode/THIRD_PARTY_NOTICES.md).
+
+**Local development alpha:** Paasta's new account endpoints still require backend deployment and real-account acceptance. Public source does not mean a live hosted workspace or signed installer is available. Paasta's hosted account/billing service is external to this repository. The commercial Yekan Bakh font is not redistributed; point `PAASTACODE_YEKAN_FONT` at your licensed local TTF file, or use the system-font fallback.
+
+Paasta additions are MIT-licensed. The original OpenCode MIT licence is preserved below and in the repository root; third-party assets and trademarks retain their own terms.
+
+---
+
+## Original upstream README
+
 <p align="center">
   <a href="https://opencode.ai">
     <picture>
