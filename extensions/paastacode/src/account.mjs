@@ -36,14 +36,23 @@ export class PaastaAccount {
   constructor(origin=consoleUrl(),home=stateHome){this.origin=consoleUrl(origin);this.path=join(home,"account.json");this.credentials=null;this.device=null;}
   async load(){const saved=await readPrivate(this.path);this.credentials=saved?.origin===this.origin?saved:null;return this;}
   async request(path,{method="GET",body,token=this.credentials?.token}={}){
-    const response=await fetch(this.origin+path,{method,headers:{...(token?{Authorization:"Bearer "+token}:{}),...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:"error"});
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok){const error=new Error(typeof data.error==="string"?data.error:data.error?.message||"ارتباط با حساب پاستا ناموفق بود.");error.status=response.status;throw error;}
+    let response;
+    try{response=await fetch(this.origin+path,{method,headers:{...(token?{Authorization:"Bearer "+token}:{}),...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:"error"});}
+    catch{throw new Error("اتصال به پاستا برقرار نشد. اینترنت و آدرس سرور را بررسی کنید و دوباره تلاش کنید.");}
+    const data=await response.json().catch(()=>null);
+    if(!response.ok){
+      const missing=response.status===404&&path.startsWith("/api/paastacode/");
+      const fallback=response.status===401?"ورود شما معتبر نیست؛ از حساب خارج شوید و دوباره وارد شوید.":"پاستا پاسخ معتبر نداد ("+response.status+"). کمی بعد دوباره تلاش کنید.";
+      const error=new Error(missing?"سرویس پاستاکد روی این سرور هنوز فعال نیست. بخش سرور پاستا باید به‌روز شود.":data?.message||data?.error?.message||(typeof data?.error==="string"?data.error:fallback));
+      error.status=response.status;throw error;
+    }
+    if(!data||typeof data!=="object"||Array.isArray(data))throw new Error("پاسخ سرور پاستا معتبر نیست. آدرس سرور و نسخهٔ آن را بررسی کنید.");
     return data;
   }
   async begin(){
     if(this.device && this.device.expires>Date.now())return this.device.public;
     const result=await this.request("/api/cli/device",{method:"POST",token:null,body:{clientId:"paastacode",clientName:"PaastaCode"}});
+    if(result.clientId!=="paastacode")throw new Error("این سرور هنوز از ورود اختصاصی پاستاکد پشتیبانی نمی‌کند. بخش سرور پاستا باید به‌روز شود.");
     const uri=new URL(result.verificationUriComplete);
     if(uri.origin!==this.origin || uri.pathname!=="/cli/authorize")throw new Error("آدرس تأیید ورود معتبر نیست.");
     this.device={code:result.deviceCode,expires:Date.now()+result.expiresIn*1000,nextPoll:0,public:{url:uri.href,code:result.userCode}};

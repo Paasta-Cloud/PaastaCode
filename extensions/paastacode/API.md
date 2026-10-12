@@ -2,10 +2,10 @@
 
 The open-source client uses a separately operated Paasta account and AI service. The service implementation, credentials and customer data are not part of this repository. Default origin: `https://console.paasta.cloud`. For a compatible local service set `PAASTACODE_CONSOLE` to an HTTPS origin or loopback HTTP origin. The client does not implement a mock account in normal operation.
 
-- `POST /api/cli/device` with `{clientId:"paastacode",clientName:"PaastaCode"}` returns `deviceCode`, `userCode`, `expiresIn`, `verificationUriComplete`. Verification must remain on the configured origin at `/cli/authorize`.
+- `POST /api/cli/device` with `{clientId:"paastacode",clientName:"PaastaCode"}` returns `clientId:"paastacode"`, `deviceCode`, `userCode`, `expiresIn`, `verificationUriComplete`. The client refuses older servers that do not acknowledge this client ID, before showing an authorization link. Verification must remain on the configured origin at `/cli/authorize`.
 - `POST /api/cli/device/token` with `{deviceCode}` returns `{error:"authorization_pending"}` or `{token}`. Never log the device code, token or model key.
 - Authenticated `GET /api/paastacode/connection` returns `{account:{id,tenantId,name,balanceToman},models:[{id,name,supported_parameters,context_length,max_output_tokens,input_toman_per_million,output_toman_per_million}]}`. The account token is sent as a Bearer header.
-- Authenticated `POST /api/paastacode/connection` with `{dailyLimitToman}` returns `{key,dailyLimitToman}`. `DELETE` revokes the connection. The client keeps the AI key outside renderers.
+- Authenticated `POST /api/paastacode/connection` with `{dailyLimitToman}` returns `{key,dailyLimitToman}`. `DELETE` revokes only the requesting device's token and linked key, including a legacy or downgraded token; it never accepts a target identity from the request. The client keeps the AI key outside renderers.
 - Inference uses OpenAI-compatible `/api/ai/v1` with that AI key. Prices come from Paasta and money is toman. The Go page is an editorial preference source only.
 - Authenticated `GET /api/paastacode/sessions` returns `{sessions:[{id,title,revision,updated_at}]}` for the current user; `GET ?id=UUID` returns one with its snapshot. `PUT` accepts `{id,title,revision,snapshot:{version:1,messages:[{role:"user"|"assistant",text}]}}`; `revision` is zero for a new record or the last acknowledged revision. A conflict returns HTTP 409; successful writes return `{id,revision}` and are read back. `DELETE ?id=UUID` removes one.
 
