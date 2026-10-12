@@ -33,7 +33,7 @@ export async function readPrivate(path){
   catch(error){if(error.code==="ENOENT")return null;throw error;}
 }
 export class PaastaAccount {
-  constructor(origin=consoleUrl(),home=stateHome){this.origin=consoleUrl(origin);this.path=join(home,"account.json");this.credentials=null;this.device=null;}
+  constructor(origin=consoleUrl(),home=stateHome,{deployment=false}={}){this.origin=consoleUrl(origin);this.clientId=deployment?"paastacode-deploy":"paastacode";this.path=join(home,deployment?"deployment-account.json":"account.json");this.credentials=null;this.device=null;}
   async load(){const saved=await readPrivate(this.path);this.credentials=saved?.origin===this.origin?saved:null;return this;}
   async request(path,{method="GET",body,token=this.credentials?.token}={}){
     let response;
@@ -51,8 +51,8 @@ export class PaastaAccount {
   }
   async begin(){
     if(this.device && this.device.expires>Date.now())return this.device.public;
-    const result=await this.request("/api/cli/device",{method:"POST",token:null,body:{clientId:"paastacode",clientName:"PaastaCode"}});
-    if(result.clientId!=="paastacode")throw new Error("این سرور هنوز از ورود اختصاصی پاستاکد پشتیبانی نمی‌کند. بخش سرور پاستا باید به‌روز شود.");
+    const result=await this.request("/api/cli/device",{method:"POST",token:null,body:{clientId:this.clientId,clientName:this.clientId==="paastacode-deploy"?"PaastaCode deployment":"PaastaCode"}});
+    if(result.clientId!==this.clientId)throw new Error("این سرور هنوز از ورود اختصاصی پاستاکد پشتیبانی نمی‌کند. بخش سرور پاستا باید به‌روز شود.");
     const uri=new URL(result.verificationUriComplete);
     if(uri.origin!==this.origin || uri.pathname!=="/cli/authorize")throw new Error("آدرس تأیید ورود معتبر نیست.");
     this.device={code:result.deviceCode,expires:Date.now()+result.expiresIn*1000,nextPoll:0,public:{url:uri.href,code:result.userCode}};
@@ -78,6 +78,7 @@ export class PaastaAccount {
     return {dailyLimitToman:result.dailyLimitToman};
   }
   async context(){return this.request("/api/paastacode/connection");}
+  async identity(){return this.request("/api/paastacode/identity");}
   async logout(){
     this.device=null;
     try{await this.request("/api/paastacode/connection",{method:"DELETE"});}

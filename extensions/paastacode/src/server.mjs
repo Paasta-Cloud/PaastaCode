@@ -4,12 +4,13 @@ import {readFile,mkdir,rm,realpath,open} from "node:fs/promises";
 import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {PaastaAccount,stateHome,readPrivate,writePrivate} from "./account.mjs";
-import {CodeRuntime,providerConfig,workspaceKey,normalizedPath} from "./runtime.mjs";
+import {CodeRuntime,providerConfig,workspaceKey,normalizedPath,paastaMcpConfig} from "./runtime.mjs";
 import {codingModels} from "./models.mjs";
+import {PaastaDeployment} from "./deployment.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
-const assets=new Map([["/","index.html"],["/app.js","app.js"],["/style.css","style.css"]]);
-const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8"};
+const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
+const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
 }
@@ -17,7 +18,7 @@ async function body(request){
   let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>1_100_000)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
-export async function startServer({workspace=process.cwd(),account,runtime,port=0}={}){
+export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false}={}){
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
   await mkdir(stateHome,{recursive:true,mode:0o700});
@@ -33,7 +34,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
           const url=new URL(saved.url);
           if(url.hostname==="127.0.0.1"&&url.protocol==="http:"){
             const response=await fetch(url.origin+"/api/state",{headers:{Authorization:"Bearer "+saved.capability},signal:AbortSignal.timeout(1000)});
-            if(response.ok)return {...saved,launchUrl:saved.url+"/#cap="+saved.capability,reused:true,close:async()=>{}};
+            if(response.ok){if(hosted&&!saved.hosted)return {...saved,hosted:false,reused:true,close:async()=>{}};return {...saved,launchUrl:saved.url+"/#cap="+saved.capability,reused:true,close:async()=>{}};}
           }
         }catch{}
         const pid=Number(await readFile(lockPath,"utf8").catch(()=>""));
@@ -45,6 +46,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
   }
   account=account||await new PaastaAccount().load();
   runtime=runtime||new CodeRuntime(workspace);
+  deployment=deployment||new PaastaDeployment({workspace,account});
   const capability=randomBytes(32).toString("base64url");
   let origin,context=null,starting=null,loginPolling=null,closed=false;
   const syncPath=join(stateHome,"sync-"+key+".json");
@@ -53,8 +55,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
     if(runtime.url)return;
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
-    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");await runtime.start(providerConfig(context.models,account.credentials.aiKey,account.origin));
-      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,engineUrl:runtime.url,enginePassword:runtime.password});
+    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);
+      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
   };
@@ -70,7 +72,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
   const json=(response,data,status=200)=>{response.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(JSON.stringify(data));};
   async function api(request,response,url){
     if(!validCapability(request.headers.authorization?.replace(/^Bearer /,""),capability)){json(response,{error:"دسترسی مجاز نیست."},401);return;}
-    if(request.headers.origin&&request.headers.origin!==origin){json(response,{error:"مبدأ درخواست معتبر نیست."},403);return;}
+    if(request.headers.origin&&request.headers.origin!==origin&&!(hosted&&request.headers.origin==="https://code.paasta.cloud")){json(response,{error:"مبدأ درخواست معتبر نیست."},403);return;}
     const route=request.method+" "+url.pathname;
     if(route==="POST /api/shutdown"){
       response.once("finish",()=>void close());return json(response,{ok:true});
@@ -88,7 +90,31 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
       return json(response,result);
     }
     if(route==="POST /api/connect"){const input=await body(request);const result=await account.connect(Number(input.dailyLimitToman));await ready();return json(response,result);}
-    if(route==="POST /api/logout"){if(loginPolling)await loginPolling;await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace});return json(response,{ok:true});}
+    if(route==="POST /api/logout"){if(loginPolling)await loginPolling;await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});return json(response,{ok:true});}
+    if(route==="GET /api/deployment/state")return json(response,await deployment.state());
+    if(route==="POST /api/deployment/login")return json(response,await deployment.begin());
+    if(route==="POST /api/deployment/login/poll"){const result=await deployment.poll();if(!result.pending&&runtime.url)await runtime.call("/mcp",{method:"POST",body:{name:"paasta",config:paastaMcpConfig(workspace)}});return json(response,result);}
+    if(route==="POST /api/deployment/disconnect"){await deployment.disconnect();return json(response,{ok:true});}
+    if(route==="GET /api/deployment/context")return json(response,await deployment.context());
+    if(route==="POST /api/deployment/request"){const input=await body(request);return json(response,await deployment.request(input.name,input.arguments));}
+    if(route==="POST /api/deployment/approve"){const input=await body(request);return json(response,await deployment.approve(input.id));}
+    if(route==="POST /api/deployment/reject"){const input=await body(request);return json(response,await deployment.reject(input.id));}
+    if(route==="GET /api/deployment/job")return json(response,await deployment.status(url.searchParams.get("id")));
+    if(route==="POST /api/mcp"){
+      const rpc=await body(request);
+      if(rpc.jsonrpc!=="2.0"||typeof rpc.method!=="string")throw new Error("درخواست MCP معتبر نیست.");
+      if(rpc.method.startsWith("notifications/")){response.writeHead(202);response.end();return;}
+      let result;
+      if(rpc.method==="initialize")result={protocolVersion:"2025-11-25",capabilities:{tools:{}},serverInfo:{name:"PaastaCode Paasta MCP",version:"0.2.0"},instructions:"Mutations create a PaastaCode review request. They cannot upload source or incur cost until the human approves the preview."};
+      else if(rpc.method==="ping")result={};
+      else if(rpc.method==="tools/list")result={tools:await deployment.tools()};
+      else if(rpc.method==="tools/call"){
+        let resultValue=await deployment.request(rpc.params?.name,rpc.params?.arguments);
+        if(resultValue?.source)resultValue={...resultValue,requiresHumanApproval:resultValue.status==="review",source:{...resultValue.source,fileCount:resultValue.source.files.length,files:resultValue.source.files.slice(0,20)}};
+        result=resultValue?.content?resultValue:{content:[{type:"text",text:JSON.stringify(resultValue)}],structuredContent:resultValue,isError:false};
+      }else throw new Error("روش MCP پشتیبانی نمی‌شود.");
+      return json(response,{jsonrpc:"2.0",id:rpc.id??null,result});
+    }
     if(route==="GET /api/cloud")return json(response,await account.request("/api/paastacode/sessions"));
     if(route==="GET /api/cloud/session")return json(response,await account.request("/api/paastacode/sessions?id="+encodeURIComponent(url.searchParams.get("id"))));
     if(route==="DELETE /api/cloud/session")return json(response,await account.request("/api/paastacode/sessions?id="+encodeURIComponent(url.searchParams.get("id")),{method:"DELETE"}));
@@ -154,6 +180,14 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
     try {
       if(request.headers.host!==new URL(origin).host){json(response,{error:"Host معتبر نیست."},403);return;}
       const url=new URL(request.url,origin);
+      if(hosted&&url.pathname.startsWith("/api/")&&request.headers.origin==="https://code.paasta.cloud"){
+        response.setHeader("Access-Control-Allow-Origin","https://code.paasta.cloud");response.setHeader("Vary","Origin");
+        if(request.method==="OPTIONS"){
+          const method=request.headers["access-control-request-method"],headers=String(request.headers["access-control-request-headers"]||"").toLowerCase().split(",").map(h=>h.trim()).filter(Boolean);
+          if(!["GET","POST","DELETE"].includes(method)||headers.some(h=>!["authorization","content-type"].includes(h))){json(response,{error:"درخواست مجاز نیست."},403);return;}
+          response.writeHead(204,{"Access-Control-Allow-Methods":"GET, POST, DELETE","Access-Control-Allow-Headers":"Authorization, Content-Type","Access-Control-Allow-Private-Network":"true","Access-Control-Max-Age":"300"});response.end();return;
+        }
+      }
       if(url.pathname.startsWith("/api/")){await api(request,response,url);return;}
       if(request.method!=="GET"){json(response,{error:"روش مجاز نیست."},405);return;}
       let data,type;
@@ -163,11 +197,6 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
       if(embed||assets.has(url.pathname)){
         const file=embed?"index.html":assets.get(url.pathname);data=await readFile(join(here,"web",file));type=mime["."+file.split(".").at(-1)];
       }else if(url.pathname==="/brand.png"){data=await readFile(join(here,"web/brand.png"));type="image/png";}
-      else if(url.pathname==="/yekan.ttf"){
-        try{data=await readFile(process.env.PAASTACODE_YEKAN_FONT||join(here,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf"));}
-        catch(error){if(error.code!=="ENOENT")throw error;response.writeHead(404);response.end();return;}
-        type="font/ttf";
-      }
       else{json(response,{error:"پیدا نشد."},404);return;}
       response.writeHead(200,{"Content-Type":type,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",
         "Content-Security-Policy":"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; "+(embed?"":"frame-ancestors 'self'; ")+"base-uri 'none'; form-action 'none'",
@@ -177,7 +206,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,port=
   await new Promise((resolveListen,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolveListen);});
   origin="http://127.0.0.1:"+server.address().port;
   await mkdir(stateHome,{recursive:true,mode:0o700});
-  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace});
+  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted});
   const close=async()=>{if(closed)return;closed=true;await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}};
-  return {url:origin,capability,runtime,close,server,launchUrl:origin+"/#cap="+capability};
+  return {url:origin,capability,runtime,close,server,ensureReady:ready,launchUrl:origin+"/#cap="+capability};
 }

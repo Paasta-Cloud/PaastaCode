@@ -1,7 +1,9 @@
 {
   "name": "@paasta/paastacode",
-  "version": "0.1.0-alpha.1",
-  "private": true,
+  "version": "0.2.0-beta.1",
+  "private": false,
+  "main": "desktop/main.cjs",
+  "author": "Paasta",
   "license": "MIT",
   "repository": {"type": "git", "url": "https://github.com/Paasta-Cloud/PaastaCode.git", "directory": "extensions/paastacode"},
   "description": "PaastaCode — Persian coding agent powered by OpenCode",
@@ -12,9 +14,14 @@
   "scripts": {
     "start": "node bin/paastacode.mjs web",
     "test": "node --test test/*.test.mjs",
-    "check": "node --check src/server.mjs && node --check src/runtime.mjs && node --check src/account.mjs && node --check bin/paastacode.mjs",
-    "desktop": "electron desktop/main.cjs"
+    "check": "node scripts/check.mjs",
+    "desktop": "electron desktop/main.cjs",
+    "package": "node scripts/package.mjs",
+    "package:desktop": "node scripts/package.mjs desktop",
+    "package:vscode": "node scripts/package.mjs vscode",
+    "package:portable": "node scripts/package.mjs portable"
   },
+  "files": ["bin", "src", "web", "licenses", "paasta-cli", "LICENSE", "OPENCODE_LICENSE", "THIRD_PARTY_NOTICES.md", "README.md", "API.md", "CHANGELOG.md"],
   "dependencies": {
     "opencode-ai": "1.19.0"
   },
@@ -23,6 +30,8 @@
   },
   "devDependencies": {
     "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "@vscode/vsce": "4.0.0",
     "playwright": "1.62.1"
   }
 }

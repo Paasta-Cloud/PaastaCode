@@ -35,7 +35,7 @@ const runtime={url:null,password:"synthetic",
   }};
 await mkdir(".artifacts",{recursive:true});
 const app=await startServer({account,runtime});
-const browser=await chromium.launch({headless:true,channel:"msedge"});
+const browser=await chromium.launch({headless:true,channel:process.env.PAASTACODE_BROWSER_CHANNEL||(process.platform==="win32"?"msedge":undefined)});
 const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on("pageerror",error=>errors.push(error.message));
 try{
@@ -43,6 +43,7 @@ try{
   assert.equal((await fetch(app.url+"/api/login",{method:"POST",headers:{Authorization:"Bearer "+app.capability,Origin:"https://evil.test"}})).status,403);
   await page.goto(app.launchUrl);await page.locator("#login").waitFor();
   await page.evaluate(()=>document.fonts.ready);
+  assert(await page.evaluate(()=>document.fonts.check("16px Vazirmatn")),"Bundled open-source font must load");
   assert.equal(await page.evaluate(()=>document.documentElement.dir),"rtl");
   assert.equal(await page.getByText("Powered by OpenCode",{exact:true}).getAttribute("href"),"https://opencode.ai");
   assert.equal(await page.getByText("فورک متن‌باز پاستا",{exact:true}).getAttribute("href"),"https://github.com/Paasta-Cloud/PaastaCode");

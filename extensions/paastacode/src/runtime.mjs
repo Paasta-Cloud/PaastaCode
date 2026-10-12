@@ -1,5 +1,7 @@
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
+import {existsSync} from "node:fs";
+import {fileURLToPath} from "node:url";
 import {join,resolve,dirname} from "node:path";
 import {mkdir,realpath} from "node:fs/promises";
 import {randomBytes,createHash} from "node:crypto";
@@ -8,6 +10,8 @@ import {codingModels} from "./models.mjs";
 
 const require=createRequire(import.meta.url);
 export function engineCommand(args,options={}){
+  const packaged=fileURLToPath(new URL("../engine/opencode"+(process.platform==="win32"?".exe":""),import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
+  if(existsSync(packaged))return spawn(packaged,args,{windowsHide:true,...options});
   const metadata=require("opencode-ai/package.json");
   const bin=resolve(dirname(require.resolve("opencode-ai/package.json")),metadata.bin.opencode);
   return spawn(bin,args,{windowsHide:true,...options});
@@ -62,3 +66,7 @@ export class CodeRuntime{
 }
 export const normalizedPath=workspace=>process.platform==="win32"?resolve(workspace).toLowerCase():resolve(workspace);
 export const workspaceKey=workspace=>createHash("sha256").update(normalizedPath(workspace)).digest("hex").slice(0,24);
+export function paastaMcpConfig(workspace){
+  const bridge=fileURLToPath(new URL("../bin/mcp.mjs",import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
+  return {type:"local",command:[process.execPath,bridge,"--workspace="+workspace],environment:{ELECTRON_RUN_AS_NODE:"1",PAASTACODE_HOME:stateHome},enabled:true};
+}

@@ -1,0 +1,12 @@
+{
+  "version": "0.24.0",
+  "origin": "https://console.paasta.cloud",
+  "files": {
+    "paasta-darwin-amd64": "ade4d752a83f08d89a82dc10854f3340b8cad54991ab6b99b292e45496ec7694",
+    "paasta-darwin-arm64": "5539bc3f840145de1e0b3d8fd7981c59c1461a03bdb216609ebef02a6807e9b1",
+    "paasta-linux-amd64": "0344e1706fab76059c450328044c08fedee1d0bb8ed20ef0895350ab80d9fbdb",
+    "paasta-linux-arm64": "67eaefd948f13e022df853c893b2932bfb7685b96911b21e02f3f65d24128b9b",
+    "paasta-windows-amd64.exe": "4a2b3ea6033437f3f3741eff3ec5472bfdf9ff2d9e2cd613fee21da961a7ce62",
+    "paasta-windows-arm64.exe": "9c2cad323aa026f834220ef6c032ff4d2cf475b8283f47fd0f2caafd37a2ed56"
+  }
+}

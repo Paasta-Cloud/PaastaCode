@@ -1,17 +1,26 @@
+import {promptInput,labelDialog} from "./components.js";
+import {deploymentUI} from "./deployment.js";
+import {connectHosted,hostedOrigin} from "./hosted.js";
 const $=id=>document.getElementById(id);
+const resizePrompt=promptInput($("prompt"));
+for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
+if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
-if(capability){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
+let apiOrigin="";
+if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false;
+const deployment=deploymentUI({api,run,notice,getState:()=>state});
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
-  const response=await fetch("/api/"+path,{method,headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
+  const response=await fetch(apiOrigin+"/api/"+path,{method,credentials:"omit",...(apiOrigin?{targetAddressSpace:"loopback"}:{}),headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});
   const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:false;}}
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
 async function loadState(){
   state=await api("state");$("workspace-name").textContent=state.workspace;
+  deployment.updateBase(state);
   $("account-name").textContent=state.account?.name||"حساب پاستا";
   $("account-detail").textContent=state.account?Number(state.account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار":"هنوز وارد نشدی";
   $("logout").hidden=!state.connected;$("login").hidden=state.connected;
@@ -124,10 +133,10 @@ $("composer").onsubmit=event=>{
     if(!session)session=await api("sessions","POST");
     await api("prompt","POST",{id:session.id,text,model:$("model").value});
     accepted=true;
-    $("prompt").value="";notice("");await sessions();
+    $("prompt").value="";resizePrompt();notice("");await sessions();
   }).finally(async()=>{promptPending=false;if(!accepted){sending=false;$("send").disabled=false;}await refresh();});
 };
-$("prompt").onkeydown=event=>{if(event.key==="Enter"&&(event.ctrlKey||event.metaKey)){event.preventDefault();$("composer").requestSubmit();}};
+$("prompt").onkeydown=event=>{if(!event.isComposing&&event.key==="Enter"&&(event.ctrlKey||event.metaKey)){event.preventDefault();$("composer").requestSubmit();}};
 $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:session.id});await refresh();});
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
@@ -139,4 +148,5 @@ $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
 document.addEventListener("keydown",event=>{if(event.key==="Escape")drawer(false);if(event.key==="Tab"&&$("rail").classList.contains("open")){const items=[...$("rail").querySelectorAll("button:not(:disabled),a[href]")].filter(el=>el.offsetParent);const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
 matchMedia("(max-width:640px)").addEventListener("change",()=>drawer(false));
+if(location.origin===hostedOrigin){const connection=await connectHosted();apiOrigin=connection.origin;capability=connection.capability;}
 loadState().catch(error=>notice(error.message,true));setInterval(refresh,1800);

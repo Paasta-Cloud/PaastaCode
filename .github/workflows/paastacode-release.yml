@@ -1,0 +1,124 @@
+name: PaastaCode packages
+on:
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: Require configured signing credentials and notarization
+        type: boolean
+        default: false
+      publish:
+        description: Publish a draft prerelease after every native package passes
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: paastacode-packages-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win32
+            arch: x64
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - runner: macos-latest
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: extensions/paastacode
+    env:
+      PAASTACODE_SIGNED_RELEASE: ${{ inputs.signed }}
+      PAASTACODE_HOME: ${{ github.workspace }}/extensions/paastacode/.artifacts/package-test-state
+      CSC_LINK: ${{ secrets.PAASTACODE_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.PAASTACODE_CSC_KEY_PASSWORD }}
+      APPLE_ID: ${{ secrets.PAASTACODE_APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.PAASTACODE_APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.PAASTACODE_APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extensions/paastacode/package-lock.json
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Install development tools
+        run: npm ci
+      - name: Check source and production dependencies
+        run: |
+          npm run check
+          npm audit --omit=dev
+      - name: Test real engine, MCP, permissions and deployment review
+        run: npm test
+      - name: Test deployment CLI source
+        working-directory: extensions/paastacode/paasta-cli
+        run: go test ./...
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Browser acceptance
+        run: |
+          node test/browser.mjs
+          node test/deployment-browser.mjs
+          node test/hosted-browser.mjs
+      - name: Build bundled web and CLI
+        run: npm run package:portable
+      - name: Test installed web and CLI
+        run: node scripts/smoke-package.mjs
+      - name: Build standalone VSIX
+        run: npm run package:vscode
+      - name: Build desktop installers
+        run: npm run package:desktop
+      - name: Generate artifact checksums
+        run: node scripts/release-manifest.mjs
+      - uses: actions/upload-artifact@v6
+        with:
+          name: paastacode-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            extensions/paastacode/dist/PaastaCode-*.exe
+            extensions/paastacode/dist/PaastaCode-*.zip
+            extensions/paastacode/dist/PaastaCode-*.tar.gz
+            extensions/paastacode/dist/PaastaCode-*.dmg
+            extensions/paastacode/dist/PaastaCode-*.AppImage
+            extensions/paastacode/dist/PaastaCode-*.deb
+            extensions/paastacode/dist/PaastaCode-*.vsix
+            extensions/paastacode/dist/release-manifest-*.json
+            extensions/paastacode/dist/SHA256SUMS-*.txt
+          if-no-files-found: error
+          retention-days: 30
+  publish:
+    if: inputs.publish
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: paastacode-*
+          path: .artifacts/paastacode-release
+          merge-multiple: true
+      - name: Create reviewable draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./extensions/paastacode/package.json').version")
+          gh release create "paastacode-v$version" .artifacts/paastacode-release/* --draft --prerelease --target "$GITHUB_SHA" --title "PaastaCode $version" --notes-file extensions/paastacode/RELEASE.md

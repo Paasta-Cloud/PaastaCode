@@ -11,9 +11,12 @@ function activate(context){
     const folder=vscode.workspace.workspaceFolders?.[0];
     if(!folder)return vscode.window.showErrorMessage("ابتدا یک پوشهٔ پروژه باز کنید.");
     const workspace=fs.realpathSync(folder.uri.fsPath);
-    const client=vscode.workspace.getConfiguration("paastacode").get("clientPath")||path.resolve(__dirname,"../bin/paastacode.mjs");
+    const custom=vscode.workspace.getConfiguration("paastacode").get("clientPath");
+    const bundled=path.join(__dirname,"client/bin/paastacode.mjs");
+    const client=custom||(fs.existsSync(bundled)?bundled:path.resolve(__dirname,"../bin/paastacode.mjs"));
     if(!path.isAbsolute(client)||!fs.existsSync(client))return vscode.window.showErrorMessage("مسیر نصب پاستاکد را در تنظیمات VS Code وارد کنید.");
-    child=spawn("node",[client,"web","--no-open","--workspace="+workspace],{cwd:workspace,windowsHide:true,stdio:["ignore","pipe","pipe"]});
+    const node=custom||!fs.existsSync(bundled)?"node":path.join(__dirname,"runtime",process.platform==="win32"?"node.exe":"node");
+    child=spawn(node,[client,"web","--no-open","--workspace="+workspace],{cwd:workspace,windowsHide:true,stdio:["ignore","pipe","pipe"]});
     child.stdout.resume();child.stderr.resume();
     child.on("error",()=>vscode.window.showErrorMessage("اجرای پاستاکد ممکن نشد؛ نصب Node.js و مسیر برنامه را بررسی کنید."));
     const root=path.dirname(path.dirname(client));

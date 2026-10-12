@@ -1,28 +1,57 @@
-const {app,BrowserWindow,shell}=require("electron");
-const path=require("node:path");
-let service,window;
+const {app,BrowserWindow,shell,dialog,ipcMain,Menu}=require("electron");
+const path=require("node:path"),fs=require("node:fs/promises");
+let service,window,changing=false;
 app.setName("PaastaCode");
-app.whenReady().then(async()=>{
+const requested=process.argv.find(arg=>arg.startsWith("--workspace="))?.slice(12);
+const preferences=()=>path.join(app.getPath("userData"),"workspace.json");
+async function folder(){
+  const result=await dialog.showOpenDialog(...(window?[window]:[]),{title:"پوشهٔ پروژه را انتخاب کنید",properties:["openDirectory","createDirectory"],defaultPath:app.getPath("documents"),buttonLabel:"باز کردن پروژه"});
+  return result.canceled?null:result.filePaths[0];
+}
+async function openWorkspace(workspace){
   const {startServer}=await import("../src/server.mjs");
-  const workspace=process.argv.find(arg=>arg.startsWith("--workspace="))?.slice(12)||process.cwd();
-  service=await startServer({workspace});
+  const next=await startServer({workspace});
+  if(service&&service.url!==next.url)await service.close();service=next;
+  await window.loadURL(service.launchUrl);
+  if(!process.env.PAASTACODE_DESKTOP_SMOKE){await fs.mkdir(path.dirname(preferences()),{recursive:true});await fs.writeFile(preferences(),JSON.stringify({workspace}),{mode:0o600});}
+}
+app.whenReady().then(async()=>{
+  let workspace=requested;
+  if(!workspace&&!process.env.PAASTACODE_DESKTOP_SMOKE)try{workspace=JSON.parse(await fs.readFile(preferences(),"utf8")).workspace;await fs.access(workspace);}catch{workspace=null;}
+  if(!workspace)workspace=process.env.PAASTACODE_DESKTOP_SMOKE?process.cwd():await folder();
+  if(!workspace){app.quit();return;}
   window=new BrowserWindow({title:"پاستاکد | PaastaCode",width:1280,height:880,minWidth:360,minHeight:580,
-    show:!process.env.PAASTACODE_DESKTOP_SMOKE,autoHideMenuBar:true,backgroundColor:"#f5f7fa",
-    webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
+    icon:path.join(__dirname,"icon.png"),show:!process.env.PAASTACODE_DESKTOP_SMOKE,autoHideMenuBar:true,backgroundColor:"#f5f7fa",
+    webPreferences:{preload:path.join(__dirname,"preload.cjs"),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   window.webContents.setWindowOpenHandler(({url})=>{
-    const target=new URL(url),allowed=new URL(process.env.PAASTACODE_CONSOLE||"https://console.paasta.cloud");
-    const attribution=["https://opencode.ai/","https://github.com/Paasta-Cloud/PaastaCode"].includes(target.href);
-    if(attribution||(target.origin===allowed.origin&&target.pathname==="/cli/authorize"))void shell.openExternal(url);
+    let target;try{target=new URL(url);}catch{return {action:"deny"};}
+    const allowed=new URL(process.env.PAASTACODE_CONSOLE||"https://console.paasta.cloud");
+    const attribution=["https://opencode.ai/","https://github.com/Paasta-Cloud/PaastaCode","https://github.com/Paasta-Cloud/PaastaCode/releases"].includes(target.href);
+    if(attribution||(target.origin===allowed.origin&&target.pathname==="/cli/authorize")||(target.protocol==="https:"&&!target.username&&!target.password&&target.origin!==allowed.origin))void shell.openExternal(url);
     return {action:"deny"};
   });
-  window.webContents.on("will-navigate",(event,url)=>{if(new URL(url).origin!==service.url)event.preventDefault();});
+  window.webContents.on("will-navigate",(event,url)=>{if(new URL(url).origin!==service?.url)event.preventDefault();});
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-  await window.loadURL(service.launchUrl);
+  ipcMain.handle("paastacode:choose-workspace",async event=>{
+    if(event.sender!==window.webContents||changing)return false;changing=true;
+    try{
+      const workspace=await folder();if(!workspace)return false;
+      const result=await dialog.showMessageBox(window,{type:"question",title:"باز کردن پروژه",message:"پروژهٔ دیگری باز شود؟",detail:"اجرای این پنجره متوقف می‌شود. گفتگوهای ذخیره‌شده باقی می‌مانند.",buttons:["بازگشت","باز کردن پروژه"],defaultId:0,cancelId:0});
+      if(result.response!==1)return false;await openWorkspace(workspace);return true;
+    }finally{changing=false;}
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    ...(process.platform==="darwin"?[{role:"appMenu"}]:[]),
+    {label:"پروژه",submenu:[{label:"باز کردن پوشه…",accelerator:"CmdOrCtrl+O",click:()=>window.webContents.executeJavaScript("window.paastacodeDesktop.chooseWorkspace()")},{role:"quit",label:"خروج"}]},
+    {role:"editMenu",label:"ویرایش"},{role:"viewMenu",label:"نمایش"},
+    {label:"راهنما",submenu:[{label:"دریافت نسخهٔ جدید",click:()=>shell.openExternal("https://github.com/Paasta-Cloud/PaastaCode/releases")},{label:"دربارهٔ پاستاکد",click:()=>dialog.showMessageBox(window,{title:"پاستاکد",message:"PaastaCode "+app.getVersion(),detail:"Powered by OpenCode\nفورک متن‌باز با مجوز MIT\nفونت وزیرمتن با مجوز SIL OFL"})}]}
+  ]));
+  await openWorkspace(workspace);
   if(process.env.PAASTACODE_DESKTOP_SMOKE){
-    const result=await window.webContents.executeJavaScript("({title:document.title,rtl:document.documentElement.dir,login:!!document.getElementById('login')})");
-    if(!result.rtl||!result.login)throw new Error("Desktop smoke failed.");
-    const image=await window.webContents.capturePage();
-    require("node:fs").writeFileSync(path.join(__dirname,"../.artifacts/desktop.png"),image.toPNG());
+    const result=await window.webContents.executeJavaScript("document.fonts.ready.then(()=>({rtl:document.documentElement.dir,login:!!document.getElementById('login'),font:document.fonts.check('16px Vazirmatn'),desktop:!!window.paastacodeDesktop}))");
+    if(result.rtl!=="rtl"||!result.login||!result.font||!result.desktop)throw new Error("Desktop smoke failed.");
+    const directory=process.env.PAASTACODE_SMOKE_OUTPUT||path.join(app.getPath("temp"),"paastacode-smoke");await fs.mkdir(directory,{recursive:true});
+    await fs.writeFile(path.join(directory,"desktop.png"),(await window.webContents.capturePage()).toPNG());
     console.log("PaastaCode desktop smoke passed");app.quit();
   }
 }).catch(error=>{console.error(error.message);app.exit(1);});

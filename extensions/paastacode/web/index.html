@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
 <body>
 <!-- PaastaCode: focused conversation, right session rail, inline changes. Operate mode.
-Inherits Paasta neutral surfaces, Yekan Bakh, blue primary action. One workspace, explicit permissions,
+Inherits Paasta neutral surfaces, Vazirmatn, blue primary action. One workspace, explicit permissions,
 clear local/account save state. Approved delegated direction: comp 2. Mobile rail becomes a drawer. -->
 <div class="workspace">
   <button id="rail-backdrop" class="rail-backdrop" aria-label="بستن گفتگوها" tabindex="-1" hidden></button>
@@ -11,12 +11,22 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
     <button id="rail-close" class="mobile-menu" aria-label="بستن گفتگوها">بستن ×</button>
     <a class="brand" href="#"><img src="/brand.png" width="32" height="32" alt=""><strong>پاستاکد</strong><span>نسخهٔ اولیه</span></a>
     <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید</button>
+    <button id="deploy-open" class="rail-action" type="button" disabled>انتشار روی پاستا</button>
     <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
     <div id="sessions" class="sessions"><p class="muted">بعد از ورود، گفتگوها اینجا دیده میشن.</p></div>
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
   <main>
-    <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">فضای کاری</span><strong id="workspace-name" dir="ltr">PaastaCode</strong></div><div class="header-actions"><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
+    <form id="workspace-connect" class="intro hosted-connect" hidden>
+      <span class="intro-label">پاستاکد تحت وب</span><h1>پروژهٔ خود را باز کنید</h1>
+      <p>رابط وب به فضای کاری روی دستگاه شما وصل می‌شود. برای شروع، این دستور را در پوشهٔ پروژه اجرا کنید و پنجرهٔ ترمینال را باز نگه دارید:</p>
+      <pre dir="ltr"><code>paastacode web --hosted</code></pre>
+      <p>اگر پاستاکد را نصب نکرده‌اید، <a href="https://github.com/Paasta-Cloud/PaastaCode/blob/dev/extensions/paastacode/README.md" target="_blank" rel="noopener noreferrer">راهنمای نصب</a> را ببینید.</p>
+      <label for="workspace-link">پیوند اتصال فضای کاری</label><input id="workspace-link" type="text" dir="ltr" autocomplete="off" spellcheck="false" required placeholder="http://127.0.0.1:PORT/#cap=…">
+      <button class="primary" type="submit">اتصال به فضای کاری</button><p id="workspace-connect-error" role="alert"></p>
+      <small>پیوند اتصال را خصوصی نگه دارید. برای ورود، مدل‌ها و ذخیرهٔ گفتگوها از حساب پاستا استفاده می‌شود.</small>
+    </form>
+    <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">فضای کاری</span><strong id="workspace-name" dir="ltr">PaastaCode</strong><button id="open-workspace" hidden>باز کردن پروژه</button></div><div class="header-actions"><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="onboarding" class="onboarding">
       <span class="intro-label">از ایده تا تغییر در کد</span>
@@ -41,4 +51,29 @@ clear local/account save state. Approved delegated direction: comp 2. Mobile rai
   </main>
 </div>
 <dialog id="save-dialog"><form method="dialog"><h2>ذخیرهٔ گفتگو در حساب پاستا</h2><p>متن درخواست‌ها و پاسخ‌ها به حساب پاستا فرستاده میشه. فایل‌های پروژه و خروجی ابزارها ذخیره نمیشن. اگر در متن گفتگو اطلاعات محرمانه داری، اول آن را بررسی کن.</p><div class="dialog-actions"><button value="cancel">بازگشت</button><button id="confirm-save" value="save" class="primary">ذخیرهٔ همین گفتگو</button></div></form></dialog>
+<dialog id="deployment-dialog" class="deployment-dialog">
+  <div class="dialog-heading"><h2>انتشار روی پاستا</h2><button id="deploy-close" type="button" aria-label="بستن پنجرهٔ انتشار">بستن</button></div>
+  <p>پروژه و هزینهٔ سرویس را بررسی کنید. سورس فقط پس از تأیید همین پیش‌نمایش فرستاده می‌شود.</p>
+  <section id="deploy-access"><p>برای مشاهدهٔ پروژه‌ها، اتصال MCP و انتشار، دسترسی جداگانهٔ حساب پاستا را تأیید کنید.</p><button id="deploy-connect" type="button">تأیید اتصال انتشار</button>
+    <div id="deploy-device" class="device" hidden><span>کد را با صفحهٔ پاستا تطبیق دهید.</span><strong id="deploy-code" dir="ltr"></strong><a id="deploy-link" target="_blank" rel="noopener noreferrer">باز کردن صفحهٔ تأیید پاستا</a></div>
+  </section>
+  <form id="deploy-form" class="deploy-form" hidden>
+    <label for="deploy-name">نام پروژه در پاستا</label><input id="deploy-name" dir="ltr" required pattern="[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?" maxlength="63" autocomplete="off">
+    <label for="deploy-plan">پلن سرویس</label><select id="deploy-plan" required></select>
+    <label for="deploy-region">محل میزبانی</label><select id="deploy-region" required></select>
+    <label for="deploy-billing">روش پرداخت</label><select id="deploy-billing"><option value="payg">براساس مصرف</option><option value="monthly">ماهانه با پرداخت پیشاپیش</option></select>
+    <button id="deploy-preview" type="submit">بررسی سورس و هزینه</button>
+  </form>
+  <section id="deploy-review" class="deploy-review" hidden>
+    <h3><bdi id="deploy-target" dir="ltr"></bdi></h3><p id="deploy-summary"></p><p id="deploy-cost"></p>
+    <details><summary>فایل‌های انتخاب‌شده برای انتشار</summary><pre id="deploy-files" dir="ltr"></pre></details>
+    <p>فایل‌های محیطی و کلیدها به‌طور خودکار وارد نمی‌شوند. اگر پروژه‌ای با همین نام دارید، نسخهٔ جدید روی همان سرویس منتشر می‌شود.</p>
+    <div class="dialog-actions"><button id="deploy-reject" type="button">لغو این انتشار</button><button id="deploy-confirm" class="primary" type="button">تأیید هزینه و انتشار</button></div>
+    <p id="deploy-result" role="status"></p>
+    <a id="deploy-url" dir="ltr" target="_blank" rel="noopener noreferrer" hidden></a>
+    <details><summary>گزارش انتشار</summary><pre id="deploy-logs" dir="ltr"></pre></details>
+  </section>
+  <div id="deploy-jobs" class="deploy-jobs" aria-label="درخواست‌های انتشار"></div>
+  <button id="deploy-disconnect" class="subtle" type="button" hidden>قطع اتصال انتشار</button>
+</dialog>
 </body></html>

@@ -4,4 +4,4 @@ PaastaCode / پاستاکد is Paasta's Persian coding-agent client. It uses the
 
 The audience is Iranian developers and AI-assisted makers. The central task is requesting a code change, reviewing permissions and results, and continuing work without losing context. Prices are toman. No unrelated deployment capability is granted by login.
 
-Platform: web, desktop, CLI, VS Code. Browser and desktop share the same UI; all clients must converge on the same workspace engine. Follow ../../DESIGN.md and the engineering handbook. Yekan Bakh for Persian, isolated monospace for code. No invented logos or customer claims.
+Platform: web, desktop, CLI, VS Code. Browser and desktop share the same UI; all clients must converge on the same workspace engine. Follow ../../DESIGN.md and the engineering handbook. Vazirmatn for Persian, isolated monospace for code. No invented logos or customer claims.
