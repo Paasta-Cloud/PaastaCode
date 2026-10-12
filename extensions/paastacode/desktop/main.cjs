@@ -2,6 +2,8 @@ const {app,BrowserWindow,shell,dialog,ipcMain,Menu}=require("electron");
 const path=require("node:path"),fs=require("node:fs/promises");
 let service,window,changing=false;
 app.setName("PaastaCode");
+// CI runners lack a usable GPU; keep native renderer acceptance on supported CPU rendering.
+if(process.env.PAASTACODE_DESKTOP_SMOKE&&process.env.CI)app.disableHardwareAcceleration();
 const requested=process.argv.find(arg=>arg.startsWith("--workspace="))?.slice(12);
 const preferences=()=>path.join(app.getPath("userData"),"workspace.json");
 async function folder(){
