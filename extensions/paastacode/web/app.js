@@ -37,8 +37,13 @@ async function loadState(){
 }
 async function sessions(){
   const listMode=mode,version=++listGeneration;
-  const items=listMode==="cloud"?(await api("cloud")).sessions:await api("sessions");
+  $("sessions").setAttribute("aria-busy","true");
+  for(const button of $("sessions").querySelectorAll("button"))button.disabled=true;
+  let items;
+  try{items=listMode==="cloud"?(await api("cloud")).sessions:await api("sessions");}
+  catch(error){if(version===listGeneration)$("sessions").setAttribute("aria-busy","false");throw error;}
   if(version!==listGeneration||mode!==listMode)return;
+  $("sessions").setAttribute("aria-busy","false");
   $("sessions").replaceChildren();
   if(!items.length){const text=document.createElement("p");text.className="muted";text.textContent=mode==="cloud"?"هنوز گفتگویی در حساب ذخیره نشده.":"اولین گفتگو را شروع کن.";$("sessions").append(text);return;}
   for(const item of items){

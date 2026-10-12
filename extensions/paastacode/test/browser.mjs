@@ -92,12 +92,12 @@ try{
   await page.getByText("فقط همین بار",{exact:true}).click();assert.equal(grants,2,"cloud list must not stop local approval polling");
   busy=false;await page.locator("#sessions button").first().click();
   safeDelete=false;await page.locator("#sessions button").first().click();await page.getByText("حذف امن به نسخهٔ تازهٔ سرویس حساب و برنامهٔ محلی نیاز دارد. پاستاکد و سرویس آن را به‌روز کنید.",{exact:true}).waitFor();assert.equal(await page.getByRole("button",{name:"حذف از حساب",exact:true}).isDisabled(),true,"old servers must not be trusted for conditional deletion");
-  safeDelete=true;await page.locator("#sessions button").first().click();await page.waitForFunction(()=>!document.querySelector(".cloud-actions .danger-action").disabled);
+  safeDelete=true;await page.locator("#sessions button").first().click();await page.waitForFunction(()=>document.querySelector(".cloud-actions .danger-action")?.disabled===false);
   await page.route(app.url+"/api/state",async route=>{const response=await route.fetch();const data=await response.json();delete data.features;await route.fulfill({response,json:data});});
   await page.reload();await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();
   await page.getByText("حذف امن به نسخهٔ تازهٔ سرویس حساب و برنامهٔ محلی نیاز دارد. پاستاکد و سرویس آن را به‌روز کنید.",{exact:true}).waitFor();
   assert.equal(await page.getByRole("button",{name:"حذف از حساب",exact:true}).isDisabled(),true,"an old local broker must not drop the revision check");
-  await page.unroute(app.url+"/api/state");await page.reload();await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();await page.waitForFunction(()=>!document.querySelector(".cloud-actions .danger-action").disabled);
+  await page.unroute(app.url+"/api/state");await page.reload();await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();await page.waitForFunction(()=>document.querySelector(".cloud-actions .danger-action")?.disabled===false);
   const downloadPromise=page.waitForEvent("download");await page.getByText("دریافت فایل گفتگو",{exact:true}).click();
   const download=await downloadPromise;const exported=JSON.parse(await readFile(await download.path(),"utf8"));
   assert.deepEqual(exported,{version:1,title:account.saved.title,messages:account.saved.snapshot.messages});
@@ -120,7 +120,7 @@ try{
   busy=false;
   await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();
   await page.getByRole("button",{name:"حذف از حساب",exact:true}).click();await page.locator("#cloud-delete-confirm").click();
-  await page.waitForFunction(()=>document.querySelector("#save-state").textContent==="نسخهٔ حساب حذف شد");assert.equal(deletes,1);assert.equal(await page.locator("#sessions button").count(),0);
+  await page.waitForFunction(()=>document.querySelector("#save-state").textContent==="نسخهٔ حساب حذف شد"&&!document.querySelector("#sessions button"));assert.equal(deletes,1);assert.equal(await page.locator("#sessions button").count(),0);
   await page.locator("#local-tab").click();await page.locator("#sessions button").first().click();
   await page.locator("#save").click();await page.locator("#confirm-save").click();await page.waitForFunction(()=>document.querySelector("#save-state").textContent.includes("ذخیره"));await page.locator("#cloud-tab").click();await page.locator("#sessions button").first().click();
   assert.notEqual(account.saved.id,deletedId,"an explicit fresh backup must not resurrect the deleted cloud ID");
