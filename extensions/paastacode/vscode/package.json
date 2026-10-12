@@ -2,7 +2,7 @@
   "name":"paastacode",
   "displayName":"PaastaCode | پاستاکد",
   "description":"رابط پاستاکد در VS Code با نشست مشترک وب و CLI",
-  "version":"0.2.1",
+  "version":"0.2.2",
   "icon":"icon.png",
   "publisher":"paasta",
   "license":"MIT",

@@ -3,6 +3,7 @@ import {deploymentUI} from "./deployment.js";
 import {connectHosted,hostedOrigin} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
 import {devicesUI} from "./devices.js";
+import {syncUI} from "./sync.js";
 const $=id=>document.getElementById(id);
 const resizePrompt=promptInput($("prompt"));
 for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
@@ -13,6 +14,7 @@ if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacod
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false;
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
+const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
@@ -25,6 +27,7 @@ async function loadState(){
   state=await api("state");$("workspace-name").textContent=state.workspace;
   deployment.updateBase(state);
   devices.update(state);
+  if(!state.configured)conversationSync.hide();
   $("account-name").textContent=state.account?.name||"حساب پاستا";
   $("account-detail").textContent=state.account?Number(state.account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار":"هنوز وارد نشدی";
   $("logout").hidden=!state.connected;$("login").hidden=state.connected;
@@ -55,6 +58,7 @@ async function sessions(){
       generation++;lastMessages="";
       if(listMode==="cloud"){
         session=null;$("composer").hidden=true;$("save").disabled=true;$("permissions").replaceChildren();
+        conversationSync.hide();
         const saved=await api("cloud/session?id="+encodeURIComponent(item.id));
         renderMessages(saved.snapshot.messages.map(m=>({info:{role:m.role},parts:[{type:"text",text:m.text}]})));
         session=null;$("permissions").replaceChildren();$("composer").hidden=true;$("save").disabled=true;$("empty").hidden=true;
@@ -112,6 +116,7 @@ async function refresh(){
       $("save").disabled=!messages.length;
       const status=await api("status");if(version!==generation||session!==selected)return;sending=promptPending||(!!status[selected.id]&&status[selected.id].type!=="idle");
       $("send").disabled=sending;$("stop").hidden=!sending;$("connection-state").textContent=sending?"پاستاکد مشغول کاره":"آماده";
+      await conversationSync.refresh();
     }
     const permissions=await api("permissions");if(version!==generation||session!==selected)return;$("permissions").replaceChildren();
     for(const permission of permissions.filter(p=>p.sessionID===session?.id)){
@@ -135,7 +140,7 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
 $("new").onclick=()=>run($("new"),async()=>{generation++;session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
@@ -154,7 +159,7 @@ $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
 $("model").onchange=price;
 $("local-tab").onclick=()=>run($("local-tab"),async()=>{mode="local";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");if(!session){$("messages").replaceChildren();$("empty").hidden=false;}$("composer").hidden=false;await sessions();});
-$("cloud-tab").onclick=()=>run($("cloud-tab"),async()=>{mode="cloud";$("local-tab").setAttribute("aria-pressed","false");$("cloud-tab").setAttribute("aria-pressed","true");await sessions();});
+$("cloud-tab").onclick=()=>run($("cloud-tab"),async()=>{conversationSync.hide();mode="cloud";$("local-tab").setAttribute("aria-pressed","false");$("cloud-tab").setAttribute("aria-pressed","true");await sessions();});
 function drawer(open){$("rail").classList.toggle("open",open);$("menu").setAttribute("aria-expanded",String(open));document.querySelector("main").inert=open;$("rail-backdrop").hidden=!open;if(open)$("rail-close").focus();else if(matchMedia("(max-width:640px)").matches)$("menu").focus();}
 $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("rail-backdrop").onclick=()=>drawer(false);
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
