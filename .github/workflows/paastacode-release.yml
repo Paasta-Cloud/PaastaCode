@@ -93,7 +93,7 @@ jobs:
           sudo apt-get install -y ./dist/PaastaCode-*.deb
       - name: Run installed Linux desktop
         if: runner.os == 'Linux'
-        run: xvfb-run -a node scripts/smoke-desktop.mjs
+        run: dbus-run-session -- xvfb-run -a node scripts/smoke-desktop.mjs
       - name: Run packaged Windows and macOS desktop
         if: runner.os != 'Linux'
         run: node scripts/smoke-desktop.mjs

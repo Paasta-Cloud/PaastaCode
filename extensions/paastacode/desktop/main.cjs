@@ -21,7 +21,7 @@ app.whenReady().then(async()=>{
   if(!workspace)workspace=process.env.PAASTACODE_DESKTOP_SMOKE?process.cwd():await folder();
   if(!workspace){app.quit();return;}
   window=new BrowserWindow({title:"پاستاکد | PaastaCode",width:1280,height:880,minWidth:360,minHeight:580,
-    icon:path.join(__dirname,"icon.png"),show:!process.env.PAASTACODE_DESKTOP_SMOKE,autoHideMenuBar:true,backgroundColor:"#f5f7fa",
+    icon:path.join(__dirname,"icon.png"),show:!process.env.PAASTACODE_DESKTOP_SMOKE||process.env.PAASTACODE_DESKTOP_VISIBLE_SMOKE==="1",autoHideMenuBar:true,backgroundColor:"#f5f7fa",
     webPreferences:{preload:path.join(__dirname,"preload.cjs"),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   window.webContents.setWindowOpenHandler(({url})=>{
     let target;try{target=new URL(url);}catch{return {action:"deny"};}
@@ -51,6 +51,7 @@ app.whenReady().then(async()=>{
     if(process.env.PAASTACODE_EXPECT_VERSION&&app.getVersion()!==process.env.PAASTACODE_EXPECT_VERSION)throw new Error("Desktop package version does not match the release being verified.");
     const result=await window.webContents.executeJavaScript("document.fonts.ready.then(()=>({rtl:document.documentElement.dir,login:!!document.getElementById('login'),font:document.fonts.check('16px Vazirmatn'),desktop:!!window.paastacodeDesktop}))");
     if(result.rtl!=="rtl"||!result.login||!result.font||!result.desktop)throw new Error("Desktop smoke failed.");
+    if(process.env.PAASTACODE_DESKTOP_VISIBLE_SMOKE==="1")await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
     const directory=process.env.PAASTACODE_SMOKE_OUTPUT||path.join(app.getPath("temp"),"paastacode-smoke");await fs.mkdir(directory,{recursive:true});
     await fs.writeFile(path.join(directory,"desktop.png"),(await window.webContents.capturePage()).toPNG());
     console.log("PaastaCode desktop smoke passed");app.quit();

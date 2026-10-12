@@ -8,7 +8,7 @@ await mkdir(qa,{recursive:true});
 const candidates=process.platform==="win32"?["dist/win-unpacked/PaastaCode.exe"]:process.platform==="darwin"?["dist/mac-arm64/PaastaCode.app/Contents/MacOS/PaastaCode","dist/mac/PaastaCode.app/Contents/MacOS/PaastaCode"]:["/opt/PaastaCode/paastacode","/opt/paastacode/paastacode"];
 const binary=candidates.map(path=>resolve(path)).find(path=>existsSync(path));
 if(!binary)throw new Error("Packaged desktop executable not found; Linux acceptance requires installing the built deb first.");
-const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:join(qa,"capture")};
+const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",...(process.env.CI?{PAASTACODE_DESKTOP_VISIBLE_SMOKE:"1"}:{}),PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:join(qa,"capture")};
 let output="",diagnostic="";
 await new Promise((done,reject)=>{
   const child=spawn(binary,["--workspace="+qa,"--user-data-dir="+join(qa,"user-data")],{env,windowsHide:true,stdio:["ignore","pipe","pipe"]});
