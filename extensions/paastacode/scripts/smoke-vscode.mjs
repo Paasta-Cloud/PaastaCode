@@ -12,6 +12,7 @@ const release=JSON.parse(await readFile(`dist/release-manifest-${process.platfor
 assert.equal(release.version,pkg.version);assert.equal(release.platform,process.platform);assert.equal(release.arch,process.arch);
 const expected=release.files.find(file=>file.name===vsix.split(/[\\/]/).at(-1));assert(expected,"VSIX must appear in the native release manifest");
 const bytes=await readFile(vsix);assert.equal(bytes.length,expected.bytes);assert.equal(createHash("sha256").update(bytes).digest("hex"),expected.sha256);
+await mkdir(resolve(".artifacts"),{recursive:true});
 const root=await realpath(resolve(".artifacts"));
 const home=await mkdtemp(join(root,"vscode-installed-")),extensions=join(home,"extensions"),profile=join(home,"profile"),workspace=join(home,"workspace"),driver=join(home,"driver");
 const output=resolve(".artifacts/vscode-acceptance");
