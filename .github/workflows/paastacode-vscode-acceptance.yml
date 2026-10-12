@@ -10,6 +10,12 @@ on:
         description: Exact public source commit used by the package workflow
         required: true
         type: string
+      platform_group:
+        description: Run the full matrix or focus on macOS failures
+        required: true
+        default: all
+        type: choice
+        options: [all, macos]
 permissions:
   contents: read
   actions: read
@@ -18,22 +24,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: windows-latest
-            platform: win32
-            arch: x64
-          - runner: ubuntu-latest
-            platform: linux
-            arch: x64
-          - runner: ubuntu-24.04-arm
-            platform: linux
-            arch: arm64
-          - runner: macos-15-intel
-            platform: darwin
-            arch: x64
-          - runner: macos-latest
-            platform: darwin
-            arch: arm64
+        include: ${{ fromJSON(inputs.platform_group == 'macos' && '[{"runner":"macos-15-intel","platform":"darwin","arch":"x64"},{"runner":"macos-latest","platform":"darwin","arch":"arm64"}]' || '[{"runner":"windows-latest","platform":"win32","arch":"x64"},{"runner":"ubuntu-latest","platform":"linux","arch":"x64"},{"runner":"ubuntu-24.04-arm","platform":"linux","arch":"arm64"},{"runner":"macos-15-intel","platform":"darwin","arch":"x64"},{"runner":"macos-latest","platform":"darwin","arch":"arm64"}]') }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
     defaults:

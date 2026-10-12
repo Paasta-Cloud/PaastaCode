@@ -28,11 +28,17 @@ try{
   const installed=await runVSCodeCommand([...profileArgs,"--list-extensions","--show-versions"],{...download,reuseMachineInstall:true,spawn:{timeout:30000}});
   assert(installed.stdout.split(/\r?\n/).includes("paasta.paastacode@"+manifest.version),"The expected customer VSIX must be installed");
   const log=await import("node:fs");const stream=log.createWriteStream(join(output,"vscode.log"));
+  let runnerError;
   try{
     await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:driver,extensionTestsPath:resolve("test/vscode-smoke.cjs"),
       launchArgs:[workspace,...profileArgs,"--remote-debugging-port="+port,"--disable-gpu"],stdout:stream,stderr:stream,
       extensionTestsEnv:{PAASTACODE_HOME:join(home,"account"),PAASTACODE_TEST_CDP:String(port),PAASTACODE_INSTALLED_ROOT:extensions,PAASTACODE_EXPECT_EXTENSION_VERSION:manifest.version,PAASTACODE_VSCODE_OUTPUT:output}});
-  }finally{await new Promise(r=>stream.end(r));}
+  }catch(error){runnerError=error;}finally{await new Promise(r=>stream.end(r));}
+  if(runnerError){
+    const diagnostic=(await readFile(join(output,"vscode.log"),"utf8")).split(/\r?\n/).filter(line=>/error|failed|assert|ERR_|fatal/i.test(line)).slice(-20).join("\n")
+      .replace(/(?:#cap=|\/embed\/)[A-Za-z0-9_-]+/g,"[redacted local capability]").replace(/Bearer [A-Za-z0-9_.-]+/g,"Bearer [redacted]");
+    console.error(diagnostic);throw runnerError;
+  }
   const result=JSON.parse(await readFile(join(output,"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
   console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and Vazirmatn`);
 }finally{
