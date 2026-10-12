@@ -1,0 +1,83 @@
+name: PaastaCode installed VS Code acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      package_run:
+        description: Successful PaastaCode package workflow run
+        required: true
+        type: string
+      package_sha:
+        description: Exact public source commit used by the package workflow
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  installed-extension:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: win32
+            arch: x64
+          - runner: ubuntu-latest
+            platform: linux
+            arch: x64
+          - runner: ubuntu-24.04-arm
+            platform: linux
+            arch: arm64
+          - runner: macos-15-intel
+            platform: darwin
+            arch: x64
+          - runner: macos-latest
+            platform: darwin
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: extensions/paastacode
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extensions/paastacode/package-lock.json
+      - name: Install acceptance tools
+        run: npm ci
+      - name: Verify source and download native customer package
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE_RUN: ${{ inputs.package_run }}
+          PACKAGE_SHA: ${{ inputs.package_sha }}
+          NATIVE_ARTIFACT: paastacode-${{ matrix.platform }}-${{ matrix.arch }}
+        run: |
+          [[ "$PACKAGE_RUN" =~ ^[0-9]+$ && "$PACKAGE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          actual=$(gh run view "$PACKAGE_RUN" --repo "$GITHUB_REPOSITORY" --json headSha,conclusion --jq '.headSha+" "+.conclusion')
+          [[ "$actual" = "$PACKAGE_SHA success" ]] || exit 1
+          gh run download "$PACKAGE_RUN" --repo "$GITHUB_REPOSITORY" --name "$NATIVE_ARTIFACT" --dir dist
+      - name: Install Linux display dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb dbus-x11 libnss3 libatk-bridge2.0-0 libgbm1 libasound2t64 libgtk-3-0
+      - name: Install and run customer VSIX in VS Code on Linux
+        if: runner.os == 'Linux'
+        run: dbus-run-session -- xvfb-run -a node scripts/smoke-vscode.mjs
+      - name: Install and run customer VSIX in VS Code on Windows and macOS
+        if: runner.os != 'Linux'
+        run: node scripts/smoke-vscode.mjs
+      - name: Retain native renderer evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: paastacode-installed-vscode-${{ matrix.platform }}-${{ matrix.arch }}
+          path: |
+            extensions/paastacode/.artifacts/vscode-acceptance/vscode.png
+            extensions/paastacode/.artifacts/vscode-acceptance/vscode-result.json
+          if-no-files-found: ignore
+          retention-days: 30
