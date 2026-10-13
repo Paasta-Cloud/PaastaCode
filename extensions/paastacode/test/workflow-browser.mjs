@@ -4,15 +4,15 @@ import {mkdir} from "node:fs/promises";
 import {chromium} from "playwright";
 process.env.PAASTACODE_HOME=resolve(".artifacts/workflow-browser-"+process.pid);
 const {startServer}=await import("../src/server.mjs");
-let busy=false,aborts=0;const sessions=[],messages=new Map(),prompts=[];
+let busy=false,busySession=null,aborts=0;const sessions=[],messages=new Map(),prompts=[];
 const runtime={url:null,async start(){this.url="http://127.0.0.1:1";},async stop(){},async call(path,options={}){
   if(path==="/session"){if(options.method==="POST"){const session={id:"ses_"+(sessions.length+1),title:options.body.title,directory:process.cwd()};sessions.push(session);messages.set(session.id,[]);return session;}return sessions;}
-  if(path==="/session/status")return busy?{[sessions[0].id]:{type:"busy"}}:{};
+  if(path==="/session/status")return busy?{[busySession]:{type:"busy"}}:{};
   if(path==="/permission")return [];
   const id=path.split("/")[2];
   if(path.endsWith("/message"))return messages.get(id);
   if(path.endsWith("/abort")){busy=false;aborts++;return true;}
-  if(path.endsWith("/prompt_async")){prompts.push(options.body);messages.get(id).push({info:{id:"msg_"+prompts.length,role:"user"},parts:options.body.parts});busy=true;return null;}
+  if(path.endsWith("/prompt_async")){prompts.push(options.body);messages.get(id).push({info:{id:"msg_"+prompts.length,role:"user"},parts:options.body.parts});busy=true;busySession=id;return null;}
   return sessions.find(s=>s.id===id);
 }};
 const account={origin:"https://example.test",credentials:{token:"synthetic",aiKey:"synthetic"},async context(){return {account:{id:"synthetic",tenantId:"synthetic",name:"حساب آزمایشی",balanceToman:1000},models:[{id:"professional",name:"Kimi K3",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"economy",name:"GLM-5.3-Flash",supported_parameters:["tools"],input_toman_per_million:10,output_toman_per_million:30}]};}};
@@ -44,7 +44,7 @@ try{
   assert.equal(await page.locator("#workflow-phase").inputValue(),"auto");await page.locator("#prompt").fill("فرم ورود را اصلاح کن");await page.locator("#send").click();
   for(let i=0;i<50&&prompts.length<5;i++)await page.waitForTimeout(100);
   busy=false;messages.get(sessions.at(-1).id).push({info:{id:"msg_auto_plan",role:"assistant",agent:"paasta-plan",time:{created:Date.now(),completed:Date.now()}},parts:[{type:"text",text:"Plan the validation change"}]});
-  for(let i=0;i<80&&prompts.length<6;i++)await page.waitForTimeout(100);assert.equal(prompts.at(-1).agent,"build");assert.equal(prompts.at(-1).model.modelID,"economy");
+  for(let i=0;i<80&&prompts.length<6;i++)await page.waitForTimeout(100);assert.equal(prompts.length,6);assert.equal(busySession,sessions.at(-1).id);assert.equal(prompts.at(-1).agent,"build");assert.equal(prompts.at(-1).model.modelID,"economy");
   await page.waitForFunction(()=>document.querySelector("#workflow-summary").textContent.includes("GLM-5.3-Flash"));assert.match(await page.locator("#price").innerText(),/GLM-5.3-Flash/);
   assert(!(await page.locator("#price").innerText()).includes("Kimi K3"),"Active execution must show the actual economy model price");
   console.log("Workflow browser acceptance passed: plan/executor pricing, live model restart, desktop/390/320px, text import preview and no script execution.");
