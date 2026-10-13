@@ -97,6 +97,9 @@ jobs:
           docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" --format '{{json .Manifest}}' > .artifacts/runtime-image/index.json
           node --input-type=module -e 'import {readFile,writeFile} from "node:fs/promises";const image=JSON.parse(await readFile(".artifacts/runtime-image/index.json","utf8"));if(!/^sha256:[a-f0-9]{64}$/.test(image.digest))throw new Error("Invalid runtime index");for(const arch of ["amd64","arm64"])if(!image.manifests?.some(m=>m.platform?.os==="linux"&&m.platform.architecture===arch))throw new Error("Missing native runtime: "+arch);await writeFile(".artifacts/runtime-image/image.txt",process.env.IMAGE+"@"+image.digest+"\n");'
           cat .artifacts/runtime-image/image.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Require anonymous runtime pull before customer activation
+        run: |
+          node --input-type=module -e 'import {readFile} from "node:fs/promises";import {createHash} from "node:crypto";const reference=(await readFile(".artifacts/runtime-image/image.txt","utf8")).trim(),digest=reference.split("@")[1];const auth=await fetch("https://ghcr.io/token?service=ghcr.io&scope=repository:paasta-cloud/paastacode-cloud:pull");if(!auth.ok)throw new Error("Anonymous registry access unavailable; make the runtime package public before activation");const token=(await auth.json()).token;const response=await fetch("https://ghcr.io/v2/paasta-cloud/paastacode-cloud/manifests/"+digest,{headers:{Authorization:"Bearer "+token,Accept:"application/vnd.oci.image.index.v1+json"}});if(!response.ok)throw new Error("Anonymous runtime pull unavailable; make the package public before activation");const bytes=Buffer.from(await response.arrayBuffer());if("sha256:"+createHash("sha256").update(bytes).digest("hex")!==digest)throw new Error("Anonymous runtime digest mismatch");'
       - uses: actions/upload-artifact@v6
         with:
           name: paastacode-cloud-runtime-reference
