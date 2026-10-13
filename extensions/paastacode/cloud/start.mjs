@@ -12,8 +12,12 @@ process.env.PAASTACODE_HOME=join(root,"account");
 process.env.HOME=join(root,"home");await mkdir(process.env.HOME,{recursive:true,mode:0o700});
 delete process.env.PAASTACODE_CLOUD_SECRET_FILE;
 const {startServer}=await import("../src/server.mjs");
+const {PaastaAccount}=await import("../src/account.mjs");
 const {cloudGateway}=await import("./gateway.mjs");
-const broker=await startServer({workspace});
+const account=new PaastaAccount(undefined,undefined,{owner:{id:process.env.PAASTACODE_CLOUD_USER_ID,tenantId:process.env.PAASTACODE_CLOUD_TENANT_ID}});
+try{await account.load();}
+catch{console.warn("Saved cloud login could not be verified; sign-in remains available and stored data is retained.");}
+const broker=await startServer({workspace,account});
 let gateway;
 try{gateway=await cloudGateway({broker,secret,port:8080});}
 catch(error){await broker.close();throw error;}

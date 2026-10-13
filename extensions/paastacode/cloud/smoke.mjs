@@ -12,13 +12,14 @@ await writeFile(join(directory,"token"),secret,{mode:0o444});await chmod(directo
 const docker=async args=>(await execute("docker",args,{timeout:120_000,maxBuffer:1024*1024})).stdout.trim();
 let created=false,createdVolume=false;
 async function launch(){
-  await docker(["run","--detach","--name",name,"--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--memory","1g","--cpus","1","--pids-limit","512","--tmpfs","/tmp:rw,nosuid,nodev,size=268435456","--mount",`type=volume,source=${volume},target=/data`,"--mount",`type=bind,source=${join(directory,"token")},target=/run/control-token,readonly`,"--env","PAASTACODE_CLOUD_SECRET_FILE=/run/control-token","--publish","127.0.0.1::8080",image]);created=true;
+  await docker(["run","--detach","--name",name,"--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--memory","1g","--cpus","1","--pids-limit","512","--tmpfs","/tmp:rw,nosuid,nodev,size=268435456","--mount",`type=volume,source=${volume},target=/data`,"--mount",`type=bind,source=${join(directory,"token")},target=/run/control-token,readonly`,"--env","PAASTACODE_CONSOLE=http://127.0.0.1:1","--env","PAASTACODE_CLOUD_SECRET_FILE=/run/control-token","--env","PAASTACODE_CLOUD_USER_ID=00000000-0000-4000-8000-000000000011","--env","PAASTACODE_CLOUD_TENANT_ID=00000000-0000-4000-8000-000000000012","--publish","127.0.0.1::8080",image]);created=true;
   const port=await docker(["port",name,"8080/tcp"]);assert.match(port,/^127\.0\.0\.1:\d+$/);const url="http://"+port;
   const deadline=Date.now()+60_000;
   while(Date.now()<deadline){try{if((await fetch(url+"/health",{signal:AbortSignal.timeout(1000)})).ok)return url;}catch{}await new Promise(done=>setTimeout(done,250));}
   throw new Error("Cloud container did not become ready");
 }
 try{
+  await assert.rejects(docker(["run","--rm","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--tmpfs","/tmp:rw,nosuid,nodev,size=67108864","--mount",`type=bind,source=${join(directory,"token")},target=/run/control-token,readonly`,"--env","PAASTACODE_CLOUD_DATA=/tmp/data","--env","PAASTACODE_CLOUD_SECRET_FILE=/run/control-token",image]),error=>error.stderr?.includes("صاحب فضای کار ابری معتبر نیست"));
   await docker(["volume","create",volume]);createdVolume=true;
   let url=await launch();const headers={Authorization:"Bearer "+secret};
   assert.equal((await fetch(url+"/api/state")).status,401);
@@ -30,10 +31,12 @@ try{
   await docker(["exec",name,"node","-e","require('fs').writeFileSync('/data/workspace/persistence.txt','retained synthetic project')"]);
   assert.match(await docker(["exec",name,"node","--input-type=module","-e","import {engineCommand} from './src/runtime.mjs'; const child=engineCommand(['--version'],{stdio:'inherit'}); child.once('exit',code=>process.exit(code));"]),/1\.19\.0/);
   await docker(["exec",name,"/opt/paastacode/engine/paasta","--version"]);
+  await docker(["exec",name,"node","-e","const fs=require('fs');fs.mkdirSync('/data/account',{recursive:true});fs.writeFileSync('/data/account/account.json',JSON.stringify({origin:'http://127.0.0.1:1',token:'paasta_'+ 'a'.repeat(43)}),{mode:0o600});"]);
   await docker(["stop","--time","40",name]);await docker(["rm",name]);created=false;
-  url=await launch();assert.equal((await fetch(url+"/api/state",{headers})).status,200);
+  url=await launch();const state=await fetch(url+"/api/state",{headers});assert.equal(state.status,200);assert.equal((await state.json()).connected,false);
+  assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(String(require('fs').existsSync('/data/account/account.json')))"]),"true");
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(require('fs').readFileSync('/data/workspace/persistence.txt','utf8'))"]),"retained synthetic project");
-  console.log("Cloud container acceptance passed: private API, non-root/read-only runtime, real engine/CLI, project persistence across container replacement");
+  console.log("Cloud container acceptance passed: required owner, unverified login recovery, private API, non-root/read-only runtime, real engine/CLI, project persistence across container replacement");
 }finally{
   if(created){await docker(["stop","--time","40",name]).catch(()=>{});await docker(["rm","--force",name]).catch(()=>{});}
   if(createdVolume)await docker(["volume","rm",volume]);

@@ -7,10 +7,18 @@ provisioning, persistence/restore acceptance and production rollout remain open.
 Each workspace must receive its own isolated workload and persistent data mount.
 Set `PAASTACODE_CLOUD_DATA` to that absolute mount path and
 `PAASTACODE_CLOUD_SECRET_FILE` to a read-only mounted 32-byte base64url secret.
+Set `PAASTACODE_CLOUD_USER_ID` and `PAASTACODE_CLOUD_TENANT_ID` from the immutable
+workspace reservation. Startup rejects absent/invalid owner identifiers. Saved
+credentials and newly approved device grants must resolve to that exact user and
+tenant before being accepted or persisted. Deployment grants inherit the same
+binding. A failed or canceled login preserves the previous account on disk.
+If a saved login cannot be verified at startup, the runtime stays disconnected
+and offers sign-in again while retaining the saved credentials and project data.
 Run `node cloud/start.mjs`. The private listener uses port 8080; `/health` exposes
 readiness only. Authenticated calls use a strict API allowlist. The gateway never
 accepts browser origins, forwards browser cookies, or exposes daemon shutdown,
 updater controls, raw engine APIs or the internal MCP transport.
+The allowlist includes the managed model workflow and reviewed project imports.
 
 The Paasta control plane must authenticate the user and check current tenant and
 workspace ownership for **every** call. A workspace secret is a service

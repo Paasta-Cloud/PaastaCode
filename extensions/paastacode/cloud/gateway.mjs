@@ -4,8 +4,8 @@ import {validCapability} from "../src/server.mjs";
 // This listener is private to the Paasta control plane. Browser identity and
 // tenant/workspace ownership must be checked there before each forwarded call.
 const routes=new Set([
-  ...["state","devices","deployment/state","deployment/context","deployment/job","cloud","cloud/session","git","git/diff","sessions","messages","permissions","status","sync"].map(path=>"GET /api/"+path),
-  ...["ready","login","login/poll","connect","logout","deployment/login","deployment/login/poll","deployment/disconnect","deployment/request","deployment/approve","deployment/reject","git","access","sessions","permission","prompt","abort","save","sync","restore"].map(path=>"POST /api/"+path),
+  ...["state","devices","deployment/state","deployment/context","deployment/job","cloud","cloud/session","git","git/diff","sessions","messages","permissions","status","sync","workflow"].map(path=>"GET /api/"+path),
+  ...["ready","login","login/poll","connect","logout","deployment/login","deployment/login/poll","deployment/disconnect","deployment/request","deployment/approve","deployment/reject","git","access","sessions","permission","prompt","abort","save","sync","restore","import/preview","import"].map(path=>"POST /api/"+path),
   "DELETE /api/devices","DELETE /api/cloud/session",
 ]);
 const maxBody=1_100_000,maxResponse=16_000_000;

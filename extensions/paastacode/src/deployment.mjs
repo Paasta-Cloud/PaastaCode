@@ -40,7 +40,7 @@ const slug=value=>typeof value==="string"&&/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])
 const sameAccount=(a,b)=>a.id===b.id&&a.tenantId===b.tenantId;
 export class PaastaDeployment{
   constructor({workspace,account,deploymentAccount,execute=runCli}={}){
-    this.workspace=resolve(workspace);this.account=account;this.connection=deploymentAccount||new PaastaAccount(account.origin,stateHome,{deployment:true});this.execute=execute;this.jobs=new Map();this.rpcId=0;this.loaded=false;
+    this.workspace=resolve(workspace);this.account=account;this.connection=deploymentAccount||new PaastaAccount(account.origin,stateHome,{deployment:true,owner:account.owner});this.execute=execute;this.jobs=new Map();this.rpcId=0;this.loaded=false;
   }
   async load(){if(!this.loaded){await this.connection.load();this.loaded=true;}}
   async identity(){
