@@ -28,4 +28,4 @@ const connection=await readPrivate(join(qa,"account","workspace-"+workspaceKey(q
 if(!connection?.daemon)throw new Error("Desktop did not start the independent workspace service");
 const headers={Authorization:"Bearer "+connection.capability};
 if(!(await fetch(connection.url+"/api/state",{headers})).ok)throw new Error("Closing the desktop stopped the shared workspace");
-await fetch(connection.url+"/api/shutdown",{method:"POST",headers});
+const {stopWorkspace}=await import("../src/workspace-service.mjs");await stopWorkspace(qa);

@@ -38,7 +38,13 @@ export async function connectWorkspace({workspace=process.cwd(),hosted=false}={}
 }
 export async function stopWorkspace(workspace=process.cwd()){
   workspace=await realpath(resolve(workspace));const connection=await connectionFor(workspace);if(!connection)return {stopped:false};
-  await call(connection,"shutdown");return {stopped:true};
+  await call(connection,"shutdown");
+  if(connection.daemon&&Number.isInteger(connection.pid)&&connection.pid>0){
+    const deadline=Date.now()+20000;
+    while(Date.now()<deadline){try{process.kill(connection.pid,0);}catch(error){if(error.code==="ESRCH")return {stopped:true};throw error;}await new Promise(r=>setTimeout(r,100));}
+    throw new Error("توقف هنوز کامل نشده است؛ چند لحظه بعد وضعیت پروژه را دوباره بررسی کنید.");
+  }
+  return {stopped:true};
 }
 export async function refreshAccounts(){
   const files=await readdir(stateHome).catch(()=>[]);

@@ -34,6 +34,7 @@ test("the launching client can exit while the shared real engine and session rem
     assert.equal((await fetch(service.url+"/api/shutdown",{method:"POST"})).status,401,"explicit stop still requires the private capability");
     await assert.rejects(connectWorkspace({workspace,hosted:true}),/--hosted/);
     assert.equal((await stopWorkspace(workspace)).stopped,true);
+    assert.throws(()=>process.kill(service.pid,0),error=>error.code==="ESRCH","explicit stop must finish the broker process before releasing its workspace directory");
     for(let i=0;i<50;i++){try{await fetch(service.url+"/api/state",{headers,signal:AbortSignal.timeout(500)});}catch{break;}await new Promise(r=>setTimeout(r,100));}
     await assert.rejects(fetch(service.url+"/api/state",{headers}));
     assert.equal(await readFile(join(workspace,"keep.txt"),"utf8"),"preserved local work");

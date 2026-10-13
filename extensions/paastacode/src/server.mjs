@@ -19,7 +19,7 @@ async function body(request){
   let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>1_100_000)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
-export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false,daemon=false}={}){
+export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false,daemon=false,onClosed}={}){
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
   await mkdir(stateHome,{recursive:true,mode:0o700});
@@ -274,6 +274,6 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});
   syncManager.start();
   const accountTimer=daemon?setInterval(()=>reloadAccount().catch(()=>{}),5000):null;accountTimer?.unref();
-  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}};
+  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}onClosed?.();};
   return {url:origin,capability,runtime,close,server,ensureReady:ready,launchUrl:origin+"/#cap="+capability};
 }

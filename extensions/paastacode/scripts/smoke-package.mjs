@@ -26,7 +26,8 @@ try{
   const state=await fetch(connection.url+"/api/state",{headers:{Authorization:"Bearer "+connection.capability}});assert.equal(state.status,200);assert.equal((await state.json()).connected,false);
   const font=await fetch(connection.url+"/fonts/Vazirmatn.woff2");assert.equal(font.status,200);assert.equal(Buffer.from(await font.arrayBuffer()).subarray(0,4).toString(),"wOF2");
   assert((await readFile(join(client,"licenses/Vazirmatn-OFL.txt"),"utf8")).includes("SIL OPEN FONT LICENSE"));
-  await fetch(connection.url+"/api/shutdown",{method:"POST",headers:{Authorization:"Bearer "+connection.capability}});
+  const {stopWorkspace}=await import(pathToFileURL(join(client,"src/workspace-service.mjs")).href);
+  await stopWorkspace(home);
   console.log("Installed portable web/CLI package smoke passed: bundled Node/engine, protected APIs, local Vazirmatn");
 }finally{
   if(child&&child.exitCode===null){child.kill();await new Promise(r=>{child.once("exit",r);setTimeout(r,3000).unref();});}
