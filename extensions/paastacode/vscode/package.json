@@ -1,17 +1,58 @@
 {
-  "name":"paastacode",
-  "displayName":"PaastaCode | پاستاکد",
-  "description":"رابط پاستاکد در VS Code با نشست مشترک وب و CLI",
-  "version":"0.2.3",
-  "icon":"icon.png",
-  "publisher":"paasta",
-  "license":"MIT",
-  "repository":{"type":"git","url":"https://github.com/Paasta-Cloud/PaastaCode.git"},
-  "engines":{"vscode":"^1.95.0"},
-  "main":"./extension.cjs",
-  "categories":["AI"],
-  "activationEvents":["onCommand:paastacode.open"],
-  "capabilities":{"untrustedWorkspaces":{"supported":false}},
-  "contributes":{"commands":[{"command":"paastacode.open","title":"PaastaCode: باز کردن پاستاکد"}],
-    "configuration":{"title":"PaastaCode","properties":{"paastacode.clientPath":{"type":"string","default":"","description":"مسیر کامل bin/paastacode.mjs از نسخهٔ نصب‌شدهٔ پاستاکد","scope":"machine"}}}}
+  "name": "paastacode",
+  "displayName": "PaastaCode | پاستاکد",
+  "description": "رابط پاستاکد در VS Code با نشست مشترک وب و CLI",
+  "version": "0.2.4",
+  "icon": "icon.png",
+  "publisher": "paasta",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paasta-Cloud/PaastaCode.git"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "main": "./extension.cjs",
+  "categories": [
+    "AI"
+  ],
+  "activationEvents": [
+    "onCommand:paastacode.open",
+    "onCommand:paastacode.update"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    }
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "paastacode.open",
+        "title": "PaastaCode: باز کردن پاستاکد"
+      },
+      {
+        "command": "paastacode.update",
+        "title": "PaastaCode: بررسی و نصب به‌روزرسانی"
+      }
+    ],
+    "configuration": {
+      "title": "PaastaCode",
+      "properties": {
+        "paastacode.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "بررسی و نصب خودکار به‌روزرسانی افزونه از انتشار رسمی پاستا",
+          "scope": "machine"
+        },
+        "paastacode.clientPath": {
+          "type": "string",
+          "default": "",
+          "description": "مسیر کامل bin/paastacode.mjs از نسخهٔ نصب‌شدهٔ پاستاکد",
+          "scope": "machine"
+        }
+      }
+    }
+  }
 }

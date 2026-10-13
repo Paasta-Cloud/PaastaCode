@@ -28,7 +28,7 @@ try{
   assert((await readFile(join(client,"licenses/Vazirmatn-OFL.txt"),"utf8")).includes("SIL OPEN FONT LICENSE"));
   const {stopWorkspace}=await import(pathToFileURL(join(client,"src/workspace-service.mjs")).href);
   await stopWorkspace(home);
-  console.log("Installed portable web/CLI package smoke passed: bundled Node/engine, protected APIs, local Vazirmatn");
+  console.log("Installed portable web/CLI package smoke passed: bundled Node/engine, protected APIs, local Persian font");
 }finally{
   if(child&&child.exitCode===null){child.kill();await new Promise(r=>{child.once("exit",r);setTimeout(r,3000).unref();});}
   assert(home.startsWith(join(await realpath(tmpdir()),"paastacode-package-")));await rm(home,{recursive:true,force:true});

@@ -41,7 +41,7 @@ try{
     console.error(diagnostic);throw runnerError;
   }
   const result=JSON.parse(await readFile(join(output,"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
-  console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and Vazirmatn`);
+  console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and local Persian font`);
 }finally{
   // Stop only this isolated QA workspace after extension-host shutdown.
   process.env.PAASTACODE_HOME=join(home,"account");

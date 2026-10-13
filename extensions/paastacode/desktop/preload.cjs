@@ -1,2 +1,2 @@
 const {contextBridge,ipcRenderer}=require("electron");
-contextBridge.exposeInMainWorld("paastacodeDesktop",Object.freeze({chooseWorkspace:()=>ipcRenderer.invoke("paastacode:choose-workspace")}));
+contextBridge.exposeInMainWorld("paastacodeDesktop",Object.freeze({chooseWorkspace:()=>ipcRenderer.invoke("paastacode:choose-workspace"),update:(action,value)=>ipcRenderer.invoke("paastacode:update",action,value),onUpdate:callback=>{if(typeof callback!=="function")return;ipcRenderer.on("paastacode:update-state",(_event,state)=>callback(state));}}));

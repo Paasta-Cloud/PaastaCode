@@ -1,9 +1,10 @@
 import {spawn} from "node:child_process";
-import {readdir,realpath} from "node:fs/promises";
+import {readdir,realpath,readFile} from "node:fs/promises";
 import {join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {readPrivate,stateHome} from "./account.mjs";
 import {workspaceKey} from "./runtime.mjs";
+import {newer} from "./updates.mjs";
 
 function valid(connection){
   try{const url=new URL(connection.url);return url.protocol==="http:"&&url.hostname==="127.0.0.1"&&!!url.port&&!url.username&&!url.password&&url.pathname==="/"&&!url.search&&!url.hash&&/^[A-Za-z0-9_-]{43}$/.test(connection.capability);}catch{return false;}
@@ -19,6 +20,11 @@ async function connectionFor(workspace){
 }
 export async function connectWorkspace({workspace=process.cwd(),hosted=false}={}){
   workspace=await realpath(resolve(workspace));let connection=await connectionFor(workspace);
+  const version=JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
+  if(connection?.version&&newer(version,connection.version)){
+    try{await call(connection,"update/prepare");await stopWorkspace(workspace);connection=null;}
+    catch{connection=await connectionFor(workspace);} // A busy older runtime continues until a later connection.
+  }
   if(!connection){
     const entry=fileURLToPath(new URL("../bin/workspace-daemon.mjs",import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
     const child=spawn(process.execPath,[entry,"--workspace="+workspace,...(hosted?["--hosted"]:[])],{cwd:workspace,detached:true,windowsHide:true,stdio:"ignore",env:{...process.env,ELECTRON_RUN_AS_NODE:"1",PAASTACODE_HOME:stateHome}});
@@ -51,4 +57,18 @@ export async function refreshAccounts(){
   for(const file of files.filter(name=>/^workspace-[a-f0-9]{24}\.json$/.test(name)).slice(0,100)){
     const connection=await readPrivate(join(stateHome,file));if(valid(connection))try{await call(connection,"account/reload");}catch{/* A closed broker cannot retain access after server-side token/key revocation. */}
   }
+}
+
+export async function prepareDesktopUpdate(runtimeRoot){
+  const files=await readdir(stateHome).catch(()=>[]),connections=[];
+  for(const file of files.filter(name=>/^workspace-[a-f0-9]{24}\.json$/.test(name))){
+    const saved=await readPrivate(join(stateHome,file));
+    if(!valid(saved)||saved.runtimeRoot!==runtimeRoot)continue;
+    const active=await connectionFor(saved.workspace);if(active)connections.push(active);
+  }
+  const prepared=[];
+  try{
+    for(const connection of connections){await call(connection,"update/prepare");prepared.push(connection);}
+    for(const connection of connections)await stopWorkspace(connection.workspace);
+  }catch(error){for(const connection of prepared)try{await call(connection,"update/cancel");}catch{}throw error;}
 }

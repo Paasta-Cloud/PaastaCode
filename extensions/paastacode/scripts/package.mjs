@@ -14,6 +14,9 @@ await mkdir(client,{recursive:true});await mkdir(dist,{recursive:true});
 // Rebuild only our known staging files; never copy credentials, workspaces or node_modules.
 const included=["bin","src","web","licenses","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
 for(const file of included)await cp(join(root,file),join(client,file),{recursive:true});
+// Commercial font stays outside the MIT source tree; licensed distributors supply it.
+const yekan=process.env.PAASTACODE_YEKAN_FONT||resolve(root,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf");
+if(existsSync(yekan))await copyFile(yekan,join(client,"web/fonts/YekanBakh.ttf"));
 await writeFile(join(client,"package.json"),JSON.stringify({...pkg,name:"paastacode",dependencies:{},devDependencies:{},scripts:{}},null,2));
 const engineMeta=require("opencode-ai/package.json"),engineRoot=dirname(require.resolve("opencode-ai/package.json"));
 let engine=join(engineRoot,engineMeta.bin.opencode);
@@ -50,6 +53,17 @@ async function bundleNode(destination){
   }
 }
 if(target==="desktop"){
+  const {build}=await import("esbuild");
+  const bundle=await build({stdin:{contents:'module.exports = require("electron-updater")',resolveDir:root,sourcefile:"updater-entry.cjs"},bundle:true,platform:"node",format:"cjs",external:["electron"],outfile:join(client,"desktop/updater-vendor.cjs"),metafile:true,legalComments:"linked"});
+  const licenses=new Set();
+  for(const input of Object.keys(bundle.metafile.inputs).filter(name=>name.includes("node_modules"))){
+    let directory=dirname(resolve(root,input));
+    while(directory!==dirname(directory)&&!existsSync(join(directory,"package.json")))directory=dirname(directory);
+    if(licenses.has(directory)||!existsSync(join(directory,"package.json")))continue;licenses.add(directory);
+    const metadata=JSON.parse(await readFile(join(directory,"package.json"),"utf8"));
+    const destination=join(client,"licenses/desktop-update",metadata.name.replaceAll("/","_"));await mkdir(destination,{recursive:true});
+    for(const name of ["LICENSE","LICENSE.txt","LICENSE.md","license","license.md"])if(existsSync(join(directory,name)))await copyFile(join(directory,name),join(destination,name));
+  }
   const binary=require.resolve("electron-builder/cli.js");
   const env={...process.env};
   for(const key of ["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"])if(!env[key])delete env[key];

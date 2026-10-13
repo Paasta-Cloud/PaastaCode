@@ -8,9 +8,11 @@ import {CodeRuntime,providerConfig,workspaceKey,normalizedPath,paastaMcpConfig} 
 import {codingModels} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
 import {ConversationSync} from "./conversation-sync.mjs";
+import {accessModes,sessionPermissions} from "./access.mjs";
+import {WorkspaceGit} from "./git.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
-const assets=new Map([["/","index.html"],["/app.js","app.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
+const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
@@ -20,6 +22,7 @@ async function body(request){
   return raw?JSON.parse(raw):{};
 }
 export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false,daemon=false,onClosed}={}){
+  const version=JSON.parse(await readFile(join(here,"package.json"),"utf8")).version;
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
   await mkdir(stateHome,{recursive:true,mode:0o700});
@@ -49,17 +52,22 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   runtime=runtime||new CodeRuntime(workspace);
   deployment=deployment||new PaastaDeployment({workspace,account});
   const capability=randomBytes(32).toString("base64url");
-  let origin,context=null,starting=null,loginPolling=null,closed=false,accountChanging=false;
+  let origin,context=null,starting=null,loginPolling=null,closed=false,accountChanging=false,updating=false;
   const syncPath=join(stateHome,"sync-"+key+".json");
   let sync=await readPrivate(syncPath)||{};
+  const accessPath=join(stateHome,"access-"+key+".json"),access=await readPrivate(accessPath)||{};
+  const accessMode=()=>context&&access[accountIdentity()]||"review";
+  const git=new WorkspaceGit(workspace);
+  let accessChanges=Promise.resolve(),permissionPolling=false;
+  const appliedAccess=new Map();
   let syncWrites=Promise.resolve();
   const persistSync=()=>{const result=syncWrites.then(()=>writePrivate(syncPath,sync));syncWrites=result.catch(()=>{});return result;};
   const ready=async()=>{
     if(runtime.url)return;
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
-    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);
-      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,engineUrl:runtime.url,enginePassword:runtime.password});
+    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);appliedAccess.clear();
+      await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
   };
@@ -99,7 +107,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(accountReloading)return accountReloading;
     accountReloading=mutateAccount(async()=>{
       const before=account.credentials?.token+":"+account.credentials?.aiKey;
-      await account.load();if(before!==account.credentials?.token+":"+account.credentials?.aiKey){await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});}lastCredentialStamp=stamp;
+      await account.load();if(before!==account.credentials?.token+":"+account.credentials?.aiKey){await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version});}lastCredentialStamp=stamp;
     }).finally(()=>{accountReloading=null;});
     return accountReloading;
   };
@@ -108,6 +116,13 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(!validCapability(request.headers.authorization?.replace(/^Bearer /,""),capability)){json(response,{error:"دسترسی مجاز نیست."},401);return;}
     if(request.headers.origin&&request.headers.origin!==origin&&!(hosted&&request.headers.origin==="https://code.paasta.cloud")){json(response,{error:"مبدأ درخواست معتبر نیست."},403);return;}
     const route=request.method+" "+url.pathname;
+    if(route==="POST /api/update/prepare"){
+      if(starting||accountChanging||git.busy)throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
+      if(runtime.url&&Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
+      updating=true;return json(response,{ok:true});
+    }
+    if(route==="POST /api/update/cancel"){updating=false;return json(response,{ok:true});}
+    if(updating&&request.method!=="GET"&&!url.pathname.endsWith("/shutdown"))throw new Error("برنامه برای به‌روزرسانی آماده می‌شود. پس از نصب، پروژه را دوباره باز کنید.");
     if(route==="POST /api/account/reload"){await reloadAccount(true);return json(response,{ok:true});}
     if(daemon)await reloadAccount();
     await accountMutations;
@@ -120,8 +135,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(route==="GET /api/state"){
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
-      return json(response,{workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon}});
+      return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
+        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true}});
     }
     if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
@@ -130,7 +145,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="POST /api/connect"){const input=await body(request);return json(response,await mutateAccount(async()=>{const previous=account.credentials?.aiKey,result=await account.connect(Number(input.dailyLimitToman));if(previous!==account.credentials?.aiKey){await runtime.stop();context=null;}await ready();return result;},expectedAccount));}
     if(route==="POST /api/logout"){
-      return json(response,await mutateAccount(async()=>{await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});return {ok:true};},expectedAccount));
+      return json(response,await mutateAccount(async()=>{await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version});return {ok:true};},expectedAccount));
     }
     if(route==="GET /api/devices")return json(response,await account.request("/api/paastacode/devices"));
     if(route==="DELETE /api/devices"){
@@ -144,7 +159,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
         try{await deployment.disconnect();}catch{result.warning="اتصال اصلی قطع شد؛ قطع مجوز انتشار کامل نشد. پس از ورود دوباره آن را از اتصال‌های حساب قطع کنید.";}
         // The server already revoked this token. Clear locally without a second network request.
         await account.forget();context=null;
-        await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});
+        await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version});
       }
       return result;},expectedAccount));
     }
@@ -187,15 +202,32 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       return json(response,result);
     }
     await ready();
+    if(url.pathname.startsWith("/api/git")||route==="POST /api/access")if(!account.credentials?.token||!account.credentials?.aiKey)throw new Error("برای دسترسی به پروژه، با پاستا وارد شوید.");
+    if(route==="GET /api/git")return json(response,await git.status());
+    if(route==="GET /api/git/diff")return json(response,await git.diff(url.searchParams.get("path")));
+    if(route==="POST /api/git"){const input=await body(request);return json(response,await mutateAccount(()=>git.action(input),expectedAccount));}
+    if(route==="POST /api/access"){
+      const input=await body(request);if(!accessModes.includes(input.mode))throw new Error("حالت دسترسی معتبر نیست.");
+      const identity=accountIdentity(),previous=accessMode();let changed=[];
+      const change=accessChanges.then(()=>mutateAccount(async()=>{
+        if(accountIdentity()!==identity)throw new Error("حساب تغییر کرده است؛ پروژه را دوباره بررسی کنید.");
+        try{
+          const sessions=await runtime.call("/session");
+          for(const session of sessions)if(normalizedPath(session.directory)===normalizedPath(workspace)){await runtime.call("/session/"+session.id,{method:"PATCH",body:{permission:sessionPermissions(input.mode)}});changed.push(session.id);appliedAccess.set(session.id,input.mode);}
+          access[identity]=input.mode;await writePrivate(accessPath,access);
+          return {mode:input.mode};
+        }catch(error){access[identity]=previous;appliedAccess.clear();for(const id of changed)try{await runtime.call("/session/"+id,{method:"PATCH",body:{permission:sessionPermissions(previous)}});}catch{await runtime.stop();}throw error;}
+      },expectedAccount));accessChanges=change.catch(()=>{});return json(response,await change);
+    }
     if(route==="GET /api/sessions"){
       const sessions=await runtime.call("/session");
       return json(response,sessions.filter(s=>normalizedPath(s.directory)===normalizedPath(workspace)));
     }
-    if(route==="POST /api/sessions")return json(response,await runtime.call("/session",{method:"POST",body:{title:"گفتگوی جدید"}}));
+    if(route==="POST /api/sessions")return json(response,await runtime.call("/session",{method:"POST",body:{title:"گفتگوی جدید",permission:sessionPermissions(accessMode())}}));
     if(route==="GET /api/messages"){const id=url.searchParams.get("id");await owned(id);return json(response,[...transcript(sync[restoreKey(id)]?.messages||[]),...await runtime.call("/session/"+id+"/message")]);}
     if(route==="GET /api/permissions"){
       const permissions=await runtime.call("/permission");
-      const result=[];for(const permission of permissions)try{await owned(permission.sessionID);result.push(permission);}catch{/* Permissions from other workspaces are never exposed. */}
+      const result=[];for(const permission of permissions)try{await owned(permission.sessionID);if(accessMode()==="full")await runtime.call("/permission/"+encodeURIComponent(permission.id)+"/reply",{method:"POST",body:{reply:"once"}});else result.push(permission);}catch{/* Permissions from other workspaces are never exposed. */}
       return json(response,result);
     }
     if(route==="POST /api/permission"){
@@ -205,6 +237,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="POST /api/prompt"){
       const input=await body(request);await owned(input.id);
+      await runtime.call("/session/"+input.id,{method:"PATCH",body:{permission:sessionPermissions(accessMode())}});
       if(typeof input.text!=="string"||!input.text.trim()||input.text.length>50000)throw new Error("متن درخواست معتبر نیست.");
       if(!codingModels(context.models).some(m=>m.id===input.model))throw new Error("مدل انتخاب‌شده در دسترس نیست.");
       const status=await runtime.call("/session/status");
@@ -261,6 +294,10 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       const embed=url.pathname==="/embed/"+capability;
       if(embed||assets.has(url.pathname)){
         const file=embed?"index.html":assets.get(url.pathname);data=await readFile(join(here,"web",file));type=mime["."+file.split(".").at(-1)];
+      }else if(url.pathname==="/fonts/YekanBakh.ttf"){
+        try{data=await readFile(process.env.PAASTACODE_YEKAN_FONT||join(here,"web/fonts/YekanBakh.ttf"));}
+        catch(error){if(error.code!=="ENOENT")throw error;try{data=await readFile(join(here,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf"));}catch(fallback){if(fallback.code!=="ENOENT")throw fallback;json(response,{error:"پیدا نشد."},404);return;}}
+        type="font/ttf";
       }else if(url.pathname==="/brand.png"){data=await readFile(join(here,"web/brand.png"));type="image/png";}
       else{json(response,{error:"پیدا نشد."},404);return;}
       response.writeHead(200,{"Content-Type":type,"Cache-Control":"no-store","X-Content-Type-Options":"nosniff",
@@ -271,9 +308,19 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   await new Promise((resolveListen,reject)=>{server.once("error",reject);server.listen(port,"127.0.0.1",resolveListen);});
   origin="http://127.0.0.1:"+server.address().port;
   await mkdir(stateHome,{recursive:true,mode:0o700});
-  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon});
+  await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version});
   syncManager.start();
   const accountTimer=daemon?setInterval(()=>reloadAccount().catch(()=>{}),5000):null;accountTimer?.unref();
-  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}onClosed?.();};
+  const permissionTimer=setInterval(()=>{
+    if(closed||updating||accountChanging||!runtime.url||!context||permissionPolling)return;permissionPolling=true;
+    const work=accessChanges.then(async()=>{
+      if(closed||updating||accountChanging||!runtime.url||!context)return;
+      const mode=accessMode();
+      for(const session of await runtime.call("/session"))if(normalizedPath(session.directory)===normalizedPath(workspace)&&appliedAccess.get(session.id)!==mode){await runtime.call("/session/"+session.id,{method:"PATCH",body:{permission:sessionPermissions(mode)}});appliedAccess.set(session.id,mode);}
+      if(mode!=="full")return;
+      for(const permission of await runtime.call("/permission")){try{await owned(permission.sessionID);if(accessMode()==="full")await runtime.call("/permission/"+encodeURIComponent(permission.id)+"/reply",{method:"POST",body:{reply:"once"}});}catch{/* Other workspaces and already answered requests are excluded. */}}
+    });accessChanges=work.catch(()=>{}).finally(()=>{permissionPolling=false;});
+  },1000);permissionTimer.unref();
+  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);clearInterval(permissionTimer);await accessChanges;if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}onClosed?.();};
   return {url:origin,capability,runtime,close,server,ensureReady:ready,launchUrl:origin+"/#cap="+capability};
 }

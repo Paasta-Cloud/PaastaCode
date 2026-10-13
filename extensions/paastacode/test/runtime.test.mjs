@@ -7,6 +7,7 @@ import {join,resolve} from "node:path";
 process.env.PAASTACODE_HOME=resolve(".artifacts/runtime-state");
 const {CodeRuntime,providerConfig,workspaceKey}=await import("../src/runtime.mjs");
 const {validCapability}=await import("../src/server.mjs");
+const {sessionPermissions}=await import("../src/access.mjs");
 
 test("local capability and provider configuration reject unsafe defaults",()=>{
   if(process.platform==="win32")assert.equal(workspaceKey("D:/Example"),workspaceKey("d:/example"));
@@ -22,7 +23,7 @@ test("real pinned OpenCode runs a tool only after approval and retains its sessi
   const provider=createServer(async(req,res)=>{
     let raw="";for await(const chunk of req)raw+=chunk;
     const input=JSON.parse(raw);calls++;toolsSeen=input.tools?.map(t=>t.function.name)||[];
-    const toolResult=input.messages.some(m=>m.role==="tool");
+    const toolResult=input.messages.slice(input.messages.findLastIndex(m=>m.role==="user")).some(m=>m.role==="tool");
     const delta=toolResult?{content:"فایل آزمایشی ساخته شد."}:{tool_calls:[{index:0,id:"call_smoke",type:"function",function:{name:"write",arguments:JSON.stringify({filePath:join(workspace,target),content:"PaastaCode smoke\n"})}}]};
     if(!toolResult)toolRequested=true;
     if(input.stream){
@@ -57,6 +58,18 @@ test("real pinned OpenCode runs a tool only after approval and retains its sessi
     await runtime.call("/permission/"+deniedPermission.id+"/reply",{method:"POST",body:{reply:"reject"}});
     await wait(async()=> (await runtime.call("/session/"+rejected.id+"/message")).some(m=>m.parts.some(p=>p.type==="tool"&&p.state?.status==="error")));
     await assert.rejects(readFile(join(workspace,target)),error=>error.code==="ENOENT");
+    target="full-access.txt";
+    const full=await runtime.call("/session",{method:"POST",body:{title:"Full Access",permission:sessionPermissions("full")}});
+    await runtime.call("/session/"+full.id+"/prompt_async",{method:"POST",body:{model:{providerID:"paasta",modelID:"synthetic"},parts:[{type:"text",text:"Create full-access.txt"}]}});
+    await wait(async()=>{try{return(await readFile(join(workspace,target),"utf8"))==="PaastaCode smoke\n";}catch{return false;}});
+    assert(!(await runtime.call("/permission")).some(p=>p.sessionID===full.id),"Full Access must execute without a renderer approving it");
+    await wait(async()=>!(await runtime.call("/session/status"))[full.id]);
+    await runtime.call("/session/"+full.id,{method:"PATCH",body:{permission:sessionPermissions("review")}});
+    target="review-again.txt";
+    await runtime.call("/session/"+full.id+"/prompt_async",{method:"POST",body:{model:{providerID:"paasta",modelID:"synthetic"},parts:[{type:"text",text:"Create review-again.txt"}]}});
+    const again=await wait(async()=>(await runtime.call("/permission")).find(p=>p.sessionID===full.id));
+    await assert.rejects(readFile(join(workspace,target)),error=>error.code==="ENOENT");
+    await runtime.call("/permission/"+again.id+"/reply",{method:"POST",body:{reply:"reject"}});
   }catch(error){console.error("Synthetic engine diagnostics",JSON.stringify({calls,toolsSeen,toolRequested, messages:sessionId?await runtime.call("/session/"+sessionId+"/message"):[]}));throw error;}
   finally{await runtime.stop();provider.closeAllConnections();await new Promise(r=>provider.close(r));assert(workspace.startsWith(join(await realpath(tmpdir()),"paastacode-engine-")));await rm(workspace,{recursive:true,force:true,maxRetries:5,retryDelay:200});}
 });

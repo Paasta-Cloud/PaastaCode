@@ -1,0 +1,66 @@
+// Keep the reading position and expanded tool reports stable during streaming.
+export function workbench(){
+  const $=id=>document.getElementById(id),viewport=$("conversation"),messages=$("messages");
+  let following=true,started=0,lastBusy=false,latest=[],blocked=false,lastWidth=viewport.clientWidth,lastHeight=viewport.clientHeight;
+  const bottom=()=>viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<80;
+  viewport.addEventListener("scroll",()=>{if(lastWidth!==viewport.clientWidth||lastHeight!==viewport.clientHeight){lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();return;}following=bottom();$("follow-output").hidden=following;},{passive:true});
+  const follow=()=>{following=true;$("follow-output").hidden=true;requestAnimationFrame(()=>{viewport.scrollTop=viewport.scrollHeight;});};
+  $("follow-output").onclick=follow;
+  new ResizeObserver(()=>{if(following)follow();}).observe(viewport);
+  const labels={read:"خواندن فایل",glob:"جست‌وجوی فایل‌ها",grep:"جست‌وجو در کد",bash:"اجرای دستور",write:"ساخت فایل",edit:"ویرایش فایل",apply_patch:"اعمال تغییرات",task:"بررسی پروژه",webfetch:"خواندن صفحه"};
+  function inline(parent,text){for(const token of text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g)){if(token.startsWith("`")&&token.endsWith("`")){const code=document.createElement("code");code.textContent=token.slice(1,-1);parent.append(code);}else if(token.startsWith("**")&&token.endsWith("**")){const strong=document.createElement("strong");strong.textContent=token.slice(2,-2);parent.append(strong);}else parent.append(document.createTextNode(token));}}
+  function content(parent,text){for(const section of text.split(/(```[\s\S]*?```)/g)){
+    if(!section.trim())continue;
+    if(section.startsWith("```")){const node=document.createElement("pre");node.dir="ltr";node.textContent=section.replace(/^```[^\n]*\n?/,"").replace(/```$/,"");parent.append(node);continue;}
+    for(const block of section.split(/\n{2,}/)){if(!block.trim())continue;const lines=block.trim().split("\n");
+      if(lines.every(line=>/^\s*[-*] /.test(line))){const list=document.createElement("ul");for(const line of lines){const item=document.createElement("li");inline(item,line.replace(/^\s*[-*] /,""));list.append(item);}parent.append(list);}
+      else {const heading=/^#{1,4} /.test(block.trim()),node=document.createElement(heading?"h3":"p");inline(node,heading?block.trim().replace(/^#{1,4} /,""):block);parent.append(node);}
+    }
+  }}
+  function render(list){
+    latest=list;const shouldFollow=following;
+    const existing=new Map([...messages.children].map(el=>[el.dataset.message,el])),keep=new Set();
+    $("empty").hidden=list.some(m=>m.parts.some(p=>p.type==="tool"||(p.type==="text"&&!p.synthetic&&p.text?.trim())));
+    for(const [index,message] of list.entries()){
+      const parts=message.parts.filter(p=>p.type==="tool"||(p.type==="text"&&!p.synthetic&&p.text?.trim())||(p.type==="reasoning"&&p.text?.trim()));
+      if(!parts.length&&!message.info.error)continue;
+      const id=message.info.id||String(index),serialized=JSON.stringify(message);keep.add(id);
+      let article=existing.get(id);
+      if(!article){article=document.createElement("article");article.dataset.message=id;messages.append(article);}
+      if(article.dataset.rendered===serialized)continue;
+      const expanded=new Set([...article.querySelectorAll("details[open]")].map(el=>el.dataset.tool));
+      article.replaceChildren();article.dataset.rendered=serialized;article.className="message "+message.info.role;
+      const header=document.createElement("header");header.textContent=message.info.role==="user"?"شما":"پاستاکد";article.append(header);
+      for(const [partIndex,part] of parts.entries()){
+        if(part.type==="text")content(article,part.text);
+        else {
+          const details=document.createElement("details"),summary=document.createElement("summary"),key=part.callID||part.id||String(partIndex);
+          details.dataset.tool=key;details.className="tool";details.open=expanded.has(key);
+          const status=part.state?.status||"completed";details.dataset.status=status;
+          const icon=document.createElement("span");icon.className="tool-indicator";icon.setAttribute("aria-hidden","true");icon.textContent=status==="completed"?"✓":status==="error"?"!":"";
+          const name=document.createElement("span");name.className="tool-title";name.textContent=part.type==="reasoning"?"روند بررسی":labels[part.tool]||part.tool;
+          const target=document.createElement("bdi");target.className="tool-target";target.dir="ltr";target.textContent=part.state?.input?.filePath||part.state?.input?.path||part.state?.title||"";
+          const badge=document.createElement("span");badge.className="tool-status";badge.textContent={completed:"انجام شد",running:"در حال اجرا",pending:"در انتظار",error:"ناموفق"}[status]||status;
+          summary.append(icon,name,target,badge);
+          const pre=document.createElement("pre");pre.dir="ltr";pre.textContent=part.type==="reasoning"?part.text:String(part.state?.metadata?.diff||part.state?.output||part.state?.error||JSON.stringify(part.state?.input||{},null,2));
+          details.append(summary,pre);article.append(details);
+        }
+      }
+      if(message.info.error){const error=document.createElement("p");error.className="message-error";error.textContent=message.info.error.data?.message||"پاسخ کامل نشد؛ درخواست را بررسی کنید.";article.append(error);}
+    }
+    for(const [id,element] of existing)if(!keep.has(id))element.remove();
+    if(shouldFollow)follow();else $("follow-output").hidden=false;
+  }
+  function activity(busy,{approval=false,status}={}){
+    blocked=approval;if(busy&&!lastBusy)started=Date.now();lastBusy=busy;
+    $("activity").hidden=!busy&&!approval;$("activity").classList.toggle("waiting",approval);$("activity").setAttribute("aria-busy",String(busy&&!approval));
+    const tool=latest.flatMap(m=>m.parts).findLast(p=>p.type==="tool"&&["running","pending"].includes(p.state?.status));
+    $("activity-label").textContent=approval?"در انتظار تأیید شما":status?.type==="retry"?"تلاش دوباره برای اتصال":tool?labels[tool.tool]||"اجرای ابزار":"پاستاکد روی درخواست کار می‌کند";
+    $("activity-detail").textContent=approval?"درخواست دسترسی را در گفتگو بررسی کنید.":status?.type==="retry"?"پاسخ هنوز آماده نیست؛ می‌توانید اجرا را متوقف کنید.":tool?.state?.title||"خروجی جدید همین‌جا نمایش داده می‌شود.";
+    $("connection-state").textContent=approval?"نیاز به تأیید":busy?"در حال کار":"آماده";
+    $("stop").hidden=!busy;$("send").disabled=busy;
+    if(following&&busy)follow();
+  }
+  setInterval(()=>{$("activity-time").textContent=lastBusy&&!blocked?Math.floor((Date.now()-started)/1000).toLocaleString("fa-IR")+" ثانیه":"";},1000);
+  return {render,activity,follow,reset(){latest=[];lastBusy=false;started=0;messages.replaceChildren();activity(false);follow();}};
+}

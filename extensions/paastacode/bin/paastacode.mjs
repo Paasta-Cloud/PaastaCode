@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
-import {resolve} from "node:path";
+import {resolve,join,dirname} from "node:path";
 import {realpath,readFile} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 import {createInterface} from "node:readline/promises";
@@ -8,6 +8,7 @@ import {PaastaAccount} from "../src/account.mjs";
 import {connectWorkspace,stopWorkspace,refreshAccounts} from "../src/workspace-service.mjs";
 import {engineCommand} from "../src/runtime.mjs";
 import {PaastaDeployment} from "../src/deployment.mjs";
+import {checkUpdate,downloadUpdate,installPortable,portableTarget,currentPackage} from "../src/updates.mjs";
 
 export function openBrowser(url){
   // PowerShell argument binding prevents URL metacharacters from becoming shell syntax.
@@ -17,11 +18,20 @@ export function openBrowser(url){
 }
 async function main(){
   const args=process.argv.slice(2),command=args[0]||"web";
+  const target=await portableTarget(currentPackage);
+  if(target){const child=spawn(join(target.path,"runtime",process.platform==="win32"?"node.exe":"node"),[join(target.path,"client/bin/paastacode.mjs"),...args],{stdio:"inherit",windowsHide:true,env:{...process.env,PAASTACODE_INSTALL_ROOT:target.installation}});child.on("error",()=>{console.error("اجرای نسخهٔ جدید ممکن نشد؛ نصب قبلی باقی مانده است.");process.exitCode=1;});child.on("exit",code=>{process.exitCode=code||0;});return;}
   const version=JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
+  if(command==="update"){
+    const release=await checkUpdate(version);if(!release){console.log("پاستاکد به‌روز است: "+version);return;}
+    console.log("نسخهٔ جدید: "+release.tag_name);if(args.includes("--check"))return;
+    const installation=process.env.PAASTACODE_INSTALL_ROOT||dirname(currentPackage.replace(/[\\/]$/,""));
+    await realpath(join(installation,"runtime",process.platform==="win32"?"node.exe":"node")).catch(()=>{throw new Error("برای به‌روزرسانی، این فرمان را از بستهٔ قابل‌نصب CLI اجرا کنید.");});
+    console.log("در حال دریافت و بررسی بسته…");const download=await downloadUpdate(release);await installPortable(download,installation);console.log("به‌روزرسانی آماده است. اجرای بعدی پاستاکد از نسخهٔ "+download.version+" استفاده می‌کند. کارهای جاری و فایل‌ها باقی مانده‌اند.");return;
+  }
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();

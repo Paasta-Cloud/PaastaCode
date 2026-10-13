@@ -26,7 +26,7 @@ try{
     const bounds=await page.locator("#workspace-connect").boundingBox();assert(bounds.x>=16&&bounds.x+bounds.width<=width-16);
     const colors=await page.locator("#workspace-link").evaluate(input=>{const style=getComputedStyle(input);return {foreground:style.color,background:style.backgroundColor};});
     assert.notEqual(colors.foreground,colors.background);
-    if(scheme==="dark")assert.equal(colors.background,"rgb(17, 21, 30)");
+    if(scheme==="dark")assert.equal(colors.background,"rgb(27, 28, 32)");
     const link=await page.locator("#workspace-link").inputValue();await page.locator("#workspace-link").fill("");
     await mkdir(".artifacts",{recursive:true});await page.screenshot({path:resolve(".artifacts/hosted-pairing-"+name+".png"),fullPage:true});
     await page.locator("#workspace-link").fill(link);

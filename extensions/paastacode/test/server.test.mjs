@@ -15,6 +15,19 @@ test("expired credentials can be cleared while transport failures retain retry s
   await assert.rejects(account.logout());assert.equal(account.credentials.token,"synthetic");
 });
 
+test("update preparation refuses active work and blocks new mutations until cancelled",async()=>{
+  let busy=true;const runtime={url:"http://127.0.0.1:1",async stop(){},async call(path){assert.equal(path,"/session/status");return busy?{ses_test:{type:"busy"}}:{};}};
+  const app=await startServer({account:{credentials:null},runtime}),headers={Authorization:"Bearer "+app.capability};
+  const post=path=>fetch(app.url+"/api/"+path,{method:"POST",headers});
+  try{
+    assert.equal((await fetch(app.url+"/api/update/prepare",{method:"POST"})).status,401);
+    assert.equal((await post("update/prepare")).status,400);busy=false;
+    assert.equal((await post("update/prepare")).status,200);
+    const blocked=await post("prompt");assert.equal(blocked.status,400);assert.match((await blocked.json()).error,/به‌روزرسانی/);
+    assert.equal((await post("update/cancel")).status,200);
+  }finally{await app.close();}
+});
+
 test("clearing an old grant cannot delete a newer login written by another client",async()=>{
   const home=resolve(".artifacts/account-replacement-"+process.pid),account=new PaastaAccount("https://example.test",home);
   account.credentials={origin:account.origin,token:"synthetic-old"};

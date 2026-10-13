@@ -25,7 +25,7 @@ exports.run=async()=>{
     await found.frame.locator("#login").waitFor({state:"visible"});
     assert.equal(await found.frame.locator("html").getAttribute("dir"),"rtl");
     await found.frame.evaluate(()=>document.fonts.ready);
-    assert(await found.frame.evaluate(()=>document.fonts.check("16px Vazirmatn")),"Installed font must load inside the actual editor webview");
+    assert(await found.frame.evaluate(()=>document.fonts.check("16px YekanBakh")||document.fonts.check("16px Vazirmatn")),"Installed font must load inside the actual editor webview");
     const output=process.env.PAASTACODE_VSCODE_OUTPUT||path.resolve(__dirname,"../.artifacts");
     await found.page.screenshot({path:path.join(output,"vscode.png")});
     require("node:fs").writeFileSync(path.join(output,"vscode-result.json"),JSON.stringify({installed:!!process.env.PAASTACODE_INSTALLED_ROOT,version:extension.packageJSON.version,rtl:true,font:true,platform:process.platform,arch:process.arch}));

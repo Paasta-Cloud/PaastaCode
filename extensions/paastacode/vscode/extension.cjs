@@ -5,6 +5,25 @@ const path=require("node:path");
 const {pathToFileURL}=require("node:url");
 let child;
 function activate(context){
+  let updating=false;
+  async function update(manual=false){
+    if(updating)return;if(!manual&&!vscode.workspace.getConfiguration("paastacode").get("autoUpdate",true))return;updating=true;
+    try{
+      const root=path.join(__dirname,"client");
+      if(!fs.existsSync(path.join(root,"package.json"))){if(manual)await vscode.window.showInformationMessage("به‌روزرسانی برای نسخهٔ نصب‌شدهٔ افزونه فعال است.");return;}
+      const current=JSON.parse(fs.readFileSync(path.join(root,"package.json"),"utf8")).version;
+      const {checkUpdate,downloadUpdate}=await import(pathToFileURL(path.join(root,"src/updates.mjs")).href);
+      const release=await checkUpdate(current);if(!release){if(manual)await vscode.window.showInformationMessage("افزونهٔ پاستاکد به‌روز است.");return;}
+      await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:"به‌روزرسانی پاستاکد"},async()=>{
+        const download=await downloadUpdate(release,"vsix");await vscode.commands.executeCommand("workbench.extensions.installExtension",vscode.Uri.file(download.path));
+      });
+      const action=await vscode.window.showInformationMessage("نسخهٔ جدید پاستاکد نصب شد. برای استفاده، پنجره را دوباره بارگذاری کنید.","بارگذاری دوباره");if(action)await vscode.commands.executeCommand("workbench.action.reloadWindow");
+    }catch{if(manual)await vscode.window.showErrorMessage("به‌روزرسانی پاستاکد انجام نشد؛ اتصال را بررسی و دوباره تلاش کنید.");}
+    finally{updating=false;}
+  }
+  context.subscriptions.push(vscode.commands.registerCommand("paastacode.update",()=>update(true)));
+  const timer=setInterval(()=>void update(),6*60*60*1000);timer.unref();context.subscriptions.push({dispose:()=>clearInterval(timer)});
+  if(!process.env.PAASTACODE_VSCODE_SMOKE&&!process.env.PAASTACODE_TEST_CDP)void update();
   context.subscriptions.push(vscode.commands.registerCommand("paastacode.open",async()=>{
     if(!vscode.workspace.isTrusted)return vscode.window.showErrorMessage("ابتدا اعتماد به پوشهٔ پروژه را تأیید کنید.");
     const folder=vscode.workspace.workspaceFolders?.[0];

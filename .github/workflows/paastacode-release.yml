@@ -76,10 +76,17 @@ jobs:
       - name: Browser acceptance
         run: |
           node test/browser.mjs
+          node test/workbench-browser.mjs
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
           node test/devices-browser.mjs
           node test/sync-browser.mjs
+      - name: Prepare publisher-licensed Persian font
+        if: github.repository_owner == 'Paasta-Cloud'
+        shell: bash
+        run: |
+          node scripts/licensed-font.mjs
+          echo "PAASTACODE_YEKAN_FONT=$PWD/.artifacts/YekanBakh.ttf" >> "$GITHUB_ENV"
       - name: Build bundled web and CLI
         run: npm run package:portable
       - name: Test installed web and CLI
@@ -112,6 +119,10 @@ jobs:
             extensions/paastacode/dist/PaastaCode-*.AppImage
             extensions/paastacode/dist/PaastaCode-*.deb
             extensions/paastacode/dist/PaastaCode-*.vsix
+            extensions/paastacode/dist/PaastaCode-*.blockmap
+            extensions/paastacode/dist/latest*.yml
+            extensions/paastacode/dist/beta*.yml
+            extensions/paastacode/dist/alpha*.yml
             extensions/paastacode/dist/release-manifest-*.json
             extensions/paastacode/dist/SHA256SUMS-*.txt
           if-no-files-found: error
@@ -128,10 +139,17 @@ jobs:
         with:
           pattern: paastacode-*
           path: .artifacts/paastacode-release
-          merge-multiple: true
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Assemble verified update metadata
+        working-directory: extensions/paastacode
+        run: |
+          npm ci --omit=dev --ignore-scripts
+          node scripts/prepare-release.mjs ../../.artifacts/paastacode-release ../../.artifacts/paastacode-publish
       - name: Create reviewable draft prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version=$(node -p "require('./extensions/paastacode/package.json').version")
-          gh release create "paastacode-v$version" .artifacts/paastacode-release/* --draft --prerelease --target "$GITHUB_SHA" --title "PaastaCode $version" --notes-file extensions/paastacode/RELEASE.md
+          gh release create "v$version" .artifacts/paastacode-publish/* --draft --prerelease --target "$GITHUB_SHA" --title "PaastaCode $version" --notes-file extensions/paastacode/RELEASE.md

@@ -4,9 +4,14 @@ import {connectHosted,hostedOrigin} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
 import {devicesUI} from "./devices.js";
 import {syncUI} from "./sync.js";
+import {workbench} from "./workbench.js";
+import {gitUI} from "./git-ui.js";
+import {updatesUI} from "./updates.js";
 const $=id=>document.getElementById(id);
+const bench=workbench();
 const resizePrompt=promptInput($("prompt"));
 for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
+updatesUI();
 if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
 let apiOrigin="";
@@ -15,6 +20,8 @@ let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
+const git=gitUI({api,run,notice});
+function accessView(value){$("access-mode").value=value||"review";$("access-mode").dataset.mode=value||"review";$("access-description").textContent=value==="full"?"Full Access: تغییر فایل و اجرای دستور بدون پرسش":"تغییر فایل و اجرای دستور با تأیید شما";}
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
@@ -25,6 +32,7 @@ async function run(button,work){button.disabled=true;try{await work();}catch(err
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
 async function loadState(){
   state=await api("state");$("workspace-name").textContent=state.workspace;
+  $("git-open").disabled=!state.configured||!state.features?.git;$("access-mode").disabled=!state.features?.workspaceAccess;accessView(state.accessMode);
   deployment.updateBase(state);
   devices.update(state);
   if(!state.configured)conversationSync.hide();
@@ -39,7 +47,7 @@ async function loadState(){
     if(state.models.some(m=>m.id===previous))$("model").value=previous;price();
   }
   if(state.error)notice(state.error,true);
-  if(state.configured)await sessions();
+  if(state.configured){await sessions();if(state.features?.git)git.refresh().catch(()=>{});}
 }
 async function sessions(){
   const listMode=mode,version=++listGeneration;
@@ -55,7 +63,7 @@ async function sessions(){
   for(const item of items){
     const button=document.createElement("button");button.textContent=item.title;button.setAttribute("aria-current",String(session?.id===item.id));
     button.onclick=()=>run(button,async()=>{
-      generation++;lastMessages="";
+      generation++;lastMessages="";bench.reset();
       if(listMode==="cloud"){
         session=null;$("composer").hidden=true;$("save").disabled=true;$("permissions").replaceChildren();
         conversationSync.hide();
@@ -80,53 +88,30 @@ async function sessions(){
     $("sessions").append(button);
   }
 }
-function textContent(parent,text){
-  const sections=text.split(/(```[\s\S]*?```)/g);
-  for(const section of sections){
-    const code=section.startsWith("```"),node=document.createElement(code?"pre":"p");
-    node.textContent=code?section.replace(/^```[^\n]*\n?/,"").replace(/```$/,""):section;
-    if(code)node.dir="ltr";parent.append(node);
-  }
-}
 function renderMessages(messages){
-  $("messages").replaceChildren();$("empty").hidden=messages.length>0;
-  for(const message of messages){
-    const article=document.createElement("article");article.className="message "+message.info.role;
-    const header=document.createElement("header");header.textContent=message.info.role==="user"?"شما":"پاستاکد";article.append(header);
-    for(const part of message.parts){
-      if(part.type==="text"&&!part.synthetic)textContent(article,part.text);
-      if(part.type==="tool"){
-        const details=document.createElement("details");details.className="tool";const title=document.createElement("summary");
-        const labels={completed:"انجام شد",running:"در حال اجرا",pending:"در انتظار",error:"ناموفق"};
-        title.textContent=(part.state?.title||part.tool)+" · "+(labels[part.state?.status]||"");
-        const content=document.createElement("pre");content.textContent=String(part.state?.metadata?.diff||part.state?.output||part.state?.error||JSON.stringify(part.state?.input||{},null,2));details.append(title,content);article.append(details);
-      }
-    }
-    if(message.info.error){const error=document.createElement("p");error.textContent=message.info.error.data?.message||"پاسخ کامل نشد؛ درخواست را بررسی کن.";article.append(error);}
-    $("messages").append(article);
-  }
+  bench.render(messages);
 }
 async function refresh(){
   if(refreshing)return;refreshing=true;
   try{
-    if(state.features?.independentRuntime&&Date.now()>=nextAccountPoll){
+    if((state.features?.independentRuntime||state.features?.workspaceAccess)&&Date.now()>=nextAccountPoll){
       nextAccountPoll=Date.now()+5000;const next=await api("state");
       const identity=value=>JSON.stringify([value.connected,value.configured,value.account?.id,value.account?.tenantId]);
       if(identity(next)!==identity(state)){clearAccountView();await loadState();refreshing=false;return;}
-      state.accountRevision=next.accountRevision;
+      state.accountRevision=next.accountRevision;state.accessMode=next.accessMode;accessView(state.accessMode);
     }
   }catch(error){if(!error.stale)notice(error.message,true);refreshing=false;return;}
   if(!state.configured){refreshing=false;return;}
-  const selected=session,version=generation;
+  const selected=session,version=generation;let runtimeStatus;
   try{
     if(selected){
       const messages=await api("messages?id="+encodeURIComponent(selected.id));if(version!==generation||session!==selected)return;const serialized=JSON.stringify(messages);
       if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent="تغییرات روی این دستگاه";}
       $("save").disabled=!messages.length;
-      const status=await api("status");if(version!==generation||session!==selected)return;sending=promptPending||(!!status[selected.id]&&status[selected.id].type!=="idle");
-      $("send").disabled=sending;$("stop").hidden=!sending;$("connection-state").textContent=sending?"پاستاکد مشغول کاره":"آماده";
+      const status=await api("status");if(version!==generation||session!==selected)return;runtimeStatus=status[selected.id];sending=promptPending||(!!runtimeStatus&&runtimeStatus.type!=="idle");
+      bench.activity(sending,{status:status[selected.id]});
       await conversationSync.refresh();
-    }
+    }else bench.activity(promptPending);
     const permissions=await api("permissions");if(version!==generation||session!==selected)return;$("permissions").replaceChildren();
     for(const permission of permissions.filter(p=>p.sessionID===session?.id)){
       const box=document.createElement("section");box.className="permission";
@@ -138,6 +123,7 @@ async function refresh(){
       }
       box.append(title,info,actions);$("permissions").append(box);
     }
+    bench.activity(sending,{approval:$("permissions").children.length>0,status:runtimeStatus});
   }catch(error){if(!error.stale)notice(error.message,true);}finally{refreshing=false;}
 }
 $("login").onclick=()=>run($("login"),async()=>{
@@ -149,12 +135,13 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
-$("new").onclick=()=>run($("new"),async()=>{generation++;session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
+$("new").onclick=()=>run($("new"),async()=>{generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
   event.preventDefault();if(sending||!$("prompt").value.trim())return;
   const text=$("prompt").value;sending=true;promptPending=true;let accepted=false;
+  bench.follow();bench.activity(true);
   run($("send"),async()=>{
     if(!session)session=await api("sessions","POST");
     await api("prompt","POST",{id:session.id,text,model:$("model").value});
@@ -167,6 +154,7 @@ $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:sessi
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
 $("model").onchange=price;
+$("access-mode").onchange=()=>run($("access-mode"),async()=>{try{const result=await api("access","POST",{mode:$("access-mode").value});state.accessMode=result.mode;accessView(result.mode);notice(result.mode==="full"?"Full Access برای این پروژه روشن شد. ابزارهای کدنویسی بدون تأیید اجرا می‌شوند.":"تأیید تغییر فایل و اجرای دستور دوباره فعال شد.");await refresh();}catch(error){accessView(state.accessMode);throw error;}});
 $("local-tab").onclick=()=>run($("local-tab"),async()=>{mode="local";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");if(!session){$("messages").replaceChildren();$("empty").hidden=false;}$("composer").hidden=false;await sessions();});
 $("cloud-tab").onclick=()=>run($("cloud-tab"),async()=>{conversationSync.hide();mode="cloud";$("local-tab").setAttribute("aria-pressed","false");$("cloud-tab").setAttribute("aria-pressed","true");await sessions();});
 function drawer(open){$("rail").classList.toggle("open",open);$("menu").setAttribute("aria-expanded",String(open));document.querySelector("main").inert=open;$("rail-backdrop").hidden=!open;if(open)$("rail-close").focus();else if(matchMedia("(max-width:640px)").matches)$("menu").focus();}

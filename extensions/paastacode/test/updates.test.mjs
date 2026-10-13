@@ -1,0 +1,23 @@
+import {test} from "node:test";
+import assert from "node:assert/strict";
+import {EventEmitter} from "node:events";
+import {createRequire} from "node:module";
+const {createUpdates}=createRequire(import.meta.url)("../desktop/update-controller.cjs");
+test("desktop updates coalesce checks, preserve running work and install only a verified downloaded update",async()=>{
+  const updater=new EventEmitter();let checks=0,installs=0,busy=true,saved;
+  updater.checkForUpdates=async()=>{checks++;updater.emit("checking-for-update");await new Promise(r=>setTimeout(r,10));updater.emit("update-available",{version:"0.2.0-beta.6"});};
+  updater.downloadUpdate=async()=>{updater.emit("download-progress",{percent:50});updater.emit("update-downloaded",{version:"0.2.0-beta.6"});};
+  updater.quitAndInstall=()=>installs++;
+  const controller=createUpdates({updater,version:"0.2.0-beta.5",enabled:true,load:async()=>({automatic:false}),save:async value=>{saved=value;},prepare:async()=>{if(busy)throw new Error("پروژه در حال کار است");}});
+  await controller.start();assert.equal(checks,0);assert.equal(updater.autoDownload,false);assert.equal(updater.allowDowngrade,false);assert.equal(await controller.install(),false);
+  await Promise.all([controller.check(),controller.check()]);assert.equal(checks,1);assert.equal(controller.state().phase,"available");
+  await controller.download();assert.equal(controller.state().phase,"ready");
+  assert.equal(await controller.install(),false);assert.equal(installs,0);assert.match(controller.state().error,/در حال کار/);
+  busy=false;assert.equal(await controller.install(true),false,"Automatic install respects the saved opt-out");
+  await controller.automatic(true);assert.deepEqual(saved,{automatic:true});assert.equal(await controller.install(true),true);assert.equal(installs,1);
+  updater.emit("error",new Error("secret upstream URL"));assert(!JSON.stringify(controller.state()).includes("secret"));
+  updater.emit("update-downloaded",{version:"0.2.0-beta.6"});
+  updater.quitAndInstall=()=>{throw new Error("secret installer path");};
+  assert.equal(await controller.install(),false);assert.match(controller.state().error,/شروع نشد/);
+  assert(!JSON.stringify(controller.state()).includes("secret"));
+});

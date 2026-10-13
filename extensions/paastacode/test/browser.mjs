@@ -48,7 +48,7 @@ try{
   assert.equal((await fetch(app.url+"/api/login",{method:"POST",headers:{Authorization:"Bearer "+app.capability,Origin:"https://evil.test"}})).status,403);
   await page.goto(app.launchUrl);await page.locator("#login").waitFor();
   await page.evaluate(()=>document.fonts.ready);
-  assert(await page.evaluate(()=>document.fonts.check("16px Vazirmatn")),"Bundled open-source font must load");
+  assert(await page.evaluate(()=>document.fonts.check("16px YekanBakh")||document.fonts.check("16px Vazirmatn")),"Licensed Yekan or bundled open-source fallback must load");
   assert.equal(await page.evaluate(()=>document.documentElement.dir),"rtl");
   assert.equal(await page.getByText("Powered by OpenCode",{exact:true}).getAttribute("href"),"https://opencode.ai");
   assert.equal(await page.getByText("فورک متن‌باز پاستا",{exact:true}).getAttribute("href"),"https://github.com/Paasta-Cloud/PaastaCode");
@@ -64,6 +64,7 @@ try{
   assert.equal(await page.locator("#prompt").inputValue(),"درخواست حفظ‌شده");await page.locator("#prompt").fill("");
   await page.locator("#sessions button").first().click();
   await page.getByText("فقط همین بار",{exact:true}).click();
+  await page.locator("#permissions .permission").waitFor({state:"detached"});
   assert.equal(grants,1);
   assert.equal(await page.locator("#messages script").count(),0);
   await page.locator("#save").click();await page.locator("#confirm-save").click();
@@ -80,7 +81,7 @@ try{
     await page.screenshot({path:".artifacts/conversation-"+width+".png",fullPage:true});
   }
   await page.emulateMedia({colorScheme:"dark"});
-  await page.waitForFunction(()=>getComputedStyle(document.querySelector("#save")).backgroundColor==="rgb(17, 21, 30)");
+  await page.waitForFunction(()=>getComputedStyle(document.querySelector("#save")).backgroundColor==="rgb(27, 28, 32)");
   await page.screenshot({path:".artifacts/conversation-dark.png",fullPage:true,animations:"disabled"});
   await page.locator("#prompt").fill("یک بررسی دیگر");
   await page.locator("#send").click();await page.waitForFunction(()=>document.querySelector("#prompt").value==="");
