@@ -1,6 +1,6 @@
 import {promptInput,labelDialog} from "./components.js";
 import {deploymentUI} from "./deployment.js";
-import {connectHosted,hostedOrigin} from "./hosted.js";
+import {connectHosted,hostedOrigin,runtimeRequest,invalidateHosted} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
 import {devicesUI} from "./devices.js";
 import {syncUI} from "./sync.js";
@@ -14,7 +14,7 @@ for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
 updatesUI();
 if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
-let apiOrigin="";
+let runtimeConnection=null;
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
 let currentWorkflow={phase:"build"},workflowSession=null,planReady=false,importToken=null,importRevision=0;
@@ -48,13 +48,15 @@ function accessView(value){$("access-mode").value=value||"review";$("access-mode
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
-  const response=await fetch(apiOrigin+"/api/"+path,{method,credentials:"omit",...(apiOrigin?{targetAddressSpace:"loopback"}:{}),headers:{Authorization:"Bearer "+capability,"Content-Type":"application/json",...(method!=="GET"&&state.features?.independentRuntime&&state.accountRevision?{"X-PaastaCode-Account":String(state.accountRevision)}:{})},body:body?JSON.stringify(body):undefined});
+  const request=runtimeRequest(runtimeConnection,path,method,body,{capability,accountRevision:state.features?.independentRuntime?state.accountRevision:undefined});
+  const response=await fetch(request.url,request.init);
+  if(runtimeConnection?.kind==="cloud"&&[403,404].includes(response.status)){const result=await response.clone().json().catch(()=>({}));if(result.workspaceError){clearAccountView();invalidateHosted();throw new Error("فضای کار را دوباره انتخاب کنید.");}}
   const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
 async function loadState(){
-  state=await api("state");$("workspace-name").textContent=state.workspace;
+  state=await api("state");$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
   $("git-open").disabled=!state.configured||!state.features?.git;$("access-mode").disabled=!state.features?.workspaceAccess;accessView(state.accessMode);
   deployment.updateBase(state);
@@ -136,7 +138,7 @@ async function refresh(){
       if(!promptPending)await loadWorkflow();
       const messages=await api("messages?id="+encodeURIComponent(selected.id));if(version!==generation||session!==selected)return;const serialized=JSON.stringify(messages);
       const last=messages.at(-1);planReady=last?.info?.role==="assistant"&&last.info.agent==="paasta-plan"&&!!last.info.time?.completed&&!last.info.error&&last.parts.some(p=>p.type==="text"&&p.text?.trim());
-      if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent="تغییرات روی این دستگاه";}
+      if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent=runtimeConnection?.kind==="cloud"?"تغییرات در فضای کار ابری":"تغییرات روی این دستگاه";}
       $("save").disabled=!messages.length;
       const status=await api("status");if(version!==generation||session!==selected)return;runtimeStatus=status[selected.id];sending=promptPending||(!!runtimeStatus&&runtimeStatus.type!=="idle");
       bench.activity(sending,{status:status[selected.id]});
@@ -166,7 +168,7 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
 $("new").onclick=()=>run($("new"),async()=>{generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
@@ -221,5 +223,12 @@ $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
 document.addEventListener("keydown",event=>{if(event.key==="Escape")drawer(false);if(event.key==="Tab"&&$("rail").classList.contains("open")){const items=[...$("rail").querySelectorAll("button:not(:disabled),a[href]")].filter(el=>el.offsetParent);const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
 matchMedia("(max-width:640px)").addEventListener("change",()=>drawer(false));
-if(location.origin===hostedOrigin){const connection=await connectHosted();apiOrigin=connection.origin;capability=connection.capability;}
+if(location.origin===hostedOrigin){runtimeConnection=await connectHosted();capability=runtimeConnection.capability;}
+if(runtimeConnection){
+  if(runtimeConnection.kind==="cloud"){$("local-tab").textContent="این فضای کار";$("save-state").textContent="در فضای کار ابری";}
+  const draftKey="paastacode-draft:"+(runtimeConnection.kind==="cloud"?runtimeConnection.owner+":"+runtimeConnection.id:runtimeConnection.origin);
+  try{$("prompt").value=sessionStorage.getItem(draftKey)||"";sessionStorage.removeItem(draftKey);resizePrompt();}catch{/* Browser storage is optional. */}
+  window.addEventListener("paastacode:workspace-switch",()=>{try{sessionStorage.setItem(draftKey,$("prompt").value);}catch{/* Keep switching available. */}});
+}
+window.addEventListener("paastacode:account-changed",clearAccountView);
 loadState().catch(error=>notice(error.message,true));setInterval(refresh,1800);

@@ -2,6 +2,7 @@
 <html lang="fa" dir="rtl">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
 <body>
+<dialog id="hosted-dialog" class="hosted-dialog"><div class="dialog-heading"><h2>فضاهای کار</h2><button id="hosted-close" type="button">بستن</button></div><div id="hosted-dialog-body"></div></dialog>
 <!-- Operate: Persian developer workbench; a stable transcript, visible execution and anchored composer. -->
 <div class="workspace">
   <button id="rail-backdrop" class="rail-backdrop" aria-label="بستن گفتگوها" tabindex="-1" hidden></button>
@@ -9,6 +10,7 @@
     <button id="rail-close" class="mobile-menu" aria-label="بستن گفتگوها">بستن ×</button>
     <a class="brand" href="#"><img src="/brand.png" width="30" height="30" alt=""><strong>پاستاکد</strong><span dir="ltr">PaastaCode</span></a>
     <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید</button>
+    <button id="hosted-open" class="rail-action" type="button" hidden>فضاهای کار</button>
     <button id="deploy-open" class="rail-action" type="button" disabled>انتشار روی پاستا</button>
     <button id="import-open" class="rail-action" type="button" hidden>ورود از ابزارهای دیگر</button>
     <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
@@ -21,8 +23,18 @@
     <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">پروژه</span><strong id="workspace-name" dir="ltr">PaastaCode</strong><button id="open-workspace" hidden>باز کردن پروژه</button></div><div class="header-actions"><button id="git-open" class="git-open" type="button" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="5" r="2"/><circle cx="17" cy="6" r="2"/><circle cx="7" cy="19" r="2"/><path d="M7 7v10m10-9v2a4 4 0 0 1-4 4H7"/></svg><bdi id="git-branch-label" dir="ltr">گیت</bdi><span id="git-count">۰</span></button><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
     <section id="sync-controls" class="sync-controls" hidden aria-label="ذخیرهٔ خودکار همین گفتگو"><button id="sync-open" type="button">ذخیرهٔ خودکار: خاموش</button><span id="sync-detail" class="muted" role="status"></span><button id="sync-review" type="button" hidden>بررسی نسخهٔ حساب</button><button id="sync-copy" type="button" hidden>ذخیرهٔ نسخهٔ مستقل</button></section>
     <div id="notice" class="notice" role="status" hidden></div>
+    <section id="hosted-hub" class="hosted-hub" hidden aria-label="فضاهای کار پاستاکد">
+      <header class="hosted-heading"><div><span class="intro-label">پاستاکد تحت وب</span><h1>از اینجا شروع کنید.</h1><p>یک فضای کار انتخاب کنید و ادامهٔ پروژه را به پاستاکد بسپارید.</p></div><span class="hosted-mark" aria-hidden="true">⌘</span></header>
+      <div class="hosted-account"><div><strong id="hosted-account-name">حساب پاستا</strong><span id="hosted-account-detail" class="muted">در حال بررسی ورود…</span></div><div class="hosted-actions"><a id="hosted-login" class="button-link" href="https://console.paasta.cloud/login" target="_blank" rel="noopener noreferrer" hidden>ورود با پاستا ↗</a><button id="hosted-refresh" type="button">تازه‌سازی</button></div></div>
+      <p id="hosted-feedback" class="hosted-feedback" role="status" aria-live="polite"></p>
+      <section class="hosted-projects" aria-labelledby="hosted-projects-title"><div class="hosted-section-heading"><h2 id="hosted-projects-title">فضاهای کار ابری</h2><span class="hosted-badge">بدون نصب</span></div><p class="muted">فایل‌ها و اجرای پروژه روی پاستا می‌مانند؛ بستن این صفحه کار را متوقف نمی‌کند.</p><div id="hosted-list" aria-live="polite"></div></section>
+      <details id="hosted-create" class="hosted-create" hidden><summary>＋ فضای کار ابری جدید</summary><form id="hosted-create-form"><div class="hosted-fields"><label>نام پروژه<input id="hosted-name" required maxlength="160" placeholder="مثلاً وب‌سایت فروشگاه" autocomplete="off"></label><label>پلن اجرا<select id="hosted-plan" required></select></label><label>محل نگه‌داری فایل‌ها<select id="hosted-storage" required></select></label><label>حجم دیسک، گیگابایت<input id="hosted-size" type="number" inputmode="numeric" min="1" step="1" required value="5"></label></div><p class="muted">پرداخت منابع ماهانه است. هزینهٔ مصرف مدل‌های هوش مصنوعی جداگانه محاسبه می‌شود.</p><button class="primary" id="hosted-quote" type="submit">بررسی هزینه</button></form></details>
+      <section id="hosted-review" class="hosted-review" hidden aria-labelledby="hosted-review-title"><span class="intro-label">پیش از تأیید</span><h2 id="hosted-review-title">بررسی سفارش</h2><p id="hosted-review-name" dir="auto"></p><dl id="hosted-costs"></dl><p id="hosted-terms"></p><p id="hosted-expiry" class="muted"></p><div class="hosted-actions"><button id="hosted-confirm" class="primary" type="button">تأیید</button><button id="hosted-dismiss" type="button">بازگشت</button></div></section>
+      <details id="hosted-local" class="hosted-local"><summary>اتصال به پروژه روی کامپیوتر خودم <span>با برنامه یا CLI پاستاکد</span></summary><div id="hosted-local-content"></div></details>
+      <p class="hosted-foot">Powered by OpenCode · پاستاکد، فورک متن‌باز OpenCode</p>
+    </section>
     <form id="workspace-connect" class="intro hosted-connect" hidden>
-      <span class="intro-label">پاستاکد تحت وب</span><h1>پروژهٔ خود را باز کنید</h1>
+      <h2>پروژه روی دستگاه شما</h2>
       <p>رابط وب به فضای کاری روی دستگاه شما وصل می‌شود. برای شروع، این دستور را در پوشهٔ پروژه اجرا کنید و پنجرهٔ ترمینال را باز نگه دارید:</p>
       <pre dir="ltr"><code>paastacode web --hosted</code></pre>
       <p>اگر پاستاکد را نصب نکرده‌اید، <a href="https://github.com/Paasta-Cloud/PaastaCode/blob/dev/extensions/paastacode/README.md" target="_blank" rel="noopener noreferrer">راهنمای نصب</a> را ببینید.</p>
