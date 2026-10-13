@@ -6,10 +6,14 @@ const workflow=readFileSync(new URL("../../../.github/workflows/paastacode-relea
 const keys=["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"];
 function environment(os,signed,values={}){
   const reads=[],secrets=new Proxy(values,{get:(target,key)=>{reads.push(key);return target[key]||"";}}),result={};
+  const platform={Windows:"win32",macOS:"darwin",Linux:"linux"}[os];
   for(const key of keys){
     const expression=workflow.match(new RegExp("^      "+key+": \\$\\{\\{ (.+) \\}\\}$","m"))?.[1];assert(expression,"Missing signing environment "+key);
     assert(/^[A-Za-z0-9_.'()\s&|=]+$/.test(expression),"Unexpected expression syntax");
-    result[key]=Function("inputs","runner","secrets","return ("+expression+");")({signed},{os},secrets);
+    // jobs.<job_id>.env has matrix, inputs and secrets; runner is only
+    // available after the job starts. The old harness invented that context.
+    assert(!/\brunner\./.test(expression),"runner context is unavailable in job-level env");
+    result[key]=Function("inputs","matrix","secrets","return ("+expression+");")({signed},{platform},secrets);
   }
   return {result,reads};
 }
