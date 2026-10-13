@@ -33,6 +33,8 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.package_sha }}
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
