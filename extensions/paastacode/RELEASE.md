@@ -1,15 +1,22 @@
-# PaastaCode 0.2.0-beta.5 candidate
+# PaastaCode 0.2.0-beta.9 / پاستاکد
 
-Bundled local web/CLI, Electron installers and standalone platform VSIX packages, with licensed local Yekan Bakh (Vazirmatn fallback in open-source builds) and MIT VibeFarsi/FarsiUI pattern adaptations. Powered by OpenCode; the source fork and deployment CLI source remain open source.
+بسته‌های نصب دسکتاپ، وب محلی، CLI و افزونهٔ VS Code با رابط فارسی و راست‌چین و فونت یکان.
 
-The separate Paasta deployment connection is restricted to project/log read and deployment write, bound to the same account, and requests a one-use human source/cost review. Changed source/price fails closed; environment files and known credentials are excluded; ambiguous deployment results are observed rather than automatically retried.
+- ریدیزاین میزکار برای برنامه‌نویس‌ها: تم تیره و روشن، آیکون‌های یکدست، جست‌وجوی گفتگو و انتخاب واضح. عنوان گفتگو از نخستین درخواست گرفته می‌شود.
+- اصلاح بسته‌بندی یکان در ویندوز و آزمون بارگذاری واقعی آن؛ شمارهٔ نسخه در عنوان پنجره.
+- دنبال‌کردن خروجی و حفظ اسکرول دستی هنگام خواندن پیام‌های قبلی.
+- تغییر مدل در همان گفتگو؛ توقف و ادامهٔ درخواست در حال اجرا با مدل تازه.
+- مدیریت خودکار برنامه‌ریزی فقط‌خواندنی و اجرا با مدل اقتصادی‌تر، در صورت وجود جفت مدل مناسب؛ نمایش مدل و قیمت مرحلهٔ جاری، تنظیمات دستی و توقف قابل‌اعتماد.
+- حذف مدل‌های رایگان و بدون قیمت معتبر از کاتالوگ و درخواست‌های جدید پاستاکد.
+- ادامهٔ پروژه‌های Codex، Claude Code و Cursor در همان پوشه و ورود قواعد و متن گفتگو پس از پیش‌نمایش.
+- Full Access، عملیات گیت و بررسی به‌روزرسانی از داخل برنامه.
+- دریافت ZIP کامل پروژهٔ آماده با دانلود مرورگر، نمایش خطای آماده‌سازی و تلاش دوباره؛ حفظ گفتگوی بازیابی‌شده پس از جایگزینی کانتینر، بدون بازپخش ابزارها.
+- رابط انتخاب و مدیریت فضای کار ابری در شاخهٔ توسعه، با بررسی هزینه، تمدید، لغو و حفظ پیش‌نویس هر پروژه.
 
-This candidate keeps workspace execution alive independently of desktop/web/CLI/VS Code clients. Closing one interface does not terminate another interface's shared engine/session. Authenticated explicit local stop preserves files and conversations. Credential changes invalidate old engines, account mutations are serialized, and stale-window actions cannot revoke a newer login. Windows packaged Electron lifecycle and 23 source checks passed; the beta4 native matrix and production UI/lifecycle acceptance are being verified.
+اجرای کاملاً ابری هنوز روی سرویس عمومی فعال نشده است. [رابط وب](https://code.paasta.cloud) فعلاً به اجرای محلی متصل می‌شود. نسخهٔ افزونه برای ارتقای نصب قبلی `0.2.8` است.
 
-The published beta3 source `31a4d3e816eb4607b4b3d3d797fe6799771cf384` passed package/desktop run `38310904450`, with all 20 customer files matched against native manifests and GitHub SHA-256 digests. Installed VSIX 0.2.2 executed in actual isolated VS Code 1.141.0 on all five native targets in `38312342215`. Its sync UI shipped as `56537883558a` through canonical `38312599338`; actual public browser consent/conflict/copy and production-role account/retry/audit checks pass. Beta4 uses extension upgrade version 0.2.3. This UI/update candidate advances the extension to 0.2.4.
+[راهنمای نصب و استفاده](https://github.com/Paasta-Cloud/PaastaCode/blob/codex/paastacode-cloud/extensions/paastacode/README.md) شامل فرمان‌های CLI و قالب‌های قابل ایمپورت است. ایمپورت، متن انتخاب‌شده و قواعد پروژه را منتقل می‌کند؛ انتقال کامل تاریخچهٔ خصوصی یا فرایند در حال اجرای ابزار قبلی نیست.
 
-The hosted UI is available at https://code.paasta.cloud and pairs explicitly with a local workspace started using `paastacode web --hosted`. Execution currently takes place on the user's device. Full hosted workspaces, extra-resource deployment previews, paid model/deployment acceptance, publisher signing and signed update delivery remain completion gates. This is an unsigned prerelease, not the final customer release. Check each native manifest for signing status.
+These are unsigned beta packages. Choose the package for your operating system and architecture and verify SHA256SUMS. Publisher signing and final in-place desktop upgrade acceptance remain open. Hosted runtime source is included for development; no production hosted execution or paid inference acceptance is claimed.
 
-Use only the package for your operating system and architecture. Verify SHA256SUMS before installation. Unsigned candidates may trigger operating-system warnings; final signed delivery requires the publisher's signing credentials.
-
-This candidate adds a Codex-like workbench with stable streaming follow/manual reading, visible tool activity, account/workspace Full Access, selected-file Git commits and remote synchronization. Desktop checks/downloads updates automatically and installs from its UI or on an idle exit; CLI installs a verified version beside the original; VS Code installs a verified platform VSIX. Windows package execution, real engine permission transitions, Git preservation, updater state/hash rejection and desktop/320px browser checks pass locally. Cross-platform native packaging, actual desktop upgrade acceptance, hosted rollout and final signing are still required. These are not claims of a completed signed release or independent hosted execution.
+Powered by OpenCode. PaastaCode is an explicit MIT fork of OpenCode. Official packages contain the publisher-licensed Yekan Bakh font; source builds retain the open-source Vazirmatn fallback. The licensed font is not relicensed under MIT.

@@ -1,0 +1,113 @@
+name: PaastaCode cloud runtime image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: paastacode-cloud-image-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/paasta-cloud/paastacode-cloud
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-latest, arch: amd64}
+          - {runner: ubuntu-24.04-arm, arch: arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: extensions/paastacode
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Create attestation-capable builder
+        run: docker buildx create --use --driver docker-container --name paastacode-publisher
+      - name: Build native runtime for acceptance
+        run: docker buildx build --load --file cloud/Dockerfile --tag paastacode-cloud:acceptance .
+      - name: Verify isolated runtime and restore across container replacement
+        run: node cloud/smoke.mjs paastacode-cloud:acceptance
+      - name: Authenticate publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Publish attested native image
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p .artifacts/runtime-image
+          docker buildx build --file cloud/Dockerfile --platform "linux/$ARCH" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --provenance=mode=max --sbom=true --push \
+            --tag "$IMAGE:sha-$GITHUB_SHA-$ARCH" \
+            --metadata-file .artifacts/runtime-image/metadata.json .
+          node --input-type=module -e 'import {readFile,writeFile} from "node:fs/promises";const metadata=JSON.parse(await readFile(".artifacts/runtime-image/metadata.json","utf8"));const digest=metadata["containerimage.digest"];if(!/^sha256:[a-f0-9]{64}$/.test(digest))throw new Error("Invalid published digest");await writeFile(".artifacts/runtime-image/"+process.env.ARCH+".txt",digest+"\n");'
+      - name: Execute exact published native digest
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          digest=$(cat ".artifacts/runtime-image/$ARCH.txt")
+          docker pull "$IMAGE@$digest"
+          node cloud/smoke.mjs "$IMAGE@$digest"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: runtime-digest-${{ matrix.arch }}
+          path: extensions/paastacode/.artifacts/runtime-image/${{ matrix.arch }}.txt
+          if-no-files-found: error
+          retention-days: 90
+      - name: Clear publisher login
+        if: always()
+        run: docker logout ghcr.io
+
+  index:
+    needs: native
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: runtime-digest-*
+          merge-multiple: true
+          path: .artifacts/runtime-image
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Authenticate publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Assemble immutable multi-platform runtime
+        run: |
+          amd64=$(cat .artifacts/runtime-image/amd64.txt)
+          arm64=$(cat .artifacts/runtime-image/arm64.txt)
+          [[ "$amd64" =~ ^sha256:[a-f0-9]{64}$ && "$arm64" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker buildx imagetools create --tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE@$amd64" "$IMAGE@$arm64"
+          docker buildx imagetools inspect "$IMAGE:sha-$GITHUB_SHA" --format '{{json .Manifest}}' > .artifacts/runtime-image/index.json
+          node --input-type=module -e 'import {readFile,writeFile} from "node:fs/promises";const image=JSON.parse(await readFile(".artifacts/runtime-image/index.json","utf8"));if(!/^sha256:[a-f0-9]{64}$/.test(image.digest))throw new Error("Invalid runtime index");for(const arch of ["amd64","arm64"])if(!image.manifests?.some(m=>m.platform?.os==="linux"&&m.platform.architecture===arch))throw new Error("Missing native runtime: "+arch);await writeFile(".artifacts/runtime-image/image.txt",process.env.IMAGE+"@"+image.digest+"\n");'
+          cat .artifacts/runtime-image/image.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Require anonymous runtime pull before customer activation
+        run: |
+          node --input-type=module -e 'import {readFile} from "node:fs/promises";import {createHash} from "node:crypto";const reference=(await readFile(".artifacts/runtime-image/image.txt","utf8")).trim(),digest=reference.split("@")[1];const auth=await fetch("https://ghcr.io/token?service=ghcr.io&scope=repository:paasta-cloud/paastacode-cloud:pull");if(!auth.ok)throw new Error("Anonymous registry access unavailable; make the runtime package public before activation");const token=(await auth.json()).token;const response=await fetch("https://ghcr.io/v2/paasta-cloud/paastacode-cloud/manifests/"+digest,{headers:{Authorization:"Bearer "+token,Accept:"application/vnd.oci.image.index.v1+json"}});if(!response.ok)throw new Error("Anonymous runtime pull unavailable; make the package public before activation");const bytes=Buffer.from(await response.arrayBuffer());if("sha256:"+createHash("sha256").update(bytes).digest("hex")!==digest)throw new Error("Anonymous runtime digest mismatch");'
+      - uses: actions/upload-artifact@v6
+        with:
+          name: paastacode-cloud-runtime-reference
+          path: |
+            .artifacts/runtime-image/image.txt
+            .artifacts/runtime-image/index.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Clear publisher login
+        if: always()
+        run: docker logout ghcr.io

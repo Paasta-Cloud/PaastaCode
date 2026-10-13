@@ -16,6 +16,7 @@ const included=["bin","src","web","licenses","desktop","paasta-cli","LICENSE","O
 for(const file of included)await cp(join(root,file),join(client,file),{recursive:true});
 // Commercial font stays outside the MIT source tree; licensed distributors supply it.
 const yekan=process.env.PAASTACODE_YEKAN_FONT||resolve(root,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf");
+if(process.env.PAASTACODE_YEKAN_FONT&&!existsSync(yekan))throw new Error("Publisher Yekan font path is invalid; refusing a release with a missing font");
 if(existsSync(yekan))await copyFile(yekan,join(client,"web/fonts/YekanBakh.ttf"));
 await writeFile(join(client,"package.json"),JSON.stringify({...pkg,name:"paastacode",dependencies:{},devDependencies:{},scripts:{}},null,2));
 const engineMeta=require("opencode-ai/package.json"),engineRoot=dirname(require.resolve("opencode-ai/package.json"));

@@ -1,4 +1,4 @@
-import {labelDialog} from "./components.js";
+import {labelDialog,icon} from "./components.js";
 const $=id=>document.getElementById(id);
 const money=value=>Number(value).toLocaleString("fa-IR",{maximumFractionDigits:4})+" تومان";
 const states={review:"در انتظار بررسی",deploying:"در حال انتشار",ready:"آماده",complete:"انجام شد",failed:"ناموفق",rejected:"لغو شد",expired:"پیش‌نمایش منقضی شد"};
@@ -28,7 +28,7 @@ export function deploymentUI({api,run,notice,getState}){
   function renderJobs(){
     $("deploy-jobs").replaceChildren();
     const pending=jobs.filter(job=>job.status==="review").length;
-    $("deploy-open").textContent="انتشار روی پاستا"+(pending?" · "+pending.toLocaleString("fa-IR")+" درخواست":"");
+    $("deploy-open").replaceChildren(icon("deploy"),document.createTextNode("انتشار روی پاستا"+(pending?" · "+pending.toLocaleString("fa-IR")+" درخواست":"")));
     for(const job of jobs.slice().reverse()){
       const button=document.createElement("button");button.type="button";button.className="deploy-job";
       const title=document.createElement("bdi");title.dir="ltr";title.textContent=job.project;

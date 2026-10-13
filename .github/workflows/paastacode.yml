@@ -31,3 +31,9 @@ jobs:
       - run: npm ci --omit=dev
       - run: npm run check
       - run: npm test
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+          cache: false
+      - name: Check native workspace archive and broker transfer
+        run: node scripts/check-workspace-export.mjs

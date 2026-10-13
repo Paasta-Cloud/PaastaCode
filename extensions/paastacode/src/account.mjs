@@ -33,8 +33,22 @@ export async function readPrivate(path){
   catch(error){if(error.code==="ENOENT")return null;throw error;}
 }
 export class PaastaAccount {
-  constructor(origin=consoleUrl(),home=stateHome,{deployment=false}={}){this.origin=consoleUrl(origin);this.clientId=deployment?"paastacode-deploy":"paastacode";this.path=join(home,deployment?"deployment-account.json":"account.json");this.credentials=null;this.device=null;}
-  async load(){const saved=await readPrivate(this.path);this.credentials=saved?.origin===this.origin?saved:null;return this;}
+  constructor(origin=consoleUrl(),home=stateHome,{deployment=false,owner}={}){
+    const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if(owner!==undefined&&(!owner||!uuid.test(owner.id)||!uuid.test(owner.tenantId)))throw new Error("صاحب فضای کار ابری معتبر نیست.");
+    this.owner=owner===undefined?undefined:Object.freeze({id:owner.id.toLowerCase(),tenantId:owner.tenantId.toLowerCase()});
+    this.origin=consoleUrl(origin);this.clientId=deployment?"paastacode-deploy":"paastacode";this.path=join(home,deployment?"deployment-account.json":"account.json");this.credentials=null;this.device=null;
+  }
+  async verifyOwner(token){
+    if(!this.owner)return;
+    const identity=await this.request("/api/paastacode/identity",{token});
+    if(identity.id!==this.owner.id||identity.tenantId!==this.owner.tenantId)throw new Error("با حساب صاحب این فضای کار وارد شوید. حساب دیگری به این فضا متصل نمی‌شود.");
+  }
+  async load(){
+    const saved=await readPrivate(this.path),credentials=saved?.origin===this.origin?saved:null;
+    if(credentials)await this.verifyOwner(credentials.token);
+    this.credentials=credentials;return this;
+  }
   async request(path,{method="GET",body,token=this.credentials?.token}={}){
     let response;
     try{response=await fetch(this.origin+path,{method,headers:{...(token?{Authorization:"Bearer "+token}:{}),...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:"error"});}
@@ -67,6 +81,8 @@ export class PaastaAccount {
     if(this.device!==device)throw new Error("درخواست ورود لغو شده است.");
     if(result.error==="authorization_pending")return {pending:true};
     if(!/^paasta_[A-Za-z0-9_-]{43}$/.test(result.token))throw new Error("پاسخ ورود معتبر نیست.");
+    try{await this.verifyOwner(result.token);}catch(error){if(this.device===device)this.device=null;throw error;}
+    if(this.device!==device)throw new Error("درخواست ورود لغو شده است.");
     this.credentials={origin:this.origin,token:result.token};
     await writePrivate(this.path,this.credentials);this.device=null;
     return {pending:false};

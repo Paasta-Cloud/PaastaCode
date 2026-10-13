@@ -15,6 +15,11 @@ async function openWorkspace(workspace){
   const next=await connectWorkspace({workspace});
   if(service&&service.url!==next.url)await service.close();service=next;
   await window.loadURL(service.launchUrl);
+  window.setTitle("پاستاکد | PaastaCode "+app.getVersion());
+  const {newer}=await import("../src/updates.mjs");
+  if(service.version&&newer(app.getVersion(),service.version)){
+    await window.webContents.executeJavaScript(`(()=>{const note=document.createElement('div');note.id='runtime-upgrade-notice';note.setAttribute('role','status');note.textContent='نسخهٔ جدید باز شده، اما این پروژه هنوز با اجرای قبلی کار می‌کند. پس از پایان کار، از منوی پروژه «توقف اجرای محلی پروژه و خروج» را انتخاب کنید و برنامه را دوباره باز کنید.';note.style.cssText='padding:12px 20px;background:#24344d;color:#f0f1f3;font:14px/1.9 Tahoma,sans-serif;flex-shrink:0';document.querySelector('main').prepend(note);})()`);
+  }
   if(!process.env.PAASTACODE_DESKTOP_SMOKE){await fs.mkdir(path.dirname(preferences()),{recursive:true});await fs.writeFile(preferences(),JSON.stringify({workspace}),{mode:0o600});}
 }
 app.whenReady().then(async()=>{
@@ -32,6 +37,7 @@ app.whenReady().then(async()=>{
     if(attribution||(target.origin===allowed.origin&&target.pathname==="/cli/authorize")||(target.protocol==="https:"&&!target.username&&!target.password&&target.origin!==allowed.origin))void shell.openExternal(url);
     return {action:"deny"};
   });
+  window.webContents.on("page-title-updated",event=>event.preventDefault());
   window.webContents.on("will-navigate",(event,url)=>{if(new URL(url).origin!==service?.url)event.preventDefault();});
   window.webContents.session.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   ipcMain.handle("paastacode:choose-workspace",async event=>{
@@ -73,8 +79,10 @@ app.whenReady().then(async()=>{
   void updates.start();const updateTimer=setInterval(()=>{if(updates.state().automatic)void updates.check();},6*60*60*1000);updateTimer.unref();
   if(process.env.PAASTACODE_DESKTOP_SMOKE){
     if(process.env.PAASTACODE_EXPECT_VERSION&&app.getVersion()!==process.env.PAASTACODE_EXPECT_VERSION)throw new Error("Desktop package version does not match the release being verified.");
-    const result=await window.webContents.executeJavaScript("document.fonts.ready.then(()=>({rtl:document.documentElement.dir,login:!!document.getElementById('login'),font:document.fonts.check('16px YekanBakh')||document.fonts.check('16px Vazirmatn'),desktop:!!window.paastacodeDesktop,updates:!!document.getElementById('updates-open')}))");
-    if(result.rtl!=="rtl"||!result.login||!result.font||!result.desktop||!result.updates)throw new Error("Desktop smoke failed.");
+    const result=await window.webContents.executeJavaScript("document.fonts.ready.then(()=>({rtl:document.documentElement.dir,login:!!document.getElementById('login'),fonts:[...document.fonts].filter(f=>f.status==='loaded').map(f=>f.family.replaceAll(String.fromCharCode(34),'')),desktop:!!window.paastacodeDesktop,updates:!!document.getElementById('updates-open')}))");
+    const requiredFont=process.env.PAASTACODE_YEKAN_FONT?"YekanBakh":null;
+    const loaded=requiredFont?result.fonts.includes(requiredFont):result.fonts.some(font=>["YekanBakh","Vazirmatn"].includes(font));
+    if(result.rtl!=="rtl"||!result.login||!loaded||!result.desktop||!result.updates)throw new Error("Desktop smoke failed: "+(requiredFont||"Persian font")+" must actually load.");
     if(process.env.PAASTACODE_DESKTOP_VISIBLE_SMOKE==="1")await window.webContents.executeJavaScript("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))");
     const directory=process.env.PAASTACODE_SMOKE_OUTPUT||path.join(app.getPath("temp"),"paastacode-smoke");await fs.mkdir(directory,{recursive:true});
     await fs.writeFile(path.join(directory,"desktop.png"),(await window.webContents.capturePage()).toPNG());

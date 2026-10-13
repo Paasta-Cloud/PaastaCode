@@ -23,7 +23,7 @@ test("real OpenCode discovers Paasta MCP and a permitted tool still creates only
   });await new Promise(r=>provider.listen(0,'127.0.0.1',r));
   const wait=async fn=>{for(let i=0;i<150;i++){const result=await fn();if(result)return result;await new Promise(r=>setTimeout(r,200));}throw Error('MCP engine operation timed out');};
   try{
-    const config=providerConfig([{id:'synthetic',name:'Synthetic',supported_parameters:['tools'],context_length:32000,max_output_tokens:4096}],'synthetic','http://127.0.0.1:'+provider.address().port);config.mcp={paasta:paastaMcpConfig(workspace)};
+    const config=providerConfig([{id:'synthetic',name:'Synthetic',input_toman_per_million:100,output_toman_per_million:300,supported_parameters:['tools'],context_length:32000,max_output_tokens:4096}],'synthetic','http://127.0.0.1:'+provider.address().port);config.mcp={paasta:paastaMcpConfig(workspace)};
     await runtime.start({...config,mcp:{}});
     await runtime.call('/mcp',{method:'POST',body:{name:'paasta',config:paastaMcpConfig(workspace)}});
     await wait(async()=>{const status=await runtime.call('/mcp');return status.paasta?.status==='connected';});

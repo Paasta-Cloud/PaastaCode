@@ -7,7 +7,7 @@ export function workbench(){
   const follow=()=>{following=true;$("follow-output").hidden=true;viewport.scrollTop=viewport.scrollHeight;};
   $("follow-output").onclick=follow;
   new ResizeObserver(()=>{lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();}).observe(viewport);
-  const labels={read:"خواندن فایل",glob:"جست‌وجوی فایل‌ها",grep:"جست‌وجو در کد",bash:"اجرای دستور",write:"ساخت فایل",edit:"ویرایش فایل",apply_patch:"اعمال تغییرات",task:"بررسی پروژه",webfetch:"خواندن صفحه"};
+  const labels={read:"خواندن فایل",glob:"جست‌وجوی فایل‌ها",grep:"جست‌وجو در کد",bash:"اجرای دستور",write:"ساخت فایل",edit:"ویرایش فایل",apply_patch:"اعمال تغییرات",task:"بررسی پروژه",webfetch:"خواندن صفحه",todowrite:"به‌روزرسانی برنامه",todoread:"بررسی برنامه"};
   function inline(parent,text){for(const token of text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g)){if(token.startsWith("`")&&token.endsWith("`")){const code=document.createElement("code");code.textContent=token.slice(1,-1);parent.append(code);}else if(token.startsWith("**")&&token.endsWith("**")){const strong=document.createElement("strong");strong.textContent=token.slice(2,-2);parent.append(strong);}else parent.append(document.createTextNode(token));}}
   function content(parent,text){for(const section of text.split(/(```[\s\S]*?```)/g)){
     if(!section.trim())continue;
@@ -39,7 +39,7 @@ export function workbench(){
           const status=part.state?.status||"completed";details.dataset.status=status;
           const icon=document.createElement("span");icon.className="tool-indicator";icon.setAttribute("aria-hidden","true");icon.textContent=status==="completed"?"✓":status==="error"?"!":"";
           const name=document.createElement("span");name.className="tool-title";name.textContent=part.type==="reasoning"?"روند بررسی":labels[part.tool]||part.tool;
-          const target=document.createElement("bdi");target.className="tool-target";target.dir="ltr";target.textContent=part.state?.input?.filePath||part.state?.input?.path||part.state?.title||"";
+          const target=document.createElement("bdi");target.className="tool-target";target.dir="ltr";const path=part.state?.input?.filePath||part.state?.input?.path;target.textContent=path?String(path).replaceAll("\\","/").split("/").slice(-3).join("/"):part.state?.input?.command||part.state?.title||"";target.title=path||target.textContent;
           const badge=document.createElement("span");badge.className="tool-status";badge.textContent={completed:"انجام شد",running:"در حال اجرا",pending:"در انتظار",error:"ناموفق"}[status]||status;
           summary.append(icon,name,target,badge);
           const pre=document.createElement("pre");pre.dir="ltr";pre.textContent=part.type==="reasoning"?part.text:String(part.state?.metadata?.diff||part.state?.output||part.state?.error||JSON.stringify(part.state?.input||{},null,2));
@@ -58,6 +58,7 @@ export function workbench(){
     $("activity-label").textContent=approval?"در انتظار تأیید شما":status?.type==="retry"?"تلاش دوباره برای اتصال":tool?labels[tool.tool]||"اجرای ابزار":"پاستاکد روی درخواست کار می‌کند";
     $("activity-detail").textContent=approval?"درخواست دسترسی را در گفتگو بررسی کنید.":status?.type==="retry"?"پاسخ هنوز آماده نیست؛ می‌توانید اجرا را متوقف کنید.":tool?.state?.title||"خروجی جدید همین‌جا نمایش داده می‌شود.";
     $("connection-state").textContent=approval?"نیاز به تأیید":busy?"در حال کار":"آماده";
+    $("thread-state").textContent=approval?"نیاز به تأیید":busy?"در حال کار":"آماده";$("thread-state").dataset.busy=String(busy||approval);
     $("stop").hidden=!busy;$("send").disabled=busy;
     if(following&&busy)follow();
   }

@@ -5,12 +5,14 @@ import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {PaastaAccount,stateHome,readPrivate,writePrivate} from "./account.mjs";
 import {CodeRuntime,providerConfig,workspaceKey,normalizedPath,paastaMcpConfig} from "./runtime.mjs";
-import {codingModels} from "./models.mjs";
+import {codingModels,workflowModels} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
 import {ConversationSync} from "./conversation-sync.mjs";
 import {accessModes,sessionPermissions} from "./access.mjs";
 import {WorkspaceGit} from "./git.mjs";
 import {previewImport} from "./project-import.mjs";
+import {WorkspaceExport} from "./workspace-export.mjs";
+import {untitledSession,promptTitle,firstRequestTitle} from "./session-title.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
@@ -22,7 +24,7 @@ async function body(request){
   let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>1_100_000)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
-export async function startServer({workspace=process.cwd(),account,runtime,deployment,port=0,hosted=false,daemon=false,onClosed}={}){
+export async function startServer({workspace=process.cwd(),account,runtime,deployment,exporter,port=0,hosted=false,daemon=false,onClosed}={}){
   const version=JSON.parse(await readFile(join(here,"package.json"),"utf8")).version;
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
@@ -52,6 +54,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   account=account||await new PaastaAccount().load();
   runtime=runtime||new CodeRuntime(workspace);
   deployment=deployment||new PaastaDeployment({workspace,account});
+  exporter=exporter||new WorkspaceExport({workspace,privateRoot:stateHome});
+  const writable=()=>{if(exporter.busy)throw new Error("دریافت خروجی پروژه در حال انجام است؛ برای تغییر فایل‌ها ابتدا آن را تمام یا لغو کنید.");};
   const capability=randomBytes(32).toString("base64url");
   let origin,context=null,starting=null,loginPolling=null,closed=false,accountChanging=false,updating=false;
   const syncPath=join(stateHome,"sync-"+key+".json");
@@ -59,10 +63,23 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   const accessPath=join(stateHome,"access-"+key+".json"),access=await readPrivate(accessPath)||{};
   const accessMode=()=>context&&access[accountIdentity()]||"review";
   const workflowsPath=join(stateHome,"workflows-"+key+".json"),workflows=await readPrivate(workflowsPath)||{};
+  let recoveredHandoff=false;
+  for(const record of Object.values(workflows))if(record.automatic?.state==="handoff"){record.automatic.state="interrupted";recoveredHandoff=true;}
+  if(recoveredHandoff)await writePrivate(workflowsPath,workflows);
   const workflow=id=>workflows[accountIdentity()+":"+id]||{phase:"build"};
   const rules=(id,mode=accessMode())=>sessionPermissions(mode,workflow(id).phase);
   const fullAccess=id=>accessMode()==="full"&&workflow(id).phase!=="plan";
   const importPreviews=new Map();
+  const stopRequests=new Set();
+  const sessionTitles=new Map();
+  const displayTitle=async item=>{
+    if(!untitledSession(item.title))return item.title;
+    const key=accountIdentity()+":"+item.id;
+    if(sessionTitles.has(key))return sessionTitles.get(key);
+    const title=firstRequestTitle(await runtime.call("/session/"+item.id+"/message"));
+    if(title){if(sessionTitles.size>=1000)sessionTitles.delete(sessionTitles.keys().next().value);sessionTitles.set(key,title);}
+    return title||"گفتگوی جدید";
+  };
   const git=new WorkspaceGit(workspace);
   let accessChanges=Promise.resolve(),permissionPolling=false;
   const appliedAccess=new Map();
@@ -96,7 +113,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       const messages=[...transcript(sync[restoreKey(id)]?.messages||[]),...await runtime.call("/session/"+id+"/message")];
       const snapshot={version:1,messages:messages.filter(m=>["user","assistant"].includes(m.info.role)).map(m=>({role:m.info.role,text:m.parts.filter(p=>p.type==="text"&&!p.synthetic).map(p=>p.text).join("\n")})).filter(m=>m.text)};
       if(idleOnly&&!snapshot.messages.length)return null;
-      return {title:session.title.slice(0,160),snapshot};
+      return {title:(await displayTitle(session)).slice(0,160),snapshot};
     }});
   const credentialStamp=async()=>account.path?stat(account.path).then(value=>value.mtimeMs+":"+value.size).catch(error=>{if(error.code==="ENOENT")return "missing";throw error;}):null;
   let accountMutations=Promise.resolve(),accountRevision=1;
@@ -104,7 +121,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(expected!==undefined&&String(accountRevision)!==expected){const error=new Error("حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.");error.status=409;error.accountChanged=true;throw error;}
     const before=account.credentials?.token+":"+account.credentials?.aiKey;accountChanging=true;
     try{await syncManager.barrier();if(starting)await starting.catch(()=>{});return await work();}
-    finally{if(before!==account.credentials?.token+":"+account.credentials?.aiKey)accountRevision++;accountChanging=false;}
+    finally{try{if(before!==account.credentials?.token+":"+account.credentials?.aiKey){accountRevision++;exporter.close();let changed=false;for(const record of Object.values(workflows))if(record.automatic?.state==="planning"){record.automatic.state="cancelled";changed=true;}if(changed)await writePrivate(workflowsPath,workflows);}}finally{accountChanging=false;}}
   });accountMutations=result.catch(()=>{});return result;};
   let lastCredentialStamp=await credentialStamp(),accountReloading=null;
   const reloadAccount=async(force=false)=>{
@@ -118,10 +135,48 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     return accountReloading;
   };
   const json=(response,data,status=200)=>{response.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(JSON.stringify(data));};
+  // The shared broker owns handoff, so closing a renderer does not abandon a plan.
+  // Persist the handoff intent before submission: ambiguous acknowledgements never replay tools.
+  const advancePlans=async()=>{
+    const owner=accountIdentity(),pending=Object.entries(workflows).filter(([key,value])=>key.startsWith(owner+":ses_")&&value.phase==="plan"&&value.automatic?.state==="planning");
+    if(!pending.length)return;
+    await mutateAccount(async()=>{
+      if(closed||updating||exporter.busy||!runtime.url||!context||accountIdentity()!==owner)return;
+      const status=await runtime.call("/session/status");
+      for(const [key,record] of pending){
+        const id=key.slice(owner.length+1);
+        if(record.automatic.state!=="planning"||status[id]&&status[id].type!=="idle")continue;
+        await owned(id);
+        const last=(await runtime.call("/session/"+id+"/message")).at(-1),info=last?.info;
+        if(!info?.id||info.id===record.automatic.previousMessage||info.time?.created<record.automatic.requestedAt)continue;
+        if(info.role!=="assistant"||!info.time?.completed)continue;
+        if(info.error||["length","tool-calls"].includes(info.finish)||info.agent!=="paasta-plan"||!last.parts.some(p=>p.type==="text"&&!p.synthetic&&p.text?.trim())){record.automatic.state="failed";await writePrivate(workflowsPath,workflows);continue;}
+        try{
+          // Revalidate the grant and live catalogue before starting another paid model.
+          const current=await account.context();
+          if(stopRequests.has(key)){record.automatic.state="cancelled";await writePrivate(workflowsPath,workflows);continue;}
+          if(current.account.id!==context.account.id||current.account.tenantId!==context.account.tenantId||!codingModels(current.models).some(m=>m.id===record.buildModel))throw new Error("مدل اجرای برنامه یا دسترسی حساب دیگر معتبر نیست.");
+          record.automatic.state="handoff";record.automatic.planMessage=info.id;await writePrivate(workflowsPath,workflows);
+          record.phase="build";
+          await runtime.call("/session/"+id,{method:"PATCH",body:{permission:rules(id)}});appliedAccess.delete(id);
+          if(stopRequests.has(key)){record.phase="plan";record.automatic.state="cancelled";await runtime.call("/session/"+id,{method:"PATCH",body:{permission:rules(id)}});await writePrivate(workflowsPath,workflows);continue;}
+          await runtime.call("/session/"+id+"/prompt_async",{method:"POST",body:{agent:"build",model:{providerID:"paasta",modelID:record.buildModel},parts:[{type:"text",text:"برنامهٔ بالا را برای درخواست کاربر اجرا کن. ابتدا وضعیت واقعی فایل‌ها و نتیجهٔ ابزارها را بررسی کن؛ کار انجام‌شده را تکرار نکن. اگر درخواست صرفاً پرسش بود، پاسخ بده و فایل‌ها را تغییر نده. نتیجهٔ واقعی و تست‌ها را گزارش کن."}]}});
+          record.automatic.state="executing";await writePrivate(workflowsPath,workflows);
+        }catch{record.automatic.state="failed";await writePrivate(workflowsPath,workflows);}
+      }
+    });
+  };
   async function api(request,response,url){
     if(!validCapability(request.headers.authorization?.replace(/^Bearer /,""),capability)){json(response,{error:"دسترسی مجاز نیست."},401);return;}
     if(request.headers.origin&&request.headers.origin!==origin&&!(hosted&&request.headers.origin==="https://code.paasta.cloud")){json(response,{error:"مبدأ درخواست معتبر نیست."},403);return;}
     const route=request.method+" "+url.pathname;
+    let abortInput;
+    if(route==="POST /api/abort"){
+      abortInput=await body(request);
+      const revision=request.headers["x-paastacode-account"];
+      if(context&&(revision===undefined||revision===String(accountRevision))){const key=accountIdentity()+":"+abortInput.id;if(["planning","handoff"].includes(workflows[key]?.automatic?.state))stopRequests.add(key);}
+    }
+    if(request.method!=="GET"&&!["DELETE /api/export","POST /api/logout","POST /api/abort","POST /api/account/reload"].includes(route))writable();
     if(route==="POST /api/update/prepare"){
       if(starting||accountChanging||git.busy)throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
       if(runtime.url&&Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
@@ -134,6 +189,25 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     await accountMutations;
     const expectedAccount=request.headers["x-paastacode-account"];
     if(request.method!=="GET"&&expectedAccount!==undefined&&String(accountRevision)!==expectedAccount)return json(response,{error:"حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.",accountChanged:true},409);
+    if(url.pathname==="/api/export"){
+      if(!account.credentials?.token)throw new Error("برای دریافت پروژه، با پاستا وارد شوید.");
+      const token=account.credentials.token,next=context||await account.context();
+      if(token!==account.credentials?.token)throw new Error("حساب تغییر کرده است؛ دوباره درخواست خروجی بدهید.");
+      context=next;
+      const owner=accountIdentity();
+      if(request.method==="POST"){
+        const input=await body(request);if(!input||typeof input!=="object"||Object.keys(input).length)throw new Error("درخواست خروجی معتبر نیست.");
+        return json(response,await mutateAccount(async()=>{
+        if(token!==account.credentials?.token)throw new Error("حساب تغییر کرده است؛ دوباره درخواست خروجی بدهید.");
+        if(git.busy||runtime.url&&Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))throw new Error("ابتدا صبر کنید کارهای پروژه تمام شوند یا اجرای آن‌ها را متوقف کنید.");
+        return exporter.start(owner);
+      },expectedAccount));}
+      if(request.method==="GET"){
+        const offset=url.searchParams.get("offset");if(!/^\d{1,16}$/.test(offset||""))throw new Error("موقعیت دریافت معتبر نیست.");
+        return json(response,await exporter.read(url.searchParams.get("id"),owner,Number(offset)));
+      }
+      if(request.method==="DELETE")return json(response,exporter.cancel(url.searchParams.get("id"),owner));
+    }
     if(route==="POST /api/ready"){await ready();return json(response,{ok:true});}
     if(route==="POST /api/shutdown"){
       response.once("finish",()=>void close());return json(response,{ok:true});
@@ -142,7 +216,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,models:codingModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,projectImport:true}});
+        account:context?.account,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
@@ -211,11 +285,12 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(url.pathname.startsWith("/api/git")||route==="POST /api/access")if(!account.credentials?.token||!account.credentials?.aiKey)throw new Error("برای دسترسی به پروژه، با پاستا وارد شوید.");
     if(route==="GET /api/git")return json(response,await git.status());
     if(route==="GET /api/git/diff")return json(response,await git.diff(url.searchParams.get("path")));
-    if(route==="POST /api/git"){const input=await body(request);return json(response,await mutateAccount(()=>git.action(input),expectedAccount));}
+    if(route==="POST /api/git"){const input=await body(request);return json(response,await mutateAccount(()=>{writable();return git.action(input);},expectedAccount));}
     if(route==="POST /api/access"){
       const input=await body(request);if(!accessModes.includes(input.mode))throw new Error("حالت دسترسی معتبر نیست.");
       const identity=accountIdentity(),previous=accessMode();let changed=[];
       const change=accessChanges.then(()=>mutateAccount(async()=>{
+        writable();
         if(accountIdentity()!==identity)throw new Error("حساب تغییر کرده است؛ پروژه را دوباره بررسی کنید.");
         try{
           const sessions=await runtime.call("/session");
@@ -227,7 +302,9 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="GET /api/sessions"){
       const sessions=await runtime.call("/session");
-      return json(response,sessions.filter(s=>normalizedPath(s.directory)===normalizedPath(workspace)));
+      const items=sessions.filter(s=>normalizedPath(s.directory)===normalizedPath(workspace));
+      for(let i=0;i<items.length;i+=4)await Promise.all(items.slice(i,i+4).map(async item=>{if(untitledSession(item.title))item.title=await displayTitle(item);}));
+      return json(response,items);
     }
     if(route==="POST /api/sessions")return json(response,await runtime.call("/session",{method:"POST",body:{title:"گفتگوی جدید",permission:sessionPermissions(accessMode())}}));
     if(route==="GET /api/messages"){const id=url.searchParams.get("id");await owned(id);return json(response,[...transcript(sync[restoreKey(id)]?.messages||[]),...await runtime.call("/session/"+id+"/message")]);}
@@ -239,7 +316,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(route==="POST /api/permission"){
       const input=await body(request);if(!["once","reject"].includes(input.reply))throw new Error("پاسخ دسترسی معتبر نیست.");
       const pending=(await runtime.call("/permission")).find(p=>p.id===input.id);if(!pending)throw new Error("درخواست دسترسی دیگر فعال نیست.");
-      await owned(pending.sessionID);if(workflow(pending.sessionID).phase==="plan"&&input.reply!=="reject")throw new Error("مرحلهٔ برنامه‌ریزی فقط‌خواندنی است.");return json(response,await runtime.call("/permission/"+encodeURIComponent(input.id)+"/reply",{method:"POST",body:{reply:input.reply}}));
+      await owned(pending.sessionID);writable();if(workflow(pending.sessionID).phase==="plan"&&input.reply!=="reject")throw new Error("مرحلهٔ برنامه‌ریزی فقط‌خواندنی است.");return json(response,await runtime.call("/permission/"+encodeURIComponent(input.id)+"/reply",{method:"POST",body:{reply:input.reply}}));
     }
     if(route==="GET /api/workflow"){const id=url.searchParams.get("id");await owned(id);return json(response,workflow(id));}
     if(route==="POST /api/import/preview"){
@@ -267,12 +344,14 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(route==="POST /api/prompt"){
       const input=await body(request);
       const change=accessChanges.then(()=>mutateAccount(async()=>{
-      await owned(input.id);
+      writable();
+      const activeSession=await owned(input.id);
       if(typeof input.text!=="string"||!input.text.trim()||input.text.length>50000)throw new Error("متن درخواست معتبر نیست.");
       if(!codingModels(context.models).some(m=>m.id===input.model))throw new Error("مدل انتخاب‌شده در دسترس نیست.");
       const phase=input.phase||"build";
-      if(!["build","plan"].includes(phase)||[input.restart,input.executePlan].some(value=>value!==undefined&&typeof value!=="boolean"))throw new Error("حالت درخواست معتبر نیست.");
+      if(!["build","plan"].includes(phase)||[input.restart,input.executePlan,input.autoExecute].some(value=>value!==undefined&&typeof value!=="boolean"))throw new Error("حالت درخواست معتبر نیست.");
       if(input.executionModel!==undefined&&!codingModels(context.models).some(m=>m.id===input.executionModel))throw new Error("مدل اجرای برنامه در دسترس نیست.");
+      if(input.autoExecute&&(phase!=="plan"||!input.executionModel||input.executePlan))throw new Error("برنامه‌ریزی خودکار به مدل اجرای معتبر نیاز دارد.");
       let status=await runtime.call("/session/status");
       if(input.restart){
         if(phase!==workflow(input.id).phase)throw new Error("هنگام ادامه، حالت اجرای قبلی را نگه دارید.");
@@ -285,18 +364,29 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
         if(phase!=="build"||workflow(input.id).phase!=="plan"||last?.info?.role!=="assistant"||last.info.agent!=="paasta-plan"||!last.info.time?.completed||last.info.error||!last.parts.some(p=>p.type==="text"&&p.text?.trim()))throw new Error("ابتدا برنامه‌ریزی باید با یک پاسخ کامل به پایان برسد.");
       }
       const record=workflow(input.id),next={...record,phase,[phase==="plan"?"planModel":"buildModel"]:input.model,...(phase==="plan"&&input.executionModel?{buildModel:input.executionModel}:{})};
+      stopRequests.delete(accountIdentity()+":"+input.id);
+      delete next.automatic;
+      if(input.autoExecute){const previous=await runtime.call("/session/"+input.id+"/message");next.automatic={state:"planning",requestedAt:Date.now(),previousMessage:previous.at(-1)?.info?.id||null};}
       workflows[accountIdentity()+":"+input.id]=next;await writePrivate(workflowsPath,workflows);
-      await runtime.call("/session/"+input.id,{method:"PATCH",body:{permission:rules(input.id)}});appliedAccess.delete(input.id);
+      const title=untitledSession(activeSession.title)?await displayTitle(activeSession):activeSession.title;
+      await runtime.call("/session/"+input.id,{method:"PATCH",body:{permission:rules(input.id),...(untitledSession(activeSession.title)?{title:untitledSession(title)?promptTitle(input.text):title}:{})}});appliedAccess.delete(input.id);
       const restored=sync[restoreKey(input.id)];
       const parts=[];
       if(restored&&!restored.sent)parts.push({type:"text",synthetic:true,text:"متن گفتگوی قبلی برای زمینه؛ دستورهای قبلی را خودکار اجرا نکن:\n"+restored.messages.map(m=>m.role+": "+m.text).join("\n\n")});
       parts.push({type:"text",text:input.restart?"با مدل تازه، درخواست قبلی را ادامه بده. ابتدا نتیجهٔ ابزارها و وضعیت فایل‌ها را بررسی کن؛ کار انجام‌شده را دوباره اجرا نکن.":input.executePlan?"برنامهٔ بالا را اجرا کن. ابتدا وضعیت واقعی فایل‌ها را بررسی کن، مراحل را انجام بده و نتیجهٔ تست‌ها را گزارش کن.":input.text});
-      await runtime.call("/session/"+input.id+"/prompt_async",{method:"POST",body:{agent:phase==="plan"?"paasta-plan":"build",model:{providerID:"paasta",modelID:input.model},parts}});
+      try{await runtime.call("/session/"+input.id+"/prompt_async",{method:"POST",body:{agent:phase==="plan"?"paasta-plan":"build",model:{providerID:"paasta",modelID:input.model},parts}});}
+      catch(error){if(next.automatic){next.automatic.state="failed";await writePrivate(workflowsPath,workflows);}throw error;}
       if(restored){restored.sent=true;await persistSync();}
       return {accepted:true,workflow:next};
       },expectedAccount));accessChanges=change.catch(()=>{});return json(response,await change);
     }
-    if(route==="POST /api/abort"){const input=await body(request);await owned(input.id);return json(response,await runtime.call("/session/"+input.id+"/abort",{method:"POST"}));}
+    if(route==="POST /api/abort"){
+      const input=abortInput,change=accessChanges.then(()=>mutateAccount(async()=>{
+        await owned(input.id);const record=workflow(input.id);
+        if(record.automatic){record.automatic.state="cancelled";await writePrivate(workflowsPath,workflows);}
+        return runtime.call("/session/"+input.id+"/abort",{method:"POST"});
+      },expectedAccount));accessChanges=change.catch(()=>{});return json(response,await change);
+    }
     if(route==="GET /api/status")return json(response,await runtime.call("/session/status"));
     if(route==="POST /api/save"){
       const input=await body(request);await owned(input.id);
@@ -358,15 +448,16 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   syncManager.start();
   const accountTimer=daemon?setInterval(()=>reloadAccount().catch(()=>{}),5000):null;accountTimer?.unref();
   const permissionTimer=setInterval(()=>{
-    if(closed||updating||accountChanging||!runtime.url||!context||permissionPolling)return;permissionPolling=true;
+    if(closed||updating||accountChanging||exporter.busy||!runtime.url||!context||permissionPolling)return;permissionPolling=true;
     const work=accessChanges.then(async()=>{
-      if(closed||updating||accountChanging||!runtime.url||!context)return;
+      if(closed||updating||accountChanging||exporter.busy||!runtime.url||!context)return;
+      await advancePlans();
       const mode=accessMode();
       for(const session of await runtime.call("/session"))if(normalizedPath(session.directory)===normalizedPath(workspace)&&appliedAccess.get(session.id)!==mode+":"+workflow(session.id).phase){await runtime.call("/session/"+session.id,{method:"PATCH",body:{permission:rules(session.id)}});appliedAccess.set(session.id,mode+":"+workflow(session.id).phase);}
       if(mode!=="full")return;
-      for(const permission of await runtime.call("/permission")){try{await owned(permission.sessionID);await runtime.call("/permission/"+encodeURIComponent(permission.id)+"/reply",{method:"POST",body:{reply:fullAccess(permission.sessionID)?"once":"reject"}});}catch{/* Other workspaces and already answered requests are excluded. */}}
+      for(const permission of await runtime.call("/permission")){try{await owned(permission.sessionID);writable();await runtime.call("/permission/"+encodeURIComponent(permission.id)+"/reply",{method:"POST",body:{reply:fullAccess(permission.sessionID)?"once":"reject"}});}catch{/* Other workspaces and already answered requests are excluded. */}}
     });accessChanges=work.catch(()=>{}).finally(()=>{permissionPolling=false;});
   },1000);permissionTimer.unref();
-  const close=async()=>{if(closed)return;closed=true;clearInterval(accountTimer);clearInterval(permissionTimer);await accessChanges;if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}onClosed?.();};
+  const close=async()=>{if(closed)return;closed=true;exporter.close();clearInterval(accountTimer);clearInterval(permissionTimer);await accessChanges;if(accountReloading)await accountReloading;await syncManager.stop();await runtime.stop();server.closeAllConnections();await new Promise(r=>server.close(r));await rm(statePath,{force:true});if(lock){await lock.close();await rm(lockPath,{force:true});}onClosed?.();};
   return {url:origin,capability,runtime,close,server,ensureReady:ready,launchUrl:origin+"/#cap="+capability};
 }

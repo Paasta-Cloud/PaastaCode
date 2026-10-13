@@ -1,0 +1,12 @@
+**
+!package.json
+!package-lock.json
+!bin/**
+!src/**
+!web/**
+!cloud/**
+!licenses/**
+!paasta-cli/**
+!LICENSE
+!OPENCODE_LICENSE
+!THIRD_PARTY_NOTICES.md

@@ -14,7 +14,7 @@ test("local capability and provider configuration reject unsafe defaults",()=>{
   assert(validCapability("a".repeat(43),"a".repeat(43)));
   for(const value of [undefined,"","b".repeat(43),"a".repeat(44)])assert(!validCapability(value,"a".repeat(43)));
   assert.throws(()=>providerConfig([],"secret","https://example.test"));
-  const config=providerConfig([{id:"model",supported_parameters:["tools"]}],"secret","https://example.test");
+  const config=providerConfig([{id:"model",input_toman_per_million:100,output_toman_per_million:300,supported_parameters:["tools"]}],"secret","https://example.test");
   assert.deepEqual(config.enabled_providers,["paasta"]);assert.equal(config.permission["*"],"ask");assert.equal(config.share,"disabled");
 });
 test("real pinned OpenCode runs a tool only after approval and retains its session",{timeout:90000},async()=>{
@@ -38,7 +38,7 @@ test("real pinned OpenCode runs a tool only after approval and retains its sessi
   const runtime=new CodeRuntime(workspace);
   const wait=async fn=>{for(let i=0;i<120;i++){const result=await fn();if(result)return result;await new Promise(r=>setTimeout(r,300));}throw new Error("Engine operation timed out; tools: "+toolsSeen.join(","));};
   try{
-    await runtime.start(providerConfig([{id:"synthetic",name:"Synthetic",supported_parameters:["tools"],context_length:32000,max_output_tokens:4096}],"synthetic", "http://127.0.0.1:"+provider.address().port));
+    await runtime.start(providerConfig([{id:"synthetic",name:"Synthetic",input_toman_per_million:100,output_toman_per_million:300,supported_parameters:["tools"],context_length:32000,max_output_tokens:4096}],"synthetic", "http://127.0.0.1:"+provider.address().port));
     const session=await runtime.call("/session",{method:"POST",body:{title:"synthetic test"}});
     sessionId=session.id;
     await runtime.call("/session/"+session.id+"/prompt_async",{method:"POST",body:{model:{providerID:"paasta",modelID:"synthetic"},parts:[{type:"text",text:"Create hello.txt"}]}});
