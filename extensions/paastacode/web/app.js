@@ -17,6 +17,29 @@ let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionSt
 let apiOrigin="";
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
+let currentWorkflow={phase:"build"},workflowSession=null,planReady=false,importToken=null,importRevision=0;
+const modelCost=m=>`ورودی ${Number(m.input_toman_per_million).toLocaleString("fa-IR")} / خروجی ${Number(m.output_toman_per_million).toLocaleString("fa-IR")} تومان، هر میلیون توکن`;
+function workflowView(){
+  $("composer").dataset.phase=$("workflow-phase").value;
+  const planning=$("workflow-phase").value==="plan";
+  $("plan-controls").hidden=!state.features?.modelWorkflow||!planning;
+  $("workflow-hint").textContent=planning?"برنامه‌ریزی فقط‌خواندنی است، حتی با Full Access.":sending?"انتخاب مدل برای پیام بعدی؛ برای تغییر اکنون، توقف و ادامه را بزنید.":"مدل انتخابی برای پیام بعدی است.";
+  $("workflow-phase").disabled=sending;
+  $("execute-plan").disabled=sending||!planReady||currentWorkflow.phase!=="plan";
+  $("model-restart").hidden=!sending||!session||$("model").value===(currentWorkflow.phase==="plan"?currentWorkflow.planModel:currentWorkflow.buildModel);
+  $("model-restart").disabled=promptPending;
+  const model=state.models?.find(m=>m.id===$("execution-model").value);$("execution-price").textContent=model?modelCost(model):"";
+}
+async function loadWorkflow(){
+  if(!session||!state.features?.modelWorkflow)return;
+  const id=session.id,value=await api("workflow?id="+encodeURIComponent(id));if(session?.id!==id||promptPending)return;
+  if(workflowSession===id&&JSON.stringify(currentWorkflow)===JSON.stringify(value))return;
+  currentWorkflow=value;workflowSession=id;$("workflow-phase").value=value.phase;
+  const selected=value.phase==="plan"?value.planModel:value.buildModel;
+  if(state.models?.some(m=>m.id===selected))$("model").value=selected;
+  if(state.models?.some(m=>m.id===value.buildModel))$("execution-model").value=value.buildModel;
+  price();workflowView();
+}
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
@@ -32,6 +55,7 @@ async function run(button,work){button.disabled=true;try{await work();}catch(err
 function price(){const m=state.models?.find(model=>model.id===$("model").value);$("price").textContent=m?"هر میلیون توکن: ورودی "+Number(m.input_toman_per_million).toLocaleString("fa-IR")+" / خروجی "+Number(m.output_toman_per_million).toLocaleString("fa-IR")+" تومان":"";}
 async function loadState(){
   state=await api("state");$("workspace-name").textContent=state.workspace;
+  $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
   $("git-open").disabled=!state.configured||!state.features?.git;$("access-mode").disabled=!state.features?.workspaceAccess;accessView(state.accessMode);
   deployment.updateBase(state);
   devices.update(state);
@@ -45,6 +69,10 @@ async function loadState(){
   if(state.models?.length){
     const previous=$("model").value;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
     if(state.models.some(m=>m.id===previous))$("model").value=previous;price();
+    const execution=$("execution-model").value;
+    const models=[...state.models].sort((a,b)=>(Number(a.input_toman_per_million)+Number(a.output_toman_per_million))-(Number(b.input_toman_per_million)+Number(b.output_toman_per_million)));
+    $("execution-model").replaceChildren(...models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=model.name||model.id;return option;}));
+    if(models.some(m=>m.id===execution))$("execution-model").value=execution;workflowView();
   }
   if(state.error)notice(state.error,true);
   if(state.configured){await sessions();if(state.features?.git)git.refresh().catch(()=>{});}
@@ -105,11 +133,14 @@ async function refresh(){
   const selected=session,version=generation;let runtimeStatus;
   try{
     if(selected){
+      if(!promptPending)await loadWorkflow();
       const messages=await api("messages?id="+encodeURIComponent(selected.id));if(version!==generation||session!==selected)return;const serialized=JSON.stringify(messages);
+      const last=messages.at(-1);planReady=last?.info?.role==="assistant"&&last.info.agent==="paasta-plan"&&!!last.info.time?.completed&&!last.info.error&&last.parts.some(p=>p.type==="text"&&p.text?.trim());
       if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent="تغییرات روی این دستگاه";}
       $("save").disabled=!messages.length;
       const status=await api("status");if(version!==generation||session!==selected)return;runtimeStatus=status[selected.id];sending=promptPending||(!!runtimeStatus&&runtimeStatus.type!=="idle");
       bench.activity(sending,{status:status[selected.id]});
+      workflowView();
       await conversationSync.refresh();
     }else bench.activity(promptPending);
     const permissions=await api("permissions");if(version!==generation||session!==selected)return;$("permissions").replaceChildren();
@@ -135,25 +166,53 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;state={};mode="local";lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent="روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
 $("new").onclick=()=>run($("new"),async()=>{generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
   event.preventDefault();if(sending||!$("prompt").value.trim())return;
-  const text=$("prompt").value;sending=true;promptPending=true;let accepted=false;
+  submitPrompt();
+};
+function submitPrompt(extra={}){
+  if(promptPending)return;
+  const text=$("prompt").value,selection={model:extra.executePlan?$("execution-model").value:$("model").value,phase:extra.restart?currentWorkflow.phase:extra.executePlan?"build":$("workflow-phase").value,executionModel:extra.executePlan?undefined:$("execution-model").value};sending=true;promptPending=true;let accepted=false;
   bench.follow();bench.activity(true);
   run($("send"),async()=>{
     if(!session)session=await api("sessions","POST");
-    await api("prompt","POST",{id:session.id,text,model:$("model").value});
+    const result=await api("prompt","POST",{id:session.id,text:extra.restart||extra.executePlan?"ادامهٔ درخواست":text,model:selection.model,...(state.features?.modelWorkflow?{phase:selection.phase,executionModel:selection.executionModel}:{}),...extra});
+    if(result.workflow){currentWorkflow=result.workflow;workflowSession=session.id;$("workflow-phase").value=currentWorkflow.phase;if(extra.executePlan){$("workflow-phase").value="build";$("model").value=currentWorkflow.buildModel;price();}}
     accepted=true;
-    $("prompt").value="";resizePrompt();notice("");await sessions();
+    if(!extra.restart&&!extra.executePlan){$("prompt").value="";resizePrompt();}notice("");await sessions();
   }).finally(async()=>{promptPending=false;if(!accepted){sending=false;$("send").disabled=false;}await refresh();});
-};
+}
 $("prompt").onkeydown=event=>{if(!event.isComposing&&event.key==="Enter"&&(event.ctrlKey||event.metaKey)){event.preventDefault();$("composer").requestSubmit();}};
 $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:session.id});await refresh();});
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
-$("model").onchange=price;
+$("model").onchange=()=>{price();workflowView();};
+$("workflow-phase").onchange=()=>{const selected=$("workflow-phase").value==="plan"?currentWorkflow.planModel:currentWorkflow.buildModel;if(state.models?.some(m=>m.id===selected))$("model").value=selected;price();workflowView();};
+$("execution-model").onchange=workflowView;
+$("model-restart").onclick=()=>submitPrompt({restart:true});
+$("execute-plan").onclick=()=>{if(!sending&&planReady)submitPrompt({executePlan:true});};
+$("import-open").onclick=()=>{importRevision++;importToken=null;$("import-review").hidden=true;$("import-result").textContent="";$("import-dialog").showModal();};
+$("import-close").onclick=()=>$("import-dialog").close();
+$("import-form").onchange=()=>{importRevision++;importToken=null;$("import-review").hidden=true;};
+$("import-form").onsubmit=event=>{event.preventDefault();run($("import-form").querySelector("button"),async()=>{
+  const revision=++importRevision,accountGeneration=generation;
+  importToken=null;$("import-review").hidden=true;$("import-result").textContent="در حال بررسی…";
+  try{const file=$("import-file").files[0];if(file&&file.size>900000)throw new Error("فایل گفتگو بیش از حد بزرگ است؛ خروجی کوتاه‌تری انتخاب کنید.");
+    const input={source:$("import-source").value,rules:$("import-rules").checked,text:file?await file.text():undefined,format:file?.name.toLowerCase().endsWith(".jsonl")?"jsonl":"text"};
+    if(revision!==importRevision||accountGeneration!==generation)return;
+    const result=await api("import/preview","POST",input);
+    if(revision!==importRevision||accountGeneration!==generation)return;
+    importToken=result.token;$("import-files").textContent=result.files.join(" · ");$("import-text").textContent=result.messages.map(m=>m.text).join("\n\n");$("import-review").hidden=false;$("import-result").textContent="پیش‌نمایش آماده است. هنوز گفتگویی ساخته نشده.";
+  }catch(error){$("import-result").textContent=error.message;}
+});};
+$("import-confirm").onclick=()=>run($("import-confirm"),async()=>{if(!importToken)return;try{
+  const result=await api("import","POST",{token:importToken});generation++;bench.reset();session=result.session;mode="local";lastMessages="";workflowSession=null;
+  $("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");$("composer").hidden=false;$("import-dialog").close();drawer(false);
+  await sessions();await refresh();notice("متن وارد شد. درخواست بعدی را بنویسید؛ فایل‌های پروژه تغییری نکردند.");$("prompt").focus();
+}catch(error){$("import-result").textContent=error.message;}});
 $("access-mode").onchange=()=>run($("access-mode"),async()=>{try{const result=await api("access","POST",{mode:$("access-mode").value});state.accessMode=result.mode;accessView(result.mode);notice(result.mode==="full"?"Full Access برای این پروژه روشن شد. ابزارهای کدنویسی بدون تأیید اجرا می‌شوند.":"تأیید تغییر فایل و اجرای دستور دوباره فعال شد.");await refresh();}catch(error){accessView(state.accessMode);throw error;}});
 $("local-tab").onclick=()=>run($("local-tab"),async()=>{mode="local";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");if(!session){$("messages").replaceChildren();$("empty").hidden=false;}$("composer").hidden=false;await sessions();});
 $("cloud-tab").onclick=()=>run($("cloud-tab"),async()=>{conversationSync.hide();mode="cloud";$("local-tab").setAttribute("aria-pressed","false");$("cloud-tab").setAttribute("aria-pressed","true");await sessions();});

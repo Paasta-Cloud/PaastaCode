@@ -77,6 +77,7 @@ jobs:
         run: |
           node test/browser.mjs
           node test/workbench-browser.mjs
+          node test/workflow-browser.mjs
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
           node test/devices-browser.mjs
