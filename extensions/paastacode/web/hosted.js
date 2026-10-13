@@ -1,3 +1,4 @@
+import {icon} from "./components.js";
 export const hostedOrigin="https://code.paasta.cloud";
 export function workspaceConnection(value){
   const url=new URL(value);
@@ -30,6 +31,7 @@ export function invalidateHosted(){
 export async function connectHosted(){
   const form=document.getElementById("workspace-connect"),input=document.getElementById("workspace-link"),error=document.getElementById("workspace-connect-error");
   const $=id=>document.getElementById(id),hub=$("hosted-hub"),dialog=$("hosted-dialog");
+  const toolbar=document.querySelector(".topbar"),projectChrome=[...document.querySelectorAll(".workspace-name,.header-actions,.thread-heading")];
   const money=value=>Number(value).toLocaleString("fa-IR")+" تومان",date=value=>new Date(value).toLocaleDateString("fa-IR");
   const element=(tag,text,cls)=>{const node=document.createElement(tag);if(text!==undefined)node.textContent=text;if(cls)node.className=cls;return node;};
   let owner=null,active=null,busy=false,refreshing=false,account=null,catalog=null,intent=null,resolveConnection;
@@ -41,6 +43,7 @@ export async function connectHosted(){
   history.replaceState(null,"",location.pathname);
   $("hosted-local-content").append(form);form.hidden=false;hub.hidden=false;$("hosted-local").open=!!fragment.get("local");
   $("onboarding").hidden=true;$("conversation").hidden=true;$("composer").hidden=true;
+  toolbar.classList.add("workspace-selector");for(const node of projectChrome)node.hidden=true;
   document.getElementById("login").disabled=true;document.getElementById("new").disabled=true;
   document.getElementById("connection-state").textContent="انتخاب فضای کار";
   const feedback=(text,danger=false)=>{$("hosted-feedback").textContent=text;$("hosted-feedback").classList.toggle("error",danger);};
@@ -54,10 +57,31 @@ export async function connectHosted(){
     if(busy)return;busy=true;button.disabled=true;hub.setAttribute("aria-busy","true");
     try{await work();}catch(caught){feedback(caught.message,true);}finally{busy=false;button.disabled=false;hub.setAttribute("aria-busy","false");}
   }
+  async function exportProject(row){
+    const exportOwner=owner;let transfer;
+    feedback("در حال آماده‌کردن فایل‌های پروژه…");
+    try{
+      const result=await api(`/${row.id}/runtime/export`,"POST",{});
+      if(!/^[-_A-Za-z0-9]{32}$/.test(result?.id||""))throw new Error("پاسخ دریافت پروژه معتبر نیست؛ دوباره تلاش کنید.");
+      transfer=result.id;
+      // The broker retains this bounded first chunk for the download's retry.
+      // A failed ZIP process is reported here before opening a browser download.
+      await api(`/${row.id}/runtime/export?id=${transfer}&offset=0`);
+      if(owner!==exportOwner)throw new Error("حساب فعال تغییر کرده است؛ پروژه را دوباره انتخاب کنید.");
+      const link=element("a");link.href=`/api/paastacode/workspaces/${row.id}/export?`+new URLSearchParams({id:transfer,owner:exportOwner});
+      link.download="PaastaCode-project.zip";link.target="_blank";link.rel="noopener noreferrer";
+      document.body.append(link);link.click();link.remove();
+      feedback("دریافت فایل ZIP شروع شد. نتیجه را در بخش دانلودهای مرورگر بررسی کنید؛ اگر دریافت قطع شد، دوباره خروجی بگیرید.");
+    }catch(caught){
+      if(transfer&&owner===exportOwner)try{await api(`/${row.id}/runtime/export?id=${transfer}`,"DELETE");}catch{/* The runtime also expires abandoned transfers. */}
+      throw caught;
+    }
+  }
   function open(value){
     if(value.kind==="cloud")remember(selectedKey,value);else remember(selectedKey,null);
     if(active){window.dispatchEvent(new Event("paastacode:workspace-switch"));location.reload();return;}
     active=value;hub.hidden=true;form.hidden=true;$("login").disabled=false;$("hosted-open").hidden=false;
+    toolbar.classList.remove("workspace-selector");for(const node of projectChrome)node.hidden=false;
     $("hosted-open").textContent=value.kind==="cloud"?value.name:"فضاهای کار";resolveConnection(value);
   }
   function review(value){
@@ -80,6 +104,7 @@ export async function connectHosted(){
   }
   function rows(workspaces){
     const paidUntil=end=>new Date(end).getTime()>Date.now();
+    $("hosted-export-note").hidden=!workspaces.some(row=>row.status==="ready"&&paidUntil(row.current_period_end));
     const key=JSON.stringify(workspaces.map(row=>[row,paidUntil(row.current_period_end)]));if(key===lastList)return;lastList=key;$("hosted-list").replaceChildren();
     if(!workspaces.length){$("hosted-list").append(element("p","هنوز فضای کار ابری ندارید. یک فضای تازه بسازید یا به پروژه روی کامپیوترتان وصل شوید.","hosted-empty"));return;}
     const labels={starting:"در حال آماده‌سازی",ready:"آماده",suspended:"متوقف",deleting:"در حال پاک‌سازی",failed:"ساخت ناموفق",stopped:"متوقف"};
@@ -89,8 +114,9 @@ export async function connectHosted(){
       name.dir="auto";badge.dataset.state=expired?"expired":row.status;heading.append(name,badge);copy.append(heading,element("p","پایان دوره: "+date(row.current_period_end),"muted"));
       if(row.last_error)copy.append(element("p",row.last_error,"hosted-project-note"));
       const actions=element("div",undefined,"hosted-actions");
-      const button=(label,work,cls)=>{const node=element("button",label,cls);node.type="button";node.onclick=()=>action(node,work);actions.append(node);};
+      const button=(label,work,cls,symbol)=>{const node=element("button",undefined,cls);if(symbol)node.append(icon(symbol));node.append(document.createTextNode(label));node.type="button";node.onclick=()=>action(node,work);actions.append(node);};
       if(row.status==="ready"&&paid)button("باز کردن",()=>open({kind:"cloud",id:row.id,name:row.name,owner}),"primary");
+      if(row.status==="ready"&&paid)button("دریافت پروژه",()=>exportProject(row),undefined,"import");
       if(row.status==="suspended"&&paid&&row.first_ready_at)button("ادامه",()=>preview("resume",row),"primary");
       if(["ready","suspended"].includes(row.status)&&row.first_ready_at)button("تمدید",()=>preview("renew",row));
       if(["starting","ready","suspended"].includes(row.status))button("لغو",()=>preview("cancel",row),"subtle");

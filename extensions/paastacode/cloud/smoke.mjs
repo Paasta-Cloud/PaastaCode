@@ -11,6 +11,26 @@ const name="paastacode-cloud-qa-"+randomBytes(6).toString("hex"),volume=name+"-d
 await writeFile(join(directory,"token"),secret,{mode:0o444});await chmod(directory,0o755);
 const docker=async args=>(await execute("docker",args,{timeout:120_000,maxBuffer:1024*1024})).stdout.trim();
 let created=false,createdVolume=false;
+const restoreCheck=`
+import assert from "node:assert/strict";
+import {readFile,writeFile} from "node:fs/promises";
+process.env.PAASTACODE_HOME="/data/acceptance";
+const {startServer}=await import("./src/server.mjs");
+const saved={id:"00000000-0000-4000-8000-000000000021",title:"Restored cloud session",revision:1,updated_at:"2026-10-13T00:00:00Z",snapshot:{version:1,messages:[{role:"user",text:"Saved project context"},{role:"assistant",text:"Reviewed without replaying tools"}]}};
+const account={origin:"http://127.0.0.1:1",credentials:{token:"synthetic",aiKey:"synthetic"},context:async()=>({account:{id:"00000000-0000-4000-8000-000000000011",tenantId:"00000000-0000-4000-8000-000000000012"},models:[{id:"fixture",name:"Synthetic paid model",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300}]}),request:async path=>{assert.equal(path,"/api/paastacode/sessions?id="+saved.id);return saved;}};
+const app=await startServer({workspace:"/data/workspace",account});
+const api=async(path,body)=>{const result=await fetch(app.url+"/api/"+path,{method:body?"POST":"GET",headers:{Authorization:"Bearer "+app.capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});assert.equal(result.status,200);return result.json();};
+try{
+  const mode=process.argv[1];let id;
+  if(mode==="write"){id=(await api("restore",{id:saved.id})).session.id;await writeFile("/data/acceptance/restored-session.json",JSON.stringify({id}),{mode:0o600});}
+  else{id=JSON.parse(await readFile("/data/acceptance/restored-session.json","utf8")).id;await api("ready",{});}
+  assert((await api("sessions")).some(session=>session.id===id&&session.title===saved.title));
+  const messages=await api("messages?id="+id),text=messages.flatMap(message=>message.parts.filter(part=>part.type==="text").map(part=>part.text)).join(" ");
+  assert(text.includes(saved.snapshot.messages[0].text));assert(text.includes(saved.snapshot.messages[1].text));
+  assert(messages.every(message=>message.parts.every(part=>part.type!=="tool")));assert.equal((await app.runtime.call("/session/"+id+"/message")).length,0,"Restore must not replay tools or inference");
+  console.log("Real engine restored cloud session "+mode+" passed");
+}finally{await app.close();}
+`;
 async function launch(){
   await docker(["run","--detach","--name",name,"--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--memory","1g","--cpus","1","--pids-limit","512","--tmpfs","/tmp:rw,nosuid,nodev,size=268435456","--mount",`type=volume,source=${volume},target=/data`,"--mount",`type=bind,source=${join(directory,"token")},target=/run/control-token,readonly`,"--env","PAASTACODE_CONSOLE=http://127.0.0.1:1","--env","PAASTACODE_CLOUD_SECRET_FILE=/run/control-token","--env","PAASTACODE_CLOUD_USER_ID=00000000-0000-4000-8000-000000000011","--env","PAASTACODE_CLOUD_TENANT_ID=00000000-0000-4000-8000-000000000012","--publish","127.0.0.1::8080",image]);created=true;
   const port=await docker(["port",name,"8080/tcp"]);assert.match(port,/^127\.0\.0\.1:\d+$/);const url="http://"+port;
@@ -31,12 +51,14 @@ try{
   await docker(["exec",name,"node","-e","require('fs').writeFileSync('/data/workspace/persistence.txt','retained synthetic project')"]);
   assert.match(await docker(["exec",name,"node","--input-type=module","-e","import {engineCommand} from './src/runtime.mjs'; const child=engineCommand(['--version'],{stdio:'inherit'}); child.once('exit',code=>process.exit(code));"]),/1\.19\.0/);
   await docker(["exec",name,"/opt/paastacode/engine/paasta","--version"]);
+  await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"write"]);
   await docker(["exec",name,"node","-e","const fs=require('fs');fs.mkdirSync('/data/account',{recursive:true});fs.writeFileSync('/data/account/account.json',JSON.stringify({origin:'http://127.0.0.1:1',token:'paasta_'+ 'a'.repeat(43)}),{mode:0o600});"]);
   await docker(["stop","--time","40",name]);await docker(["rm",name]);created=false;
   url=await launch();const state=await fetch(url+"/api/state",{headers});assert.equal(state.status,200);assert.equal((await state.json()).connected,false);
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(String(require('fs').existsSync('/data/account/account.json')))"]),"true");
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(require('fs').readFileSync('/data/workspace/persistence.txt','utf8'))"]),"retained synthetic project");
-  console.log("Cloud container acceptance passed: required owner, unverified login recovery, private API, non-root/read-only runtime, real engine/CLI, project persistence across container replacement");
+  await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"read"]);
+  console.log("Cloud container acceptance passed: required owner, unverified login recovery, private API, non-root/read-only runtime, real engine/CLI, project and restored-session persistence across container replacement; no tool/inference replay");
 }finally{
   if(created){await docker(["stop","--time","40",name]).catch(()=>{});await docker(["rm","--force",name]).catch(()=>{});}
   if(createdVolume)await docker(["volume","rm",volume]);

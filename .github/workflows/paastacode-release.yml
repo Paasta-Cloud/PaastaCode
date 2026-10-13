@@ -82,6 +82,7 @@ jobs:
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
           node test/cloud-hub-browser.mjs
+          node test/download-browser.mjs
           node test/devices-browser.mjs
           node test/sync-browser.mjs
       - name: Prepare publisher-licensed Persian font

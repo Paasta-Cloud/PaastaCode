@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { chromium } from "playwright";
 process.env.PAASTACODE_HOME=resolve(".artifacts/cloud-hub-browser-"+process.pid);
@@ -7,7 +8,8 @@ const {startServer}=await import("../src/server.mjs");
 const app=await startServer({account:{credentials:null},runtime:{stop:async()=>{}}});
 const browser=await chromium.launch({channel:process.env.PAASTACODE_BROWSER_CHANNEL||(process.platform==="win32"?"msedge":undefined)});
 const userA="00000000-0000-4000-8000-000000000001",userB="00000000-0000-4000-8000-000000000002",tenant="00000000-0000-4000-8000-000000000003",existingId="00000000-0000-4000-8000-000000000004",createdId="00000000-0000-4000-8000-000000000005";
-let loggedIn=false,enabled=true,account={id:userA,tenantId:tenant,name:"حساب آزمایشی",balanceToman:1000000},quotes=0,creates=0,confirmations=0,loseAck=true;
+let loggedIn=false,enabled=true,account={id:userA,tenantId:tenant,name:"حساب آزمایشی",balanceToman:1000000},quotes=0,creates=0,confirmations=0,loseAck=true,exportFailure=false;
+const exportId="A".repeat(32),zip=Buffer.from("504b05060000000000000000000000000000000000000000","hex");
 let workspaces=[{id:existingId,name:"وب‌سایت فروشگاه",status:"ready",current_period_end:new Date(Date.now()+86400000*25).toISOString(),first_ready_at:new Date().toISOString()}];
 const calls=[],errors=[],requests=[];
 try{
@@ -22,6 +24,17 @@ try{
       if(!loggedIn)return json({error:"ورود لازم است.",workspaceError:true},403);
       if(request.headers()["x-paastacode-owner"]&&request.headers()["x-paastacode-owner"]!==account.id+":"+account.tenantId)return json({error:"حساب تغییر کرده است.",workspaceError:true},403);
       assert(request.headers().cookie?.includes("synthetic-browser-session"));assert.equal(request.headers().authorization,undefined);
+      if(path.endsWith("/runtime/export")){
+        if(request.method()==="POST")return json({id:exportId,name:"PaastaCode-project.zip",chunkBytes:1048576});
+        assert.equal(url.searchParams.get("id"),exportId);
+        if(request.method()==="DELETE")return json({ok:true});
+        if(exportFailure)return json({error:"خروجی پروژه کامل نشد؛ دوباره تلاش کنید."},502);
+        assert.equal(url.searchParams.get("offset"),"0");return json({offset:0,nextOffset:zip.length,data:zip.toString("base64"),sha256:createHash("sha256").update(zip).digest("hex"),done:true});
+      }
+      if(path.endsWith("/export")){
+        assert.equal(url.searchParams.get("id"),exportId);assert.equal(url.searchParams.get("owner"),account.id+":"+account.tenantId);
+        return route.fulfill({contentType:"application/zip",headers:{"Content-Disposition":'attachment; filename="PaastaCode-project.zip"'},body:zip});
+      }
       if(path.endsWith("/runtime/state"))return json({connected:true,configured:true,workspace:"/data/private-path",account:{...account,balanceToman:1000000},models:[{id:"synthetic",name:"مدل پاستا",input_toman_per_million:100,output_toman_per_million:200}],features:{independentRuntime:true,workspaceAccess:true},accountRevision:1,accessMode:"review"});
       if(path.includes("/runtime/"))return json(path.endsWith("/status")?{}:[]);
       if(path.endsWith("/catalog"))return json({enabled,plans:[{id:"basic",name:"پایه",cpu_millicores:1000,memory_mib:2048,monthly_price_toman:"100000"}],storage:[{id:existingId,name:"دیسک پروژه",region:"تهران",min_size_gb:1,max_size_gb:50,price_per_gb_month_toman:"2000"}]});
@@ -40,15 +53,25 @@ try{
     const response=await fetch(app.url+path);await route.fulfill({status:response.status,headers:{"content-type":response.headers.get("content-type")||"text/plain","content-security-policy":"default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' http://127.0.0.1:*; form-action 'none'; frame-ancestors 'none'; base-uri 'none'"},body:Buffer.from(await response.arrayBuffer())});
   });
   await page.goto("https://code.paasta.cloud/");await page.locator("#hosted-login").waitFor({state:"visible"});
+  assert.equal(await page.locator(".thread-heading").isVisible(),false);assert.equal(await page.locator(".header-actions").isVisible(),false);
   assert.equal(await page.locator("#hosted-create").isVisible(),false);
   loggedIn=true;await page.locator("#hosted-refresh").click();await page.locator(".hosted-project").waitFor();
   await mkdir(".artifacts",{recursive:true});
   for(const [name,width,height,scheme] of [["desktop",1440,1000,"light"],["mobile",390,844,"dark"],["narrow",320,800,"light"]]){
     await page.setViewportSize({width,height});await page.emulateMedia({colorScheme:scheme});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    const downloadButton=await page.getByRole("button",{name:"دریافت پروژه",exact:true}).boundingBox();assert(downloadButton.y+downloadButton.height<=height,"Workspace download must be visible before scrolling");
     await page.screenshot({path:resolve(".artifacts/cloud-hub-"+name+".png"),animations:"disabled"});
   }
   await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({colorScheme:"light"});
+  const downloadStarted=page.waitForEvent("download");await page.getByRole("button",{name:"دریافت پروژه",exact:true}).click();
+  // Native Chromium downloads bypass route mocks; real ZIP receipt is covered
+  // by download-browser.mjs against an actual HTTP fixture server.
+  const download=await downloadStarted;assert.equal(download.suggestedFilename(),"PaastaCode-project.zip");
+  assert((await page.locator("#hosted-feedback").innerText()).includes("شروع شد"));assert(await page.locator("#hosted-export-note").isVisible());
+  exportFailure=true;const cancelledBefore=calls.filter(call=>call.method==="DELETE").length;
+  await page.getByRole("button",{name:"دریافت پروژه",exact:true}).click();await page.waitForFunction(()=>document.querySelector("#hosted-feedback").textContent.includes("خروجی پروژه کامل نشد"));
+  assert.equal(calls.filter(call=>call.method==="DELETE").length,cancelledBefore+1,"Failed preparation must release the export lock");exportFailure=false;
   await page.locator("#hosted-create summary").click();await page.locator("#hosted-name").fill("اپلیکیشن تازه");await page.locator("#hosted-quote").click();await page.locator("#hosted-review").waitFor({state:"visible"});
   assert((await page.locator("#hosted-terms").textContent()).includes("۷ روز"));assert((await page.locator("#hosted-costs").textContent()).includes("۱۱۰٬۰۰۰"));assert.equal(creates,0);
   await page.locator("#hosted-confirm").scrollIntoViewIfNeeded();
@@ -63,6 +86,7 @@ try{
   workspaces.find(row=>row.id===createdId).status="ready";workspaces.find(row=>row.id===createdId).first_ready_at=new Date().toISOString();
   await page.locator("#hosted-refresh").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();
   await page.locator("#composer").waitFor({state:"visible"});assert.equal(await page.locator("#workspace-name").textContent(),"اپلیکیشن تازه");assert.equal(await page.locator("#local-tab").textContent(),"این فضای کار");
+  assert(await page.locator(".thread-heading").isVisible());assert(await page.locator(".header-actions").isVisible());
   assert(!requests.some(url=>url.startsWith("http://127.0.0.1")),"cloud mode must never need a loopback runtime");
   await page.locator("#prompt").fill("پیش‌نویس پروژهٔ تازه");
   await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"وب‌سایت فروشگاه"}).getByRole("button",{name:"باز کردن"}).click();

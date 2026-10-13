@@ -2,8 +2,17 @@
 
 This is the execution component for browser-only PaastaCode. It is not yet an
 enabled customer service. The service-side owner-authorized web proxy is implemented
-in the Paasta platform draft. Browser workspace management, paid resource
-provisioning, complete persistence/restore acceptance and production rollout remain open.
+in the Paasta platform draft. Browser workspace management and paid resource
+provisioning are implemented; live persistence/restore acceptance and production
+rollout remain open.
+
+Publisher builds run through `.github/workflows/paastacode-cloud-image.yml` on
+native Linux amd64 and arm64 runners. Each image must pass the non-root,
+read-only gateway and real-engine conversation restore/replacement smoke before
+publication. SBOM/provenance attestations and a combined immutable digest are
+retained as CI artifacts. Set `PAASTACODE_CLOUD_IMAGE` only to that verified
+multi-platform reference, and verify anonymous pull access before enabling the
+customer catalogue. Image publication alone does not enable provisioning.
 
 Each workspace must receive its own isolated workload and persistent data mount.
 Set `PAASTACODE_CLOUD_DATA` to that absolute mount path and
