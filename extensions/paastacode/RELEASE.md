@@ -19,4 +19,10 @@
 
 These are unsigned beta packages. Choose the package for your operating system and architecture and verify SHA256SUMS. Publisher signing and final in-place desktop upgrade acceptance remain open. Hosted runtime source is included for development; no production hosted execution or paid inference acceptance is claimed.
 
+### Publisher signing configuration
+
+Configure Windows `PAASTACODE_WINDOWS_CSC_LINK` and `PAASTACODE_WINDOWS_CSC_KEY_PASSWORD` separately from macOS `PAASTACODE_MAC_CSC_LINK` and `PAASTACODE_MAC_CSC_KEY_PASSWORD`. macOS also requires `PAASTACODE_APPLE_ID`, `PAASTACODE_APPLE_APP_SPECIFIC_PASSWORD` and `PAASTACODE_APPLE_TEAM_ID` for notarization. Store certificate material and passwords in GitHub Secrets, never in this repository or chat.
+
+The release workflow supplies these credentials only when `signed` is enabled and only to the matching operating system. Unsigned and Linux jobs receive none. The previous `PAASTACODE_CSC_LINK`/`PAASTACODE_CSC_KEY_PASSWORD` remain a fallback for existing single-platform configuration; one certificate cannot replace both Windows and Apple certificates. Real signed installer and in-place upgrade acceptance still require the publisher credentials and are not proved by the credential-routing test.
+
 Powered by OpenCode. PaastaCode is an explicit MIT fork of OpenCode. Official packages contain the publisher-licensed Yekan Bakh font; source builds retain the open-source Vazirmatn fallback. The licensed font is not relicensed under MIT.

@@ -44,11 +44,11 @@ jobs:
     env:
       PAASTACODE_SIGNED_RELEASE: ${{ inputs.signed }}
       PAASTACODE_HOME: ${{ github.workspace }}/extensions/paastacode/.artifacts/package-test-state
-      CSC_LINK: ${{ secrets.PAASTACODE_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ secrets.PAASTACODE_CSC_KEY_PASSWORD }}
-      APPLE_ID: ${{ secrets.PAASTACODE_APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.PAASTACODE_APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.PAASTACODE_APPLE_TEAM_ID }}
+      CSC_LINK: ${{ inputs.signed && runner.os == 'Windows' && (secrets.PAASTACODE_WINDOWS_CSC_LINK || secrets.PAASTACODE_CSC_LINK) || inputs.signed && runner.os == 'macOS' && (secrets.PAASTACODE_MAC_CSC_LINK || secrets.PAASTACODE_CSC_LINK) || '' }}
+      CSC_KEY_PASSWORD: ${{ inputs.signed && runner.os == 'Windows' && (secrets.PAASTACODE_WINDOWS_CSC_KEY_PASSWORD || secrets.PAASTACODE_CSC_KEY_PASSWORD) || inputs.signed && runner.os == 'macOS' && (secrets.PAASTACODE_MAC_CSC_KEY_PASSWORD || secrets.PAASTACODE_CSC_KEY_PASSWORD) || '' }}
+      APPLE_ID: ${{ inputs.signed && runner.os == 'macOS' && secrets.PAASTACODE_APPLE_ID || '' }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.signed && runner.os == 'macOS' && secrets.PAASTACODE_APPLE_APP_SPECIFIC_PASSWORD || '' }}
+      APPLE_TEAM_ID: ${{ inputs.signed && runner.os == 'macOS' && secrets.PAASTACODE_APPLE_TEAM_ID || '' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
