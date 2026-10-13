@@ -4,9 +4,9 @@ export function workbench(){
   let following=true,started=0,lastBusy=false,latest=[],blocked=false,lastWidth=viewport.clientWidth,lastHeight=viewport.clientHeight;
   const bottom=()=>viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<80;
   viewport.addEventListener("scroll",()=>{if(lastWidth!==viewport.clientWidth||lastHeight!==viewport.clientHeight){lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();return;}following=bottom();$("follow-output").hidden=following;},{passive:true});
-  const follow=()=>{following=true;$("follow-output").hidden=true;requestAnimationFrame(()=>{viewport.scrollTop=viewport.scrollHeight;});};
+  const follow=()=>{following=true;$("follow-output").hidden=true;viewport.scrollTop=viewport.scrollHeight;};
   $("follow-output").onclick=follow;
-  new ResizeObserver(()=>{if(following)follow();}).observe(viewport);
+  new ResizeObserver(()=>{lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();}).observe(viewport);
   const labels={read:"خواندن فایل",glob:"جست‌وجوی فایل‌ها",grep:"جست‌وجو در کد",bash:"اجرای دستور",write:"ساخت فایل",edit:"ویرایش فایل",apply_patch:"اعمال تغییرات",task:"بررسی پروژه",webfetch:"خواندن صفحه"};
   function inline(parent,text){for(const token of text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g)){if(token.startsWith("`")&&token.endsWith("`")){const code=document.createElement("code");code.textContent=token.slice(1,-1);parent.append(code);}else if(token.startsWith("**")&&token.endsWith("**")){const strong=document.createElement("strong");strong.textContent=token.slice(2,-2);parent.append(strong);}else parent.append(document.createTextNode(token));}}
   function content(parent,text){for(const section of text.split(/(```[\s\S]*?```)/g)){
