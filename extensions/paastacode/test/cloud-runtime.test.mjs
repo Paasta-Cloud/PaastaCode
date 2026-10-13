@@ -36,5 +36,8 @@ test("private cloud gateway rejects direct callers and forwards only bounded aut
     }
     for(const [method,path] of [["POST","/api/workflow"],["GET","/api/import"],["DELETE","/api/import/preview"]])assert.equal((await fetch(url+path,{method,headers})).status,404);
     assert.equal(calls.length,5);
+    assert.equal((await fetch(url+"/api/state",{headers:{"X-PaastaCode-Cloud-Token":secret,Authorization:"Bearer synthetic-kubernetes-auth"}})).status,200);
+    assert.equal(calls.at(-1).headers.authorization,"Bearer "+capability);assert.equal(calls.at(-1).headers["x-paastacode-cloud-token"],undefined);
+    assert.equal((await fetch(url+"/api/state",{headers:{...headers,"X-PaastaCode-Cloud-Token":"wrong"}})).status,401);
   }finally{await gateway.close();broker.closeAllConnections();await new Promise(done=>broker.close(done));}
 });

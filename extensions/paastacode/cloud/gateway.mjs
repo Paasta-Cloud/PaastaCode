@@ -1,13 +1,10 @@
 import {createServer} from "node:http";
 import {validCapability} from "../src/server.mjs";
+import allowed from "./routes.json" with {type:"json"};
 
 // This listener is private to the Paasta control plane. Browser identity and
 // tenant/workspace ownership must be checked there before each forwarded call.
-const routes=new Set([
-  ...["state","devices","deployment/state","deployment/context","deployment/job","cloud","cloud/session","git","git/diff","sessions","messages","permissions","status","sync","workflow"].map(path=>"GET /api/"+path),
-  ...["ready","login","login/poll","connect","logout","deployment/login","deployment/login/poll","deployment/disconnect","deployment/request","deployment/approve","deployment/reject","git","access","sessions","permission","prompt","abort","save","sync","restore","import/preview","import"].map(path=>"POST /api/"+path),
-  "DELETE /api/devices","DELETE /api/cloud/session",
-]);
+const routes=new Set(Object.entries(allowed).flatMap(([method,paths])=>paths.map(path=>method+" /api/"+path)));
 const maxBody=1_100_000,maxResponse=16_000_000;
 export async function cloudGateway({broker,secret,port=8080,host="0.0.0.0"}){
   const target=new URL(broker.url);
@@ -15,7 +12,9 @@ export async function cloudGateway({broker,secret,port=8080,host="0.0.0.0"}){
   const json=(response,status,value)=>{response.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(JSON.stringify(value));};
   const server=createServer(async(request,response)=>{
     if(request.method==="GET"&&request.url==="/health"){json(response,200,{ready:true});return;}
-    if(!validCapability(request.headers.authorization?.replace(/^Bearer /,""),secret)){request.resume();json(response,401,{error:"دسترسی مجاز نیست."});return;}
+    // Kubernetes authenticates and removes its Authorization header before pod proxying.
+    const credential=request.headers["x-paastacode-cloud-token"]??request.headers.authorization?.replace(/^Bearer /,"");
+    if(!validCapability(credential,secret)){request.resume();json(response,401,{error:"دسترسی مجاز نیست."});return;}
     let url;
     try{url=new URL(request.url,"http://runtime.invalid");}catch{request.resume();json(response,400,{error:"مسیر درخواست معتبر نیست."});return;}
     if(!routes.has(request.method+" "+url.pathname)||!request.url.startsWith("/api/")||request.url.includes("\\")||/%(?:2f|5c|2e)/i.test(url.pathname)){request.resume();json(response,404,{error:"پیدا نشد."});return;}

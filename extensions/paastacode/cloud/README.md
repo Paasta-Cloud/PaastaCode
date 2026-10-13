@@ -1,8 +1,9 @@
 # Managed cloud runtime (in progress)
 
 This is the execution component for browser-only PaastaCode. It is not yet an
-enabled customer service. The account-authorized web proxy, paid resource
-provisioning, persistence/restore acceptance and production rollout remain open.
+enabled customer service. The service-side owner-authorized web proxy is implemented
+in the Paasta platform draft. Browser workspace management, paid resource
+provisioning, complete persistence/restore acceptance and production rollout remain open.
 
 Each workspace must receive its own isolated workload and persistent data mount.
 Set `PAASTACODE_CLOUD_DATA` to that absolute mount path and
@@ -19,6 +20,12 @@ readiness only. Authenticated calls use a strict API allowlist. The gateway neve
 accepts browser origins, forwards browser cookies, or exposes daemon shutdown,
 updater controls, raw engine APIs or the internal MCP transport.
 The allowlist includes the managed model workflow and reviewed project imports.
+Both sides share `cloud/routes.json`. The control plane sends the workspace
+credential in `X-PaastaCode-Cloud-Token` when using the authenticated Kubernetes
+pod proxy; its Kubernetes `Authorization` credential is separate and is removed
+by [the API server authentication filter](https://github.com/kubernetes/apiserver/blob/master/pkg/endpoints/filters/authentication.go).
+Direct private test callers may still use Bearer authentication. The gateway
+does not forward either control credential to the local broker.
 
 The Paasta control plane must authenticate the user and check current tenant and
 workspace ownership for **every** call. A workspace secret is a service

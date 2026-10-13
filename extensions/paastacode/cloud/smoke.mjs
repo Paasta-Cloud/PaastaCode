@@ -21,7 +21,7 @@ async function launch(){
 try{
   await assert.rejects(docker(["run","--rm","--read-only","--cap-drop","ALL","--security-opt","no-new-privileges","--tmpfs","/tmp:rw,nosuid,nodev,size=67108864","--mount",`type=bind,source=${join(directory,"token")},target=/run/control-token,readonly`,"--env","PAASTACODE_CLOUD_DATA=/tmp/data","--env","PAASTACODE_CLOUD_SECRET_FILE=/run/control-token",image]),error=>error.stderr?.includes("صاحب فضای کار ابری معتبر نیست"));
   await docker(["volume","create",volume]);createdVolume=true;
-  let url=await launch();const headers={Authorization:"Bearer "+secret};
+  let url=await launch();const headers={"X-PaastaCode-Cloud-Token":secret};
   assert.equal((await fetch(url+"/api/state")).status,401);
   assert.equal((await fetch(url+"/api/state",{headers})).status,200);
   assert.equal((await fetch(url+"/api/state",{headers:{...headers,Origin:"https://code.paasta.cloud"}})).status,403);
