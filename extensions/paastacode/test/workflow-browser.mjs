@@ -31,11 +31,13 @@ try{
   for(const width of [390,320]){await page.setViewportSize({width,height:844});await page.waitForTimeout(100);assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));const composer=await page.locator("#composer").boundingBox();assert(composer.y+composer.height<=844);await page.screenshot({path:`.artifacts/workflow-${width}.png`});}
   await page.locator("#execute-plan").click();for(let i=0;i<30&&prompts.length<3;i++)await page.waitForTimeout(100);assert.equal(prompts.at(-1).agent,"build");assert.equal(prompts.at(-1).model.modelID,"economy");
   busy=false;await page.locator("#activity").waitFor({state:"hidden"});
+  const otherClient=await fetch(app.url+"/api/prompt",{method:"POST",headers:{Authorization:"Bearer "+app.capability,"Content-Type":"application/json"},body:JSON.stringify({id:sessions[0].id,phase:"plan",model:"professional",executionModel:"economy",text:"Plan from another client"})});assert.equal(otherClient.status,200);
+  await page.waitForFunction(()=>document.querySelector("#workflow-phase").value==="plan",{},{timeout:7000});assert.equal(await page.locator("#model").inputValue(),"professional","Another client's model selection must appear without reopening the session");busy=false;
   await page.setViewportSize({width:1440,height:1000});await page.locator("#import-open").click();await page.locator("#import-rules").uncheck();await page.locator("#import-source").selectOption("cursor");
   await page.locator("#import-file").setInputFiles({name:"conversation.md",mimeType:"text/markdown",buffer:Buffer.from("# Context\nKeep RTL. <script>window.importExecuted=true</script>")});
   await page.locator("#import-form button").click();await page.locator("#import-review").waitFor();assert.equal(sessions.length,1,"Preview must not create a session");
   await page.setViewportSize({width:320,height:844});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:".artifacts/import-320.png"});
   await page.locator("#import-confirm").click();await page.locator("#import-dialog").waitFor({state:"hidden"});await page.locator("#messages").getByText(/Keep RTL/).waitFor();
-  assert.equal(await page.evaluate(()=>window.importExecuted),undefined);assert.equal(sessions.length,2);assert.equal(prompts.length,3,"Import cannot run inference or execute old tools");assert.deepEqual(errors,[]);
+  assert.equal(await page.evaluate(()=>window.importExecuted),undefined);assert.equal(sessions.length,2);assert.equal(prompts.length,4,"Import cannot run inference or execute old tools");assert.deepEqual(errors,[]);
   console.log("Workflow browser acceptance passed: plan/executor pricing, live model restart, desktop/390/320px, text import preview and no script execution.");
 }finally{await browser.close();await app.close();}
