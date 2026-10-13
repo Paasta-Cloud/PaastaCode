@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
 import {resolve,join,dirname} from "node:path";
-import {realpath,readFile} from "node:fs/promises";
+import {realpath,readFile,stat} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 import {createInterface} from "node:readline/promises";
 import {PaastaAccount} from "../src/account.mjs";
@@ -31,10 +31,26 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
+  if(command==="ask"||command==="import"){
+    const value=name=>args.find(arg=>arg.startsWith("--"+name+"="))?.slice(name.length+3);
+    const service=await connectWorkspace({workspace});
+    const api=async(path,body)=>{const response=await fetch(service.url+"/api/"+path,{method:body?"POST":"GET",headers:{Authorization:"Bearer "+service.capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});const result=await response.json();if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;};
+    if(command==="import"){
+      let text;const file=value("file");if(file){if((await stat(file)).size>900000)throw new Error("فایل گفتگو بیش از حد بزرگ است.");text=await readFile(file,"utf8");}
+      const preview=await api("import/preview",{source:value("source"),rules:!args.includes("--no-rules"),text,format:file?.toLowerCase().endsWith(".jsonl")?"jsonl":"text"});
+      console.log(preview.messages.map(m=>m.text).join("\n\n"));
+      if(!args.includes("--apply")){console.log("فقط پیش‌نمایش؛ برای ورود همین متن، دستور را با --apply اجرا کنید.");return;}
+      const result=await api("import",{token:preview.token});console.log("گفتگو وارد شد: "+result.session.id);return;
+    }
+    if(!value("model")||(!value("text")&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
+    const id=value("session")||(await api("sessions",{})).id;
+    const result=await api("prompt",{id,text:value("text")||"ادامهٔ درخواست",model:value("model"),phase:value("phase")||"build",executionModel:value("execution-model"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
+    console.log("درخواست پذیرفته شد: "+id+" · "+result.workflow.phase+"\nبرای مشاهدهٔ خروجی: paastacode cli یا paastacode web");return;
+  }
   if(command==="login"){
     const budgetArg=args.find(a=>a.startsWith("--daily-limit="));
     const budget=budgetArg?Number(budgetArg.slice(14)):null;
