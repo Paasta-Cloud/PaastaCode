@@ -25,6 +25,7 @@ test("private cloud gateway rejects direct callers and forwards only bounded aut
     assert.equal(malformed,400);
     const result=await fetch(url+"/api/state",{headers:{...headers,Cookie:"paasta_session=must-not-leak"}});
     assert.deepEqual(await result.json(),{connected:false});assert.equal(result.headers.get("set-cookie"),null);
+    assert.equal(result.headers.get("x-paastacode-runtime"),"1");
     assert.equal(calls[0].headers.authorization,"Bearer "+capability);assert.equal(calls[0].headers.cookie,undefined);
     await fetch(url+"/api/prompt",{method:"POST",headers:{...headers,"X-PaastaCode-Account":"7"},body:'{"text":"تست"}'});
     assert.equal(calls[1].headers["x-paastacode-account"],"7");assert.equal(JSON.parse(calls[1].body).text,"تست");

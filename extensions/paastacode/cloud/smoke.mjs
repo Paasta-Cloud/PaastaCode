@@ -23,7 +23,7 @@ try{
   await docker(["volume","create",volume]);createdVolume=true;
   let url=await launch();const headers={"X-PaastaCode-Cloud-Token":secret};
   assert.equal((await fetch(url+"/api/state")).status,401);
-  assert.equal((await fetch(url+"/api/state",{headers})).status,200);
+  const first=await fetch(url+"/api/state",{headers});assert.equal(first.status,200);assert.equal(first.headers.get("x-paastacode-runtime"),"1");
   assert.equal((await fetch(url+"/api/state",{headers:{...headers,Origin:"https://code.paasta.cloud"}})).status,403);
   assert.equal((await fetch(url+"/api/shutdown",{method:"POST",headers})).status,404);
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(String(process.getuid()))"]),"1000");

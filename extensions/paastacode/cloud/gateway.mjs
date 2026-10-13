@@ -9,7 +9,8 @@ const maxBody=1_100_000,maxResponse=16_000_000;
 export async function cloudGateway({broker,secret,port=8080,host="0.0.0.0"}){
   const target=new URL(broker.url);
   if(target.protocol!=="http:"||target.hostname!=="127.0.0.1"||!target.port||target.username||target.password||target.pathname!=="/"||target.search||target.hash||!/^[-_A-Za-z0-9]{43}$/.test(secret||""))throw new Error("Cloud runtime configuration is invalid");
-  const json=(response,status,value)=>{response.writeHead(status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(JSON.stringify(value));};
+  const outputHeaders={"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff","X-PaastaCode-Runtime":"1"};
+  const json=(response,status,value)=>{response.writeHead(status,outputHeaders);response.end(JSON.stringify(value));};
   const server=createServer(async(request,response)=>{
     if(request.method==="GET"&&request.url==="/health"){json(response,200,{ready:true});return;}
     // Kubernetes authenticates and removes its Authorization header before pod proxying.
@@ -30,7 +31,7 @@ export async function cloudGateway({broker,secret,port=8080,host="0.0.0.0"}){
       const output=[];let bytes=0;
       for await(const chunk of result.body){bytes+=chunk.length;if(bytes>maxResponse)throw new Error("Response too large");output.push(chunk);}
       // Do not forward credentials, cookies, CORS grants or navigation headers.
-      response.writeHead(result.status,{"Content-Type":"application/json; charset=utf-8","Cache-Control":"no-store","X-Content-Type-Options":"nosniff"});response.end(Buffer.concat(output));
+      response.writeHead(result.status,outputHeaders);response.end(Buffer.concat(output));
     }catch{if(!response.headersSent)json(response,502,{error:"اجرای ابری پاسخ نداد. کارهای ذخیره‌شده باقی مانده‌اند؛ دوباره تلاش کنید."});}
     finally{clearTimeout(timer);}
   });
