@@ -25,7 +25,7 @@ export function providerConfig(models,key,origin){
         limit:{context:Number(m.context_length)||32000,output:Number(m.max_output_tokens)||4096}}]))}},
     share:"disabled",autoupdate:false,plugin:[],permission:{"*":"ask",read:{"*":"allow","*.env":"deny","*.env.*":"deny","*.pem":"deny","*.key":"deny"},glob:"allow",grep:"allow",external_directory:"deny",question:"deny"},
     agent:{build:{prompt:"با کاربر فارسی صحبت کن. کد، مسیرها، شناسه‌ها و دستورها را با زبان و قالب اصلی نگه دار. پیش از تغییر، پروژه را بررسی کن. نتیجهٔ واقعی و محدودیت‌ها را شفاف بگو."},
-      "paasta-plan":{mode:"primary",description:"برنامه‌ریزی فقط‌خواندنی",permission:{"*":"deny",read:"allow",glob:"allow",grep:"allow"},prompt:"با کاربر فارسی صحبت کن. پروژه را فقط با خواندن و جستجو بررسی کن. هیچ فایل، دستور، عامل دیگر یا ابزار MCP اجرا نکن. یک برنامهٔ اجرایی شامل مراحل، فایل‌های مرتبط، معیار پذیرش و تست‌ها بنویس. اجرای برنامه پس از انتخاب کاربر به مدل کدنویسی سپرده می‌شود."}}};
+      "paasta-plan":{mode:"primary",description:"برنامه‌ریزی فقط‌خواندنی",permission:{"*":"deny",read:"allow",glob:"allow",grep:"allow"},prompt:"با کاربر فارسی صحبت کن. پروژه را فقط با خواندن و جستجو بررسی کن. هیچ فایل، دستور، عامل دیگر یا ابزار MCP اجرا نکن. یک برنامهٔ کوتاه شامل مراحل، فایل‌های مرتبط، معیار پذیرش و تست‌ها بنویس. اگر درخواست صرفاً پرسش است، پاسخ آن را مشخص کن و تغییر فایل پیشنهاد نده. مرحلهٔ بعد به مدل کدنویسی سپرده می‌شود."}}};
 }
 export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}

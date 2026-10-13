@@ -13,7 +13,7 @@ test("the launching client can exit while the shared real engine and session rem
   const workspace=await realpath(await mkdtemp(join(tmpdir(),"pc-daemon-test-")));
   const upstream=createServer((req,res)=>{
     if(req.url!=="/api/paastacode/connection"){res.writeHead(404);res.end('{}');return;}
-    res.setHeader("Content-Type","application/json");res.end(JSON.stringify({account:{id:"synthetic-user",tenantId:"synthetic-tenant",name:"آزمایشی",balanceToman:0},models:[{id:"synthetic",name:"آزمایشی",supported_parameters:["tools"],context_length:4096,max_output_tokens:512}]}));
+    res.setHeader("Content-Type","application/json");res.end(JSON.stringify({account:{id:"synthetic-user",tenantId:"synthetic-tenant",name:"آزمایشی",balanceToman:0},models:[{id:"synthetic",name:"آزمایشی",input_toman_per_million:100,output_toman_per_million:300,supported_parameters:["tools"],context_length:4096,max_output_tokens:512}]}));
   });
   await new Promise(r=>upstream.listen(0,"127.0.0.1",r));const origin="http://127.0.0.1:"+upstream.address().port;process.env.PAASTACODE_CONSOLE=origin;
   let service;

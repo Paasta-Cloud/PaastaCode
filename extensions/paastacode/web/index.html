@@ -3,24 +3,33 @@
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
 <body>
 <dialog id="hosted-dialog" class="hosted-dialog"><div class="dialog-heading"><h2>فضاهای کار</h2><button id="hosted-close" type="button">بستن</button></div><div id="hosted-dialog-body"></div></dialog>
-<!-- Operate: Persian developer workbench; a stable transcript, visible execution and anchored composer. -->
+<!-- THESIS: A Persian developer's working desk with unmistakable task context.
+OWN-WORLD: Charcoal surfaces, embedded Yekan, precise blue selection, compact tool rows.
+STORY: Find a request, see what is running, inspect output, continue in the same project.
+FIRST VIEWPORT: Right task rail, project toolbar, active title, transcript, anchored composer.
+FORM: Owner-selected Codex-like convention; existing authorization delegates layout decisions. -->
 <div class="workspace">
   <button id="rail-backdrop" class="rail-backdrop" aria-label="بستن گفتگوها" tabindex="-1" hidden></button>
   <aside id="rail" class="rail" aria-label="گفتگوها و حساب">
     <button id="rail-close" class="mobile-menu" aria-label="بستن گفتگوها">بستن ×</button>
     <a class="brand" href="#"><img src="/brand.png" width="30" height="30" alt=""><strong>پاستاکد</strong><span dir="ltr">PaastaCode</span></a>
-    <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید</button>
+    <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید <kbd>Ctrl N</kbd></button>
     <button id="hosted-open" class="rail-action" type="button" hidden>فضاهای کار</button>
     <button id="deploy-open" class="rail-action" type="button" disabled>انتشار روی پاستا</button>
     <button id="import-open" class="rail-action" type="button" hidden>ورود از ابزارهای دیگر</button>
     <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
+    <label class="session-search"><span class="sr-only">جست‌وجوی گفتگوها</span><input id="session-search" type="search" placeholder="جست‌وجوی گفتگوها…" autocomplete="off"></label>
+    <div class="session-heading"><span>گفتگوها</span><span id="session-count">۰</span></div>
     <div id="sessions" class="sessions"><p class="muted">بعد از ورود، گفتگوها اینجا دیده میشن.</p></div>
+    <p id="session-no-results" class="muted" hidden>گفتگویی با این نام پیدا نشد.</p>
+    <button id="theme-toggle" class="rail-action theme-toggle" type="button" aria-pressed="false">نمای روشن</button>
     <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
     <button id="updates-open" class="rail-action" type="button" hidden>به‌روزرسانی برنامه</button>
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
   <main>
     <header class="topbar"><button id="menu" class="mobile-menu" aria-label="نمایش گفتگوها" aria-expanded="false">☰</button><div class="workspace-name"><span class="muted">پروژه</span><strong id="workspace-name" dir="ltr">PaastaCode</strong><button id="open-workspace" hidden>باز کردن پروژه</button></div><div class="header-actions"><button id="git-open" class="git-open" type="button" disabled><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="7" cy="5" r="2"/><circle cx="17" cy="6" r="2"/><circle cx="7" cy="19" r="2"/><path d="M7 7v10m10-9v2a4 4 0 0 1-4 4H7"/></svg><bdi id="git-branch-label" dir="ltr">گیت</bdi><span id="git-count">۰</span></button><span id="save-state" class="muted">روی این دستگاه</span><button id="save" disabled>ذخیره در حساب</button></div></header>
+    <div class="thread-heading"><div><span id="thread-location">گفتگوی پروژه</span><h1 id="conversation-title">گفتگوی جدید</h1></div><span id="thread-state" role="status">آماده</span></div>
     <section id="sync-controls" class="sync-controls" hidden aria-label="ذخیرهٔ خودکار همین گفتگو"><button id="sync-open" type="button">ذخیرهٔ خودکار: خاموش</button><span id="sync-detail" class="muted" role="status"></span><button id="sync-review" type="button" hidden>بررسی نسخهٔ حساب</button><button id="sync-copy" type="button" hidden>ذخیرهٔ نسخهٔ مستقل</button></section>
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="hosted-hub" class="hosted-hub" hidden aria-label="فضاهای کار پاستاکد">
@@ -59,10 +68,11 @@
     <button id="follow-output" class="follow-output" type="button" hidden>رفتن به آخرین خروجی ↓</button>
     <section id="activity" class="activity" role="status" hidden><span class="activity-indicator" aria-hidden="true"></span><div><strong id="activity-label">در حال کار</strong><span id="activity-detail"></span></div><span id="activity-time"></span></section>
     <form id="composer" class="composer" hidden>
-      <div id="workflow-controls" class="workflow-controls" hidden><label for="workflow-phase" class="sr-only">حالت کار</label><select id="workflow-phase"><option value="build">کدنویسی</option><option value="plan">برنامه‌ریزی</option></select><span id="workflow-hint" class="muted">مدل انتخابی برای پیام بعدی است.</span><button id="model-restart" type="button" hidden>توقف و ادامه با مدل جدید</button></div>
+      <div id="workflow-controls" class="workflow-controls" hidden><span id="workflow-summary" class="workflow-summary" role="status">برنامه‌ریزی و اجرا با پاستاکد</span><details id="model-settings" class="model-settings"><summary>تنظیمات مدل‌ها</summary><div class="model-settings-body"><label for="workflow-phase" class="sr-only">حالت کار</label><select id="workflow-phase"><option value="auto">برنامه‌ریزی و اجرای خودکار</option><option value="build">اجرا با یک مدل</option><option value="plan">فقط برنامه‌ریزی</option></select><span id="workflow-hint" class="muted"></span><div id="plan-controls" class="plan-controls" hidden><label for="execution-model">مدل اجرای برنامه</label><select id="execution-model"></select><span id="execution-price" class="muted"></span><button id="execute-plan" type="button" disabled>اجرای برنامه با این مدل</button></div></div></details><button id="model-restart" type="button" hidden>توقف و ادامه با مدل جدید</button></div>
+      <button id="workflow-resume" type="button" hidden>بررسی و ادامهٔ کار</button>
       <label class="sr-only" for="prompt">درخواست از پاستاکد</label><textarea id="prompt" rows="2" placeholder="تغییر بعدی را توضیح دهید…" maxlength="50000"></textarea>
-      <div id="plan-controls" class="plan-controls" hidden><label for="execution-model">مدل اجرای برنامه</label><select id="execution-model"></select><span id="execution-price" class="muted"></span><button id="execute-plan" type="button" disabled>اجرای برنامه با این مدل</button></div>
-      <div class="composer-toolbar"><label class="model-picker"><span class="sr-only">مدل پاستا</span><select id="model" aria-label="مدل پاستا"></select></label><label class="access-picker"><span class="sr-only">دسترسی ابزارها</span><select id="access-mode" aria-label="دسترسی ابزارها"><option value="review">با تأیید شما</option><option value="full">Full Access</option></select></label><button id="stop" type="button" hidden aria-label="توقف اجرای درخواست"><span aria-hidden="true">■</span> توقف</button><button id="send" class="primary send" aria-label="ارسال درخواست"><span aria-hidden="true">↑</span><span class="sr-only">ارسال</span></button></div>
+
+      <div class="composer-toolbar"><label class="model-picker"><span id="model-role" class="sr-only">مدل پاستا</span><select id="model" aria-label="مدل پاستا"></select></label><label class="access-picker"><span class="sr-only">دسترسی ابزارها</span><select id="access-mode" aria-label="دسترسی ابزارها"><option value="review">با تأیید شما</option><option value="full">Full Access</option></select></label><button id="stop" type="button" hidden aria-label="توقف اجرای درخواست"><span aria-hidden="true">■</span> توقف</button><button id="send" class="primary send" aria-label="ارسال درخواست"><span aria-hidden="true">↑</span><span class="sr-only">ارسال</span></button></div>
       <div class="composer-meta"><span id="price" class="price"></span><small id="access-description" class="composer-foot">تغییر فایل و اجرای دستور با تأیید شما</small><kbd>Ctrl ↵</kbd></div>
     </form>
     <footer class="app-footer"><span class="attribution"><a href="https://opencode.ai" target="_blank" rel="noopener noreferrer" dir="ltr">Powered by OpenCode</a><a href="https://github.com/Paasta-Cloud/PaastaCode" target="_blank" rel="noopener noreferrer">فورک متن‌باز پاستا</a></span><span id="connection-state">اتصال محلی</span></footer>

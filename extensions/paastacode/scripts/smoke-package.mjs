@@ -25,6 +25,7 @@ try{
   assert.equal((await fetch(connection.url+"/api/state")).status,401);
   const state=await fetch(connection.url+"/api/state",{headers:{Authorization:"Bearer "+connection.capability}});assert.equal(state.status,200);assert.equal((await state.json()).connected,false);
   const font=await fetch(connection.url+"/fonts/Vazirmatn.woff2");assert.equal(font.status,200);assert.equal(Buffer.from(await font.arrayBuffer()).subarray(0,4).toString(),"wOF2");
+  if(process.env.PAASTACODE_YEKAN_FONT){const yekan=await fetch(connection.url+"/fonts/YekanBakh.ttf");assert.equal(yekan.status,200,"Publisher package must serve Yekan");assert.deepEqual(Buffer.from(await yekan.arrayBuffer()),await readFile(process.env.PAASTACODE_YEKAN_FONT));}
   assert((await readFile(join(client,"licenses/Vazirmatn-OFL.txt"),"utf8")).includes("SIL OPEN FONT LICENSE"));
   const {stopWorkspace}=await import(pathToFileURL(join(client,"src/workspace-service.mjs")).href);
   await stopWorkspace(home);

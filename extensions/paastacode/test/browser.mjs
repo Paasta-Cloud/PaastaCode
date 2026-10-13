@@ -81,16 +81,21 @@ try{
     await page.screenshot({path:".artifacts/conversation-"+width+".png",fullPage:true});
   }
   await page.emulateMedia({colorScheme:"dark"});
-  await page.waitForFunction(()=>getComputedStyle(document.querySelector("#save")).backgroundColor==="rgb(27, 28, 32)");
+  await page.waitForFunction(()=>document.documentElement.dataset.theme==="dark");
   await page.screenshot({path:".artifacts/conversation-dark.png",fullPage:true,animations:"disabled"});
+  await page.locator("#model-settings summary").click();await page.locator("#workflow-phase").selectOption("build");await page.locator("#model-settings summary").click();
   await page.locator("#prompt").fill("یک بررسی دیگر");
   await page.locator("#send").click();await page.waitForFunction(()=>document.querySelector("#prompt").value==="");
   assert.equal(messages.at(-1).parts[0].text,"یک بررسی دیگر");
   await page.waitForFunction(()=>document.querySelector("#send").disabled);
   await page.setViewportSize({width:1440,height:1000});
   await page.locator("#cloud-tab").click();pending=true;
+  assert.equal(await page.locator("#composer").isVisible(),false,"Switching to account previews cannot keep the local send target");
+  assert.equal(await page.locator("#messages").innerText(),"");assert.equal(await page.locator('#sessions [aria-current="true"]').count(),0);
+  await page.locator("#local-tab").click();await page.locator("#sessions button").first().click();
   await page.getByText("فقط همین بار",{exact:true}).waitFor();
-  await page.getByText("فقط همین بار",{exact:true}).click();assert.equal(grants,2,"cloud list must not stop local approval polling");
+  await page.getByText("فقط همین بار",{exact:true}).click();assert.equal(grants,2,"Returning to the local conversation restores its pending approval");
+  await page.locator("#cloud-tab").click();assert.equal(await page.locator("#messages").innerText(),"");
   busy=false;await page.locator("#sessions button").first().click();
   safeDelete=false;await page.locator("#sessions button").first().click();await page.getByText("حذف امن به نسخهٔ تازهٔ سرویس حساب و برنامهٔ محلی نیاز دارد. پاستاکد و سرویس آن را به‌روز کنید.",{exact:true}).waitFor();assert.equal(await page.getByRole("button",{name:"حذف از حساب",exact:true}).isDisabled(),true,"old servers must not be trusted for conditional deletion");
   safeDelete=true;await page.locator("#sessions button").first().click();await page.waitForFunction(()=>document.querySelector(".cloud-actions .danger-action")?.disabled===false);

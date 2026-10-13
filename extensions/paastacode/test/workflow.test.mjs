@@ -18,7 +18,7 @@ test("workflow changes serialize, retain models, protect plan under Full Access,
     const s=sessions.find(s=>path==="/session/"+s.id);if(s)return s;
     throw new Error("Unexpected route");
   }};
-  const account={origin:"https://synthetic.test",credentials:{token:"synthetic",aiKey:"synthetic"},async context(){return {account:{id:"user",tenantId:"tenant"},models:["professional","economy"].map(id=>({id,supported_parameters:["tools"]}))};}};
+  const account={origin:"https://synthetic.test",credentials:{token:"synthetic",aiKey:"synthetic"},async context(){return {account:{id:"user",tenantId:"tenant"},models:["professional","economy"].map(id=>({id,input_toman_per_million:100,output_toman_per_million:300,supported_parameters:["tools"]}))};}};
   const app=await startServer({account,runtime}),headers={Authorization:"Bearer "+app.capability,"Content-Type":"application/json"};
   const api=(path,data,extra={})=>fetch(app.url+"/api/"+path,{method:data?"POST":"GET",headers:{...headers,...extra},body:data?JSON.stringify(data):undefined});
   try{
