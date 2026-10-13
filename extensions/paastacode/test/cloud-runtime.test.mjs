@@ -31,12 +31,12 @@ test("private cloud gateway rejects direct callers and forwards only bounded aut
     assert.equal(calls[1].headers["x-paastacode-account"],"7");assert.equal(JSON.parse(calls[1].body).text,"تست");
     const tooLarge=await fetch(url+"/api/prompt",{method:"POST",headers,body:"x".repeat(1_100_001)});
     assert.equal(tooLarge.status,413);assert.equal(calls.length,2);
-    for(const [method,path,body] of [["GET","/api/workflow?session=synthetic"],["POST","/api/import/preview",'{"source":"codex"}'],["POST","/api/import",'{"token":"synthetic"}']]){
+    for(const [method,path,body] of [["GET","/api/workflow?session=synthetic"],["POST","/api/import/preview",'{"source":"codex"}'],["POST","/api/import",'{"token":"synthetic"}'],["POST","/api/export","{}"],["GET","/api/export?id=synthetic&offset=0"],["DELETE","/api/export?id=synthetic"]]){
       assert.equal((await fetch(url+path,{method,headers,body})).status,200);
       assert.equal(calls.at(-1).url,path);
     }
     for(const [method,path] of [["POST","/api/workflow"],["GET","/api/import"],["DELETE","/api/import/preview"]])assert.equal((await fetch(url+path,{method,headers})).status,404);
-    assert.equal(calls.length,5);
+    assert.equal(calls.length,8);
     assert.equal((await fetch(url+"/api/state",{headers:{"X-PaastaCode-Cloud-Token":secret,Authorization:"Bearer synthetic-kubernetes-auth"}})).status,200);
     assert.equal(calls.at(-1).headers.authorization,"Bearer "+capability);assert.equal(calls.at(-1).headers["x-paastacode-cloud-token"],undefined);
     assert.equal((await fetch(url+"/api/state",{headers:{...headers,"X-PaastaCode-Cloud-Token":"wrong"}})).status,401);

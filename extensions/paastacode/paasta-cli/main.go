@@ -3855,6 +3855,7 @@ Usage:
   paasta whoami | projects | status NAME
   paasta deploy [PATH] [-n NAME] [-p PLAN] [--billing payg|monthly] [-r REGION]
   paasta deploy [PATH] --dry-run [--json]     Preview local files without login or upload
+  paasta workspace-export PATH > project.zip Download files, Git and project env; omit account stores and links
   paasta deploy --image IMAGE --name NAME     Deploy a public Docker image
   paasta deploy --git URL --connection ID --name NAME
                                                 Deploy a public or private Git repository
@@ -3958,6 +3959,9 @@ Automation: add --yes and --json where supported. Secrets are never included in 
 }
 
 func run(command args) error {
+	if command.Command == "workspace-export" {
+		return workspaceExport(command)
+	}
 	if value, exists := command.Flags["dry-run"]; command.Command == "deploy" && exists && value != "true" && value != "false" {
 		return errors.New("--dry-run must be true or false")
 	}
@@ -4257,7 +4261,7 @@ func main() {
 	if command.Command == "--version" {
 		command.Command = "version"
 	}
-	if !(command.Command == "deploy" && command.Flags["dry-run"] == "true") {
+	if command.Command != "workspace-export" && !(command.Command == "deploy" && command.Flags["dry-run"] == "true") {
 		checkForUpdate(value(command.Flags, "server", defaultServer))
 	}
 	if err := run(command); err != nil {

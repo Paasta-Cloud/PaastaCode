@@ -1,5 +1,5 @@
 {
-  "GET": ["state", "devices", "deployment/state", "deployment/context", "deployment/job", "cloud", "cloud/session", "git", "git/diff", "sessions", "messages", "permissions", "status", "sync", "workflow"],
-  "POST": ["ready", "login", "login/poll", "connect", "logout", "deployment/login", "deployment/login/poll", "deployment/disconnect", "deployment/request", "deployment/approve", "deployment/reject", "git", "access", "sessions", "permission", "prompt", "abort", "save", "sync", "restore", "import/preview", "import"],
-  "DELETE": ["devices", "cloud/session"]
+  "GET": ["state", "devices", "deployment/state", "deployment/context", "deployment/job", "cloud", "cloud/session", "git", "git/diff", "sessions", "messages", "permissions", "status", "sync", "workflow", "export"],
+  "POST": ["ready", "login", "login/poll", "connect", "logout", "deployment/login", "deployment/login/poll", "deployment/disconnect", "deployment/request", "deployment/approve", "deployment/reject", "git", "access", "sessions", "permission", "prompt", "abort", "save", "sync", "restore", "import/preview", "import", "export"],
+  "DELETE": ["devices", "cloud/session", "export"]
 }

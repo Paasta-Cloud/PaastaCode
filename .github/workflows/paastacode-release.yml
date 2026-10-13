@@ -92,7 +92,9 @@ jobs:
       - name: Build bundled web and CLI
         run: npm run package:portable
       - name: Test installed web and CLI
-        run: node scripts/smoke-package.mjs
+        run: |
+          node scripts/smoke-package.mjs
+          node test/workspace-export-integration.mjs
       - name: Build standalone VSIX
         run: npm run package:vscode
       - name: Build desktop installers
