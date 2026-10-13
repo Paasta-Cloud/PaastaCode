@@ -1,0 +1,88 @@
+name: PaastaCode verified package publication
+on:
+  workflow_dispatch:
+    inputs:
+      package_run:
+        description: Successful native package run
+        required: true
+        type: string
+      package_sha:
+        description: Exact package source commit
+        required: true
+        type: string
+      acceptance_run:
+        description: Successful installed VSIX acceptance run for those packages
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: paastacode-publication
+  cancel-in-progress: false
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PACKAGE_RUN: ${{ inputs.package_run }}
+      PACKAGE_SHA: ${{ inputs.package_sha }}
+      ACCEPTANCE_RUN: ${{ inputs.acceptance_run }}
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+      - name: Verify completed runs, exact source and installed package inputs
+        shell: bash
+        run: |
+          [[ "$PACKAGE_RUN" =~ ^[0-9]+$ && "$ACCEPTANCE_RUN" =~ ^[0-9]+$ && "$PACKAGE_SHA" =~ ^[0-9a-f]{40}$ ]] || exit 1
+          cd "$RUNNER_TEMP"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PACKAGE_RUN" > package.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ACCEPTANCE_RUN" > acceptance.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$PACKAGE_RUN/jobs?per_page=100" > package-jobs.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ACCEPTANCE_RUN/jobs?per_page=100" > acceptance-jobs.json
+          gh api "repos/$GITHUB_REPOSITORY/compare/$PACKAGE_SHA...dev" > ancestry.json
+          gh run view "$ACCEPTANCE_RUN" --repo "$GITHUB_REPOSITORY" --log > acceptance.log
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import {readFileSync} from 'node:fs';
+          const json=name=>JSON.parse(readFileSync(name+'.json','utf8'));
+          const check=(name,path,prefix)=>{
+            const run=json(name);
+            assert.equal(String(run.id),process.env[name==='package'?'PACKAGE_RUN':'ACCEPTANCE_RUN']);
+            assert.equal(run.repository.full_name,process.env.GITHUB_REPOSITORY);
+            assert.equal(run.path,path);assert.equal(run.head_sha,process.env.PACKAGE_SHA);
+            assert.equal(run.status,'completed');assert.equal(run.conclusion,'success');
+            const jobs=json(name+'-jobs').jobs.filter(job=>job.name.startsWith(prefix+' ('));
+            assert.equal(jobs.length,5);assert(jobs.every(job=>job.conclusion==='success'));
+            for(const platform of ['win32, x64','linux, x64','linux, arm64','darwin, x64','darwin, arm64'])assert(jobs.some(job=>job.name.endsWith(', '+platform+')')));
+          };
+          check('package','.github/workflows/paastacode-release.yml','package');
+          check('acceptance','.github/workflows/paastacode-vscode-acceptance.yml','installed-extension');
+          assert(['ahead','identical'].includes(json('ancestry').status),'Package source must be in dev history');
+          const logs=readFileSync('acceptance.log','utf8').split('\n');
+          for(const [key,value] of [['PACKAGE_RUN',process.env.PACKAGE_RUN],['PACKAGE_SHA',process.env.PACKAGE_SHA]]){
+            const lines=logs.filter(line=>line.includes(key+': '));
+            assert.equal(lines.length,5);assert(lines.every(line=>line.trimEnd().endsWith(key+': '+value)),'Installed acceptance must use these exact packages');
+          }
+          console.log('Five native builds and five installed VSIX checks match the approved source and package run.');
+          NODE
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.package_sha }}
+          persist-credentials: false
+      - name: Download the verified native outputs
+        run: gh run download "$PACKAGE_RUN" --repo "$GITHUB_REPOSITORY" --pattern 'paastacode-*' --dir .artifacts/paastacode-release
+      - name: Assemble and verify updater metadata
+        working-directory: extensions/paastacode
+        run: |
+          npm ci --omit=dev --ignore-scripts
+          node scripts/prepare-release.mjs ../../.artifacts/paastacode-release ../../.artifacts/paastacode-publish
+      - name: Create a reviewable draft prerelease
+        run: |
+          version=$(node -p "require('./extensions/paastacode/package.json').version")
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(beta|alpha)\.[0-9]+$ ]] || exit 1
+          gh release create "v$version" .artifacts/paastacode-publish/* --draft --prerelease --target "$PACKAGE_SHA" --title "PaastaCode $version" --notes-file extensions/paastacode/RELEASE.md
