@@ -32,7 +32,8 @@ function workflowView(){
 }
 async function loadWorkflow(){
   if(!session||!state.features?.modelWorkflow)return;
-  const id=session.id,value=await api("workflow?id="+encodeURIComponent(id));if(session?.id!==id)return;
+  const id=session.id,value=await api("workflow?id="+encodeURIComponent(id));if(session?.id!==id||promptPending)return;
+  if(workflowSession===id&&JSON.stringify(currentWorkflow)===JSON.stringify(value))return;
   currentWorkflow=value;workflowSession=id;$("workflow-phase").value=value.phase;
   const selected=value.phase==="plan"?value.planModel:value.buildModel;
   if(state.models?.some(m=>m.id===selected))$("model").value=selected;
@@ -132,7 +133,7 @@ async function refresh(){
   const selected=session,version=generation;let runtimeStatus;
   try{
     if(selected){
-      if(workflowSession!==selected.id&&!promptPending)await loadWorkflow();
+      if(!promptPending)await loadWorkflow();
       const messages=await api("messages?id="+encodeURIComponent(selected.id));if(version!==generation||session!==selected)return;const serialized=JSON.stringify(messages);
       const last=messages.at(-1);planReady=last?.info?.role==="assistant"&&last.info.agent==="paasta-plan"&&!!last.info.time?.completed&&!last.info.error&&last.parts.some(p=>p.type==="text"&&p.text?.trim());
       if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent="تغییرات روی این دستگاه";}
