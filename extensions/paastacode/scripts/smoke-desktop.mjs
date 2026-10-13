@@ -20,7 +20,7 @@ await new Promise((done,reject)=>{
 });
 const png=await readFile(join(qa,"capture/desktop.png"));
 if(png.subarray(0,8).toString("hex")!=="89504e470d0a1a0a"||(await stat(join(qa,"capture/desktop.png"))).size<10000)throw new Error("Desktop capture missing or invalid");
-console.log("Packaged desktop executed with an isolated profile; Persian RTL, Vazirmatn and preload passed on "+process.platform+"/"+process.arch);
+console.log("Packaged desktop executed with an isolated profile; Persian RTL, local font and preload passed on "+process.platform+"/"+process.arch);
 // Closing the actual packaged window must leave its shared workspace broker alive.
 process.env.PAASTACODE_HOME=join(qa,"account");
 const {readPrivate}=await import("../src/account.mjs"),{workspaceKey}=await import("../src/runtime.mjs");
