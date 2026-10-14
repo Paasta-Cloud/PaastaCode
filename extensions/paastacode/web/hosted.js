@@ -137,7 +137,7 @@ export async function connectHosted({onAccount=()=>{}}={}){
       if(!next||!uuid.test(next.id)||!uuid.test(next.tenantId))throw new Error("اطلاعات حساب هنوز در دسترس نیست. دوباره تلاش کنید.");
       const nextOwner=next.id+":"+next.tenantId;if(owner&&owner!==nextOwner){invalidateHosted();return;}owner=nextOwner;account=next;onAccount(next);
       $("hosted-login").hidden=true;$("hosted-account-name").textContent=account.name||"حساب پاستا";$("hosted-account-detail").textContent=money(account.balanceToman)+" اعتبار";
-      $('hosted-billing').hidden=false;$('hosted-billing').href='/billing.html#owner='+encodeURIComponent(owner);
+      $('hosted-billing').hidden=false;$('hosted-billing').href='https://console.paasta.cloud/paastacode?owner='+encodeURIComponent(owner);
       if(!catalog){catalog=await api("/catalog");choices();}
       $("hosted-create").hidden=!catalog.enabled||!catalog.plans?.length||!catalog.storage?.length;
       rows(result.workspaces||[]);

@@ -14,8 +14,8 @@ export function consoleUrl(value=process.env.PAASTACODE_CONSOLE||"https://consol
 export function billingUrl(origin,account){
   const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if(!uuid.test(account?.id||'')||!uuid.test(account?.tenantId||''))return null;
-  const base=consoleUrl(origin),path=['https://console.paasta.cloud','https://paasta.cloud'].includes(base)?'https://code.paasta.cloud/billing.html':base+'/api/paastacode/web/billing.html';
-  return path+'#owner='+encodeURIComponent(account.id+':'+account.tenantId);
+  const base=consoleUrl(origin),managed=['https://console.paasta.cloud','https://paasta.cloud'].includes(base),path=managed?'https://console.paasta.cloud/paastacode':base+'/api/paastacode/web/billing.html';
+  return path+(managed?'?owner=':'#owner=')+encodeURIComponent(account.id+':'+account.tenantId);
 }
 async function protect(bytes,decode=false){
   if(process.platform!=="win32")return bytes;
