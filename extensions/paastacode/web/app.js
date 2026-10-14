@@ -19,7 +19,8 @@ for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
 updatesUI();
 if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
-let runtimeConnection=null;
+let runtimeConnection=null,hostedAccountOwner=null;
+const awaitingWorkspace=()=>location.origin===hostedOrigin&&!runtimeConnection;
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
 let cloudSelection=null;
@@ -79,10 +80,18 @@ function accessView(value){$("access-mode").value=value||"review";$("access-mode
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
   const version=generation;
-  const request=runtimeRequest(runtimeConnection,path,method,body,{capability,accountRevision:state.features?.independentRuntime?state.accountRevision:undefined});
+  let request;
+  if(awaitingWorkspace()){
+    if(!hostedAccountOwner)throw new Error("برای دیدن گفتگوها، وارد حساب پاستا شوید.");
+    if(method!=="GET"||!(path==="cloud"||/^cloud\/session\?id=[0-9a-f-]{36}$/i.test(path)))throw new Error("ابتدا یک فضای کار انتخاب کنید یا به پروژه روی کامپیوترتان وصل شوید.");
+    request={url:"/api/paastacode/sessions"+(path==="cloud"?"":"?id="+encodeURIComponent(new URLSearchParams(path.split("?")[1]).get("id"))),init:{credentials:"same-origin",cache:"no-store",headers:{"X-PaastaCode-Owner":hostedAccountOwner}}};
+  }else request=runtimeRequest(runtimeConnection,path,method,body,{capability,accountRevision:state.features?.independentRuntime?state.accountRevision:undefined});
   const response=await fetch(request.url,request.init);
   if(runtimeConnection?.kind==="cloud"&&[403,404].includes(response.status)){const result=await response.clone().json().catch(()=>({}));if(result.workspaceError){clearAccountView();invalidateHosted();throw new Error("فضای کار را دوباره انتخاب کنید.");}}
-  const result=await response.json();if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
+  const result=await response.json().catch(()=>null);if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}
+  if(awaitingWorkspace()&&response.status===403){hostedAccountOwner=null;clearAccountView();$("account-name").textContent="حساب پاستا";$("account-detail").textContent="ورود دوباره لازم است";$("hosted-hub").hidden=false;$("conversation").hidden=true;$("hosted-login").hidden=false;document.querySelector(".thread-heading").hidden=true;throw new Error("دسترسی حساب تغییر کرده است؛ دوباره وارد حساب پاستا شوید.");}
+  if(!result||typeof result!=="object")throw new Error("پاسخ سرویس کامل دریافت نشد؛ دوباره تلاش کنید.");
+  if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
 function price(){
@@ -122,7 +131,7 @@ async function sessions(){
   $("sessions").setAttribute("aria-busy","true");
   for(const button of $("sessions").querySelectorAll("button"))button.disabled=true;
   let items;
-  try{items=listMode==="cloud"?(await api("cloud")).sessions:await api("sessions");}
+  try{items=listMode==="cloud"?(await api("cloud")).sessions:awaitingWorkspace()?[]:await api("sessions");if(!Array.isArray(items))throw new Error("فهرست گفتگوها کامل دریافت نشد؛ دوباره تلاش کنید.");}
   catch(error){if(version===listGeneration)$("sessions").setAttribute("aria-busy","false");throw error;}
   if(version!==listGeneration||mode!==listMode)return;
   $("sessions").setAttribute("aria-busy","false");
@@ -142,14 +151,17 @@ async function sessions(){
         session=null;cloudSelection=item;selectionView();$("composer").hidden=true;$("save").disabled=true;$("permissions").replaceChildren();
         conversationSync.hide();
         const saved=await api("cloud/session?id="+encodeURIComponent(item.id));
+        if(awaitingWorkspace()){$("hosted-hub").hidden=true;$("conversation").hidden=false;document.querySelector(".thread-heading").hidden=false;}
         renderMessages(saved.snapshot.messages.map(m=>({info:{role:m.role},parts:[{type:"text",text:m.text}]})));
         session=null;$("permissions").replaceChildren();$("composer").hidden=true;$("save").disabled=true;$("empty").hidden=true;
         $("save-state").textContent="ذخیره‌شده در حساب";
         const viewGeneration=generation;
-        $("messages").append(cloudActions({saved,api,run,notice,getState:()=>state,isCurrent:()=>generation===viewGeneration&&mode==="cloud",onDeleted:async()=>{generation++;$("messages").replaceChildren();$("save-state").textContent="نسخهٔ حساب حذف شد";$("empty").hidden=false;await sessions();}}));
+        $("messages").append(cloudActions({saved,api,run,notice,getState:()=>state,readOnly:awaitingWorkspace(),isCurrent:()=>generation===viewGeneration&&mode==="cloud",onDeleted:async()=>{generation++;$("messages").replaceChildren();$("save-state").textContent="نسخهٔ حساب حذف شد";$("empty").hidden=false;await sessions();}}));
         const actions=document.createElement("div");actions.className="suggestions";
-        const restore=document.createElement("button");restore.textContent="ادامه در این پروژه";
+        const restore=document.createElement("button");restore.textContent=awaitingWorkspace()?"انتخاب فضای کار":"ادامه در این پروژه";
+        if(awaitingWorkspace()){const help=document.createElement("p");help.className="muted";help.textContent="برای ادامهٔ کدنویسی، یک فضای کار باز کنید یا به پروژه روی کامپیوترتان وصل شوید.";actions.append(help);}
         restore.onclick=()=>run(restore,async()=>{
+          if(awaitingWorkspace()){await switchTab("local");return;}
           const result=await api("restore","POST",{id:item.id});session=result.session;mode="local";
           $("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");$("composer").hidden=false;
           notice("متن گفتگو برای ادامه آماده است. فایل‌ها و دستورهای قبلی بازسازی نمیشن. درخواست بعدی را بنویس.");
@@ -268,9 +280,11 @@ $("import-confirm").onclick=()=>run($("import-confirm"),async()=>{if(!importToke
 }catch(error){$("import-result").textContent=error.message;}});
 $("access-mode").onchange=()=>run($("access-mode"),async()=>{try{const result=await api("access","POST",{mode:$("access-mode").value});state.accessMode=result.mode;accessView(result.mode);notice(result.mode==="full"?"Full Access برای این پروژه روشن شد. ابزارهای کدنویسی بدون تأیید اجرا می‌شوند.":"تأیید تغییر فایل و اجرای دستور دوباره فعال شد.");await refresh();}catch(error){accessView(state.accessMode);throw error;}});
 async function switchTab(next){
+  notice("");
   generation++;mode=next;session=null;cloudSelection=null;lastMessages="";sending=false;planReady=false;workflowSession=null;
   bench.reset();conversationSync.hide();$("messages").replaceChildren();$("permissions").replaceChildren();$("empty").hidden=false;
-  $("composer").hidden=next==="cloud";$("save").disabled=true;$("save-state").textContent=next==="cloud"?"یک گفتگوی ذخیره‌شده را انتخاب کنید":"یک گفتگو را انتخاب کنید";
+  $("composer").hidden=next==="cloud"||awaitingWorkspace();$("save").disabled=true;$("save-state").textContent=next==="cloud"?"یک گفتگوی ذخیره‌شده را انتخاب کنید":"یک گفتگو را انتخاب کنید";
+  if(awaitingWorkspace()){$("hosted-hub").hidden=false;$("conversation").hidden=true;document.querySelector(".thread-heading").hidden=true;}
   $("local-tab").setAttribute("aria-pressed",String(next==="local"));$("cloud-tab").setAttribute("aria-pressed",String(next==="cloud"));selectionView();await sessions();
 }
 $("local-tab").onclick=()=>run($("local-tab"),()=>switchTab("local"));
@@ -280,7 +294,7 @@ $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
 document.addEventListener("keydown",event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="n"&&!$("new").disabled&&!document.querySelector("dialog[open]")){event.preventDefault();$("new").click();}if(event.key==="Escape")drawer(false);if(event.key==="Tab"&&$("rail").classList.contains("open")){const items=[...$("rail").querySelectorAll("button:not(:disabled),a[href],input:not(:disabled)")].filter(el=>el.offsetParent);const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
 matchMedia("(max-width:640px)").addEventListener("change",()=>drawer(false));
-if(location.origin===hostedOrigin){runtimeConnection=await connectHosted();capability=runtimeConnection.capability;}
+if(location.origin===hostedOrigin){runtimeConnection=await connectHosted({onAccount:account=>{if(!awaitingWorkspace())return;hostedAccountOwner=account.id+":"+account.tenantId;$("account-name").textContent=account.name||"حساب پاستا";$("account-detail").textContent=Number(account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار";}});capability=runtimeConnection.capability;}
 if(runtimeConnection){
   if(runtimeConnection.kind==="cloud"){$("local-tab").textContent="این فضای کار";$("save-state").textContent="در فضای کار ابری";}
   const draftKey="paastacode-draft:"+(runtimeConnection.kind==="cloud"?runtimeConnection.owner+":"+runtimeConnection.id:runtimeConnection.origin);

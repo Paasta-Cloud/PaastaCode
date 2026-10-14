@@ -28,7 +28,7 @@ export function invalidateHosted(){
   window.dispatchEvent(new Event("paastacode:account-changed"));
   location.reload();
 }
-export async function connectHosted(){
+export async function connectHosted({onAccount=()=>{}}={}){
   const form=document.getElementById("workspace-connect"),input=document.getElementById("workspace-link"),error=document.getElementById("workspace-connect-error");
   const $=id=>document.getElementById(id),hub=$("hosted-hub"),dialog=$("hosted-dialog");
   const toolbar=document.querySelector(".topbar"),projectChrome=[...document.querySelectorAll(".workspace-name,.header-actions,.thread-heading")];
@@ -135,7 +135,7 @@ export async function connectHosted(){
     try{
       const result=await api();const next=result.account;
       if(!next||!uuid.test(next.id)||!uuid.test(next.tenantId))throw new Error("اطلاعات حساب هنوز در دسترس نیست. دوباره تلاش کنید.");
-      const nextOwner=next.id+":"+next.tenantId;if(owner&&owner!==nextOwner){invalidateHosted();return;}owner=nextOwner;account=next;
+      const nextOwner=next.id+":"+next.tenantId;if(owner&&owner!==nextOwner){invalidateHosted();return;}owner=nextOwner;account=next;onAccount(next);
       $("hosted-login").hidden=true;$("hosted-account-name").textContent=account.name||"حساب پاستا";$("hosted-account-detail").textContent=money(account.balanceToman)+" اعتبار";
       if(!catalog){catalog=await api("/catalog");choices();}
       $("hosted-create").hidden=!catalog.enabled||!catalog.plans?.length||!catalog.storage?.length;
