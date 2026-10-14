@@ -30,7 +30,7 @@ const browser=await chromium.launch({headless:true,channel:process.env.PAASTACOD
 const page=await browser.newPage({viewport:{width:1440,height:960}}),errors=[];page.on("pageerror",error=>errors.push(error.message));
 const active=()=>page.locator('#sessions button[aria-current="true"]');
 try{
-  await page.goto(app.launchUrl);await page.locator('#sessions button[data-session="ses_redesign0"]').waitFor();
+  await page.goto(app.launchUrl);await page.evaluate(()=>document.fonts.load('600 18px Geist'));assert(await page.evaluate(()=>document.fonts.check('600 18px Geist')),'the Paasta English font is bundled');assert((await page.locator('.brand [lang=en]').evaluate(el=>getComputedStyle(el).fontFamily)).startsWith('Geist')); await page.locator('#sessions button[data-session="ses_redesign0"]').waitFor();
   assert.equal(await active().count(),0);assert(!(await page.locator("#sessions").innerText()).includes("گفتگوی جدید"));
   await page.locator('[data-session="ses_redesign0"]').click();await page.getByText("حالا تست‌های فرم را اجرا می‌کنم.",{exact:false}).waitFor();
   assert.equal(await active().count(),1);assert.equal(await active().getAttribute("data-session"),"ses_redesign0");

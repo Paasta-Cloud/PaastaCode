@@ -16,7 +16,7 @@ import {untitledSession,promptTitle,firstRequestTitle} from "./session-title.mjs
 import {attachmentParts} from "./prompt-attachments.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
-const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
+const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"],["/fonts/Geist.woff2","fonts/Geist.woff2"]]);
 const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
