@@ -42,6 +42,7 @@ try{
   const colors=await page.locator("#sessions button").evaluateAll(buttons=>buttons.map(b=>({selected:b.getAttribute("aria-current")==="true",background:getComputedStyle(b).backgroundColor,border:getComputedStyle(b).borderColor})));
   assert.notEqual(colors.find(c=>c.selected).background,colors.find(c=>!c.selected).background);assert.notEqual(colors.find(c=>c.selected).border,colors.find(c=>!c.selected).border);
   await page.locator("#theme-toggle").click();assert.equal(await page.locator("html").getAttribute("data-theme"),"light");await page.waitForTimeout(220);await page.screenshot({path:".artifacts/redesign-desktop-light.png"});
+  assert(await page.locator('#model').evaluate(el=>getComputedStyle(el).direction==='ltr'&&parseFloat(getComputedStyle(el).paddingLeft)>=36),'Latin model identifiers reserve space for the RTL chevron');
   await page.locator("#session-search").fill("صورتحساب");assert.equal(await page.locator("#sessions button:visible").count(),1);await page.locator("#sessions button:visible").click();
   await page.getByText("نمایش مبلغ با واحد تومان بررسی می‌شود.",{exact:true}).waitFor();assert.equal(await active().count(),1);assert.equal(await active().getAttribute("data-session"),"ses_redesign1");
   await page.locator("#session-search").fill("نامی که نیست");assert(await page.locator("#session-no-results").isVisible());await page.locator("#session-search").fill("");
