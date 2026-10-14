@@ -80,6 +80,7 @@ jobs:
           node test/redesign-browser.mjs
           node test/workflow-browser.mjs
           node test/composer-browser.mjs
+          node test/billing-browser.mjs
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
           node test/cloud-hub-browser.mjs
