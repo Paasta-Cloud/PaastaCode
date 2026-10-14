@@ -33,5 +33,5 @@ test("real OpenCode discovers Paasta MCP and a permitted tool still creates only
     const permission=await wait(async()=> (await runtime.call('/permission')).find(item=>item.sessionID===session.id));assert(toolName);assert.equal(requests,0);assert.equal(uploads,0);
     await runtime.call('/permission/'+permission.id+'/reply',{method:'POST',body:{reply:'once'}});
     await wait(async()=>requests===1);assert.equal(uploads,0,'Engine tool approval does not authorize deployment cost');
-  }finally{await service.close();await new Promise(r=>provider.close(r));assert(workspace.startsWith(join(await realpath(tmpdir()),'paastacode-mcp-engine-')));await rm(workspace,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
+  }finally{await service.close();provider.closeAllConnections();await new Promise(r=>provider.close(r));assert(workspace.startsWith(join(await realpath(tmpdir()),'paastacode-mcp-engine-')));await rm(workspace,{recursive:true,force:true,maxRetries:5,retryDelay:100});}
 });
