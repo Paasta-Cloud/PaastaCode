@@ -1,6 +1,6 @@
 import {labelDialog,icon} from './components.js';
 /** @param {Document | HTMLElement} root
- * @param {{ signal?: AbortSignal, standalone?: boolean }} [options] */
+ * @param {{ signal?: AbortSignal, standalone?: boolean, onBalanceChange?: (balance: number) => void }} [options] */
 export function mountBilling(root = document, options = {}) {
 const signal=options.signal;
 const $=id=>root.querySelector('#'+id),dialog=$('billing-confirm');labelDialog(dialog);
@@ -59,6 +59,7 @@ function controls(){
 }
 function render(){
   if(signal?.aborted)return;
+  options.onBalanceChange?.(Number(state.account.balanceToman));
   $('billing-content').hidden=false;$('billing-login').hidden=true;$('billing-name').textContent=state.account.name;$('billing-balance').textContent='موجودی آزاد: '+money(state.account.balanceToman);
   $('billing-mode').textContent=modeName(state.mode);$('billing-unavailable').hidden=state.saleEnabled===true;
   $('billing-unavailable').textContent='خرید اشتراک و تغییر سقف کیف پول فعلاً در دسترس نیست. توقف مصرف تازه همچنان ممکن است.'+(state.upcoming?' لغو تمدیدِ شروع‌نشده را می‌توانید از بخش اشتراک بررسی کنید.':'');
