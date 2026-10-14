@@ -43,7 +43,8 @@ export function workbench(){
           const target=document.createElement("bdi");target.className="tool-target";target.dir="ltr";const path=part.state?.input?.filePath||part.state?.input?.path;target.textContent=path?String(path).replaceAll("\\","/").split("/").slice(-3).join("/"):part.state?.input?.command||part.state?.title||"";target.title=path||target.textContent;
           const badge=document.createElement("span");badge.className="tool-status";badge.textContent={completed:"انجام شد",running:"در حال اجرا",pending:"در انتظار",error:"ناموفق"}[status]||status;
           summary.append(icon,name,target,badge);
-          const pre=document.createElement("pre");pre.dir="ltr";pre.textContent=part.type==="reasoning"?part.text:String(part.state?.metadata?.diff||part.state?.output||part.state?.error||JSON.stringify(part.state?.input||{},null,2));
+          const pre=document.createElement("pre");pre.dir="ltr";pre.textContent=part.type==="reasoning"?part.text:String(part.state?.metadata?.diff||part.state?.output||part.state?.metadata?.output||part.state?.error||(["running","pending"].includes(status)?"هنوز خروجی‌ای دریافت نشده است.":JSON.stringify(part.state?.input||{},null,2)));
+          if(status==="running"&&Number.isFinite(part.state?.time?.start))details.dataset.started=String(part.state.time.start);
           details.append(summary,pre);article.append(details);
         }
       }
@@ -63,6 +64,6 @@ export function workbench(){
     $("stop").hidden=!busy;$("send").disabled=busy;
     if(following&&busy)follow();
   }
-  setInterval(()=>{$("activity-time").textContent=lastBusy&&!blocked?Math.floor((Date.now()-started)/1000).toLocaleString("fa-IR")+" ثانیه":"";},1000);
+  setInterval(()=>{$("activity-time").textContent=lastBusy&&!blocked?Math.floor((Date.now()-started)/1000).toLocaleString("fa-IR")+" ثانیه":"";for(const tool of messages.querySelectorAll('.tool[data-started]')){const seconds=Math.max(0,Math.floor((Date.now()-Number(tool.dataset.started))/1000));tool.querySelector('.tool-status').textContent="در حال اجرا · "+seconds.toLocaleString("fa-IR")+" ثانیه";}},1000);
   return {render,activity,follow,reset(){latest=[];lastBusy=false;started=0;messages.replaceChildren();activity(false);follow();}};
 }
