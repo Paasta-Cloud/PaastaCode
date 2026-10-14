@@ -71,6 +71,7 @@ main .sync-controls{padding:6px 28px;border-bottom:0;gap:8px}main .sync-controls
 .vf-select:has(select:disabled)>.ui-icon{opacity:.5}
 .model-picker .vf-select,.access-picker .vf-select,.model-settings-body>.vf-select{width:100%}
 .model-picker select,.access-picker select{padding-inline:12px 36px;border-radius:8px;min-height:40px}
+.model-picker select{padding-inline:36px 12px;text-align:right}
 .composer-toolbar .send{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;min-height:40px;border-radius:10px;font-size:inherit;transition:background .16s ease,transform .16s ease}
 .composer-toolbar .send>.ui-icon{width:20px;height:20px;stroke-width:2}
 .composer-toolbar .send:active:not(:disabled){transform:scale(.95)}
