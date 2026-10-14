@@ -30,6 +30,7 @@ try{
   const messages=await api("messages?id="+id),text=messages.flatMap(message=>message.parts.filter(part=>part.type==="text").map(part=>part.text)).join(" ");
   assert(text.includes(saved.snapshot.messages[0].text));assert(text.includes(saved.snapshot.messages[1].text));
   assert(messages.every(message=>message.parts.every(part=>part.type!=="tool")));assert.equal((await app.runtime.call("/session/"+id+"/message")).length,0,"Restore must not replay tools or inference");
+  const transfer=await api('export',{});await new Promise(resolve=>setTimeout(resolve,300));const chunk=await api('export?id='+transfer.id+'&offset=0');assert(chunk.done);const zip=Buffer.from(chunk.data,'base64');assert.equal(zip.readUInt32LE(0),0x04034b50);assert(zip.includes(Buffer.from('persistence.txt')),'The real broker retains a fast archive before its first read');
   console.log("Real engine restored cloud session "+mode+" passed");
 }finally{await app.close();}
 `;
