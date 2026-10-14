@@ -5,6 +5,7 @@ import {EventEmitter} from "node:events";
 import {createHash} from "node:crypto";
 import {setTimeout as delay} from "node:timers/promises";
 import {WorkspaceExport} from "../src/workspace-export.mjs";
+import {spawn} from 'node:child_process';
 
 function processFixture(bytes,{code=0,...options}={}){
   let child;
@@ -16,6 +17,15 @@ function processFixture(bytes,{code=0,...options}={}){
   }});
   return {exporter,child:()=>child};
 }
+
+test('a real fast producer retains bytes when download starts after process exit',async()=>{
+  const bytes=Buffer.alloc(120000,0x61);
+  const exporter=new WorkspaceExport({workspace:process.cwd(),command:()=>process.execPath,spawnChild:(command,_args,settings)=>spawn(command,['-e',"process.stdout.end(Buffer.alloc(120000,0x61))"],settings)});
+  try{const job=exporter.start('owner');assert(await exporter.job.finished);await delay(50);const result=await exporter.read(job.id,'owner',0);assert(result.done);assert.deepEqual(Buffer.from(result.data,'base64'),bytes);}finally{exporter.close();}
+});
+test('successful exit with no archive bytes cannot report an empty download',async()=>{
+  const {exporter}=processFixture(Buffer.alloc(0));const job=exporter.start('owner');await assert.rejects(exporter.read(job.id,'owner',0));assert.equal(exporter.job,null);
+});
 
 test("export chunks bind owner, retain one retry, bound reads and never repeat bytes",async()=>{
   const bytes=Buffer.from("0123456789abcdefghijklmnop"),{exporter,child}=processFixture(bytes);

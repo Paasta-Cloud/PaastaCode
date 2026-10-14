@@ -1,4 +1,5 @@
 import {spawn} from "node:child_process";
+import {PassThrough} from 'node:stream';
 import {createHash,randomBytes} from "node:crypto";
 import {cliPath} from "./deployment.mjs";
 
@@ -15,9 +16,11 @@ export class WorkspaceExport {
     this.close();
     const args=["workspace-export",this.workspace,...(this.privateRoot?["--private-root",this.privateRoot]:[])];
     const child=this.spawnChild(this.command(),args,{windowsHide:true,stdio:["ignore","pipe","pipe"],env:{...process.env,NO_COLOR:"1",PAASTA_RUNTIME_TOKEN:"",PAASTA_RUNTIME_SERVER:""}});
-    const finished=new Promise(resolve=>{child.once("error",()=>resolve(false));child.once("close",code=>resolve(code===0));});
+    // Capture immediately: ChildProcess drains unread stdout when a fast child exits.
+    const output=new PassThrough({highWaterMark:this.chunkSize});child.stdout.pipe(output);
+    const finished=new Promise(resolve=>{child.once("error",()=>{output.destroy();resolve(false);});child.once("close",code=>resolve(code===0));});
     child.stderr.resume();
-    const job={id:randomBytes(24).toString("base64url"),owner,child,finished,reader:child.stdout[Symbol.asyncIterator](),offset:0,tail:Buffer.alloc(0),done:false,last:null,pending:null};
+    const job={id:randomBytes(24).toString("base64url"),owner,child,output,finished,reader:output[Symbol.asyncIterator](),offset:0,tail:Buffer.alloc(0),done:false,last:null,pending:null};
     this.job=job;this.touch(job);
     return {id:job.id,name:"PaastaCode-project.zip",chunkBytes:this.chunkSize};
   }
@@ -41,6 +44,7 @@ export class WorkspaceExport {
           const take=Math.min(this.chunkSize-bytes,job.tail.length);chunks.push(job.tail.subarray(0,take));job.tail=job.tail.subarray(take);bytes+=take;
         }
         if(ended&&!await job.finished)throw failed();
+        if(ended&&!job.offset&&!bytes)throw failed();
         if(this.job!==job)throw failed();
         const data=Buffer.concat(chunks,bytes);
         job.done=ended;job.offset+=bytes;
@@ -54,6 +58,6 @@ export class WorkspaceExport {
   cancel(id,owner){this.owned(id,owner);this.close();return {ok:true};}
   close(){
     const job=this.job;if(!job)return;this.job=null;clearTimeout(job.timer);
-    job.child.kill();job.child.stdout.destroy();job.child.stderr.destroy();
+    job.child.kill();job.output.destroy();job.child.stdout.destroy();job.child.stderr.destroy();
   }
 }
