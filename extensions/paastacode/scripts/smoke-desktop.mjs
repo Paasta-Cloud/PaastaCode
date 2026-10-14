@@ -2,13 +2,14 @@ import {spawn} from "node:child_process";
 import {mkdir,readFile,stat} from "node:fs/promises";
 import {existsSync} from "node:fs";
 import {resolve,join} from "node:path";
-const qa=resolve(".artifacts/desktop-installed-"+process.pid);
-const version=JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
+const qa=resolve(process.env.PAASTACODE_SMOKE_ROOT||".artifacts/desktop-installed-"+process.pid);
+const capture=resolve(process.env.PAASTACODE_SMOKE_OUTPUT||join(qa,"capture"));
+const version=process.env.PAASTACODE_EXPECT_VERSION||JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
 await mkdir(qa,{recursive:true});
-const candidates=process.platform==="win32"?["dist/win-unpacked/PaastaCode.exe"]:process.platform==="darwin"?["dist/mac-arm64/PaastaCode.app/Contents/MacOS/PaastaCode","dist/mac/PaastaCode.app/Contents/MacOS/PaastaCode"]:["/opt/PaastaCode/paastacode","/opt/paastacode/paastacode"];
+const candidates=process.env.PAASTACODE_SMOKE_BINARY?[process.env.PAASTACODE_SMOKE_BINARY]:process.platform==="win32"?["dist/win-unpacked/PaastaCode.exe"]:process.platform==="darwin"?["dist/mac-arm64/PaastaCode.app/Contents/MacOS/PaastaCode","dist/mac/PaastaCode.app/Contents/MacOS/PaastaCode"]:["/opt/PaastaCode/paastacode","/opt/paastacode/paastacode"];
 const binary=candidates.map(path=>resolve(path)).find(path=>existsSync(path));
 if(!binary)throw new Error("Packaged desktop executable not found; Linux acceptance requires installing the built deb first.");
-const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",...(process.env.CI?{PAASTACODE_DESKTOP_VISIBLE_SMOKE:"1"}:{}),PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:join(qa,"capture")};
+const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",...(process.env.CI?{PAASTACODE_DESKTOP_VISIBLE_SMOKE:"1"}:{}),PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:capture};
 let output="",diagnostic="";
 await new Promise((done,reject)=>{
   const child=spawn(binary,["--workspace="+qa,"--user-data-dir="+join(qa,"user-data")],{env,windowsHide:true,stdio:["ignore","pipe","pipe"]});
@@ -18,8 +19,8 @@ await new Promise((done,reject)=>{
   child.once("error",error=>{clearTimeout(timeout);reject(error);});
   child.once("exit",code=>{clearTimeout(timeout);if(code===0&&output.includes("PaastaCode desktop smoke passed"))done();else reject(new Error("Packaged desktop acceptance failed ("+code+"): "+diagnostic.replace(/paasta(?:_ai)?_[A-Za-z0-9_-]{43}/g,"[redacted]").replaceAll(qa,"[QA profile]")));});
 });
-const png=await readFile(join(qa,"capture/desktop.png"));
-if(png.subarray(0,8).toString("hex")!=="89504e470d0a1a0a"||(await stat(join(qa,"capture/desktop.png"))).size<10000)throw new Error("Desktop capture missing or invalid");
+const png=await readFile(join(capture,"desktop.png"));
+if(png.subarray(0,8).toString("hex")!=="89504e470d0a1a0a"||(await stat(join(capture,"desktop.png"))).size<10000)throw new Error("Desktop capture missing or invalid");
 console.log("Packaged desktop executed with an isolated profile; Persian RTL, local font and preload passed on "+process.platform+"/"+process.arch);
 // Closing the actual packaged window must leave its shared workspace broker alive.
 process.env.PAASTACODE_HOME=join(qa,"account");
