@@ -2,7 +2,7 @@ export function conversationExport(saved){
   if(!/^[a-f0-9-]{36}$/i.test(saved.id)||saved.snapshot?.version!==1||!Array.isArray(saved.snapshot.messages))throw new Error("گفتگو برای خروجی گرفتن معتبر نیست.");
   return JSON.stringify({version:1,title:saved.title,messages:saved.snapshot.messages.map(({role,text})=>({role,text}))},null,2)+"\n";
 }
-export function cloudActions({saved,api,run,notice,isCurrent,onDeleted,getState}){
+export function cloudActions({saved,api,run,notice,isCurrent,onDeleted,getState,readOnly=false}){
   const actions=document.createElement("div");actions.className="cloud-actions";
   const download=document.createElement("button");download.type="button";download.textContent="دریافت فایل گفتگو";
   download.onclick=()=>run(download,async()=>{
@@ -10,6 +10,7 @@ export function cloudActions({saved,api,run,notice,isCurrent,onDeleted,getState}
     const url=URL.createObjectURL(new Blob([conversationExport(saved)],{type:"application/json;charset=utf-8"}));
     const link=document.createElement("a");link.href=url;link.download="paastacode-conversation-"+saved.id+".json";document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
   });
+  if(readOnly){actions.append(download);return actions;}
   const remove=document.createElement("button");remove.type="button";remove.className="danger-action";remove.textContent="حذف از حساب";
   const safeDelete=saved.features?.conditionalDelete===true&&getState().features?.conditionalDelete===true;
   remove.disabled=!safeDelete;
