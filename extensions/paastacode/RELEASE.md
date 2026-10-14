@@ -1,4 +1,6 @@
-# PaastaCode 0.2.0-beta.9 / پاستاکد
+# PaastaCode 0.2.0-beta.10 / پاستاکد
+
+Enter sends the request; Shift+Enter inserts a new line. Attach UTF-8 source/text, screenshots or a PDF through the picker, drag/drop, clipboard images or CLI `--attach=PATH`. Image/PDF delivery requires matching live model capabilities. Limits: eight files, four MiB each and six MiB combined. Attachments survive a rejected send; account text backups retain names rather than file bytes.
 
 بسته‌های نصب دسکتاپ، وب محلی، CLI و افزونهٔ VS Code با رابط فارسی و راست‌چین و فونت یکان.
 

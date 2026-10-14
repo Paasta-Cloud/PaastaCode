@@ -23,7 +23,7 @@ export async function cloudGateway({broker,secret,port=8080,host="0.0.0.0"}){
     const abort=new AbortController();const timer=setTimeout(()=>abort.abort(),60_000);response.once("close",()=>abort.abort());
     try{
       const chunks=[];let size=0;
-      for await(const chunk of request){size+=chunk.length;if(size>maxBody){request.resume();json(response,413,{error:"حجم درخواست بیش از حد مجاز است."});return;}chunks.push(chunk);}
+      for await(const chunk of request){size+=chunk.length;if(size>(request.method==="POST"&&url.pathname==="/api/prompt"?10*1024*1024:maxBody)){request.resume();json(response,413,{error:"حجم درخواست بیش از حد مجاز است."});return;}chunks.push(chunk);}
       const headers={Authorization:"Bearer "+broker.capability,"Content-Type":"application/json"};
       const revision=request.headers["x-paastacode-account"];
       if(typeof revision==="string"&&/^\d{1,15}$/.test(revision))headers["X-PaastaCode-Account"]=revision;
