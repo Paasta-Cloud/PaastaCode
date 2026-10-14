@@ -11,6 +11,12 @@ export function consoleUrl(value=process.env.PAASTACODE_CONSOLE||"https://consol
     (url.protocol!=="https:" && !(url.protocol==="http:"&&["127.0.0.1","localhost"].includes(url.hostname))))throw new Error("آدرس پاستا معتبر نیست.");
   return url.origin;
 }
+export function billingUrl(origin,account){
+  const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if(!uuid.test(account?.id||'')||!uuid.test(account?.tenantId||''))return null;
+  const base=consoleUrl(origin),path=['https://console.paasta.cloud','https://paasta.cloud'].includes(base)?'https://code.paasta.cloud/billing.html':base+'/api/paastacode/web/billing.html';
+  return path+'#owner='+encodeURIComponent(account.id+':'+account.tenantId);
+}
 async function protect(bytes,decode=false){
   if(process.platform!=="win32")return bytes;
   // DPAPI binds saved tokens to the signed-in Windows account; bytes travel only over stdin/stdout.

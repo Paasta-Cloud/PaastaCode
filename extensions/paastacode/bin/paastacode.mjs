@@ -4,7 +4,7 @@ import {resolve,join,dirname,basename} from "node:path";
 import {realpath,readFile,stat} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 import {createInterface} from "node:readline/promises";
-import {PaastaAccount} from "../src/account.mjs";
+import {PaastaAccount,billingUrl} from "../src/account.mjs";
 import {connectWorkspace,stopWorkspace,refreshAccounts} from "../src/workspace-service.mjs";
 import {engineCommand} from "../src/runtime.mjs";
 import {codingModels} from "../src/models.mjs";
@@ -32,7 +32,7 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
@@ -68,6 +68,11 @@ async function main(){
   }
   if(command==="logout"){await account.logout();await refreshAccounts();console.log("دسترسی دستگاه لغو شد.");return;}
   if(command==="stop"){const result=await stopWorkspace(workspace);console.log(result.stopped?"اجرای مشترک این پروژه متوقف شد. فایل‌ها و گفتگوها باقی می‌مانند.":"این پروژه اجرای فعالی ندارد.");return;}
+  if(command==="billing"){
+    const context=await account.context(),url=billingUrl(account.origin,context.account);if(!url)throw new Error("برای مدیریت مصرف با حساب پاستا وارد شوید.");
+    if(args.includes('--check')){const status=await account.request('/api/paastacode/subscription');console.log('روش مصرف: '+({subscription:'اشتراک',payg:'کیف پول',paused:'متوقف'}[status.mode]||status.mode));if(status.current)console.log('باقی‌ماندهٔ هفته: '+status.current.quotas.week.remainingToman.toLocaleString('fa-IR')+' تومان');if(status.paygBudget?.configured)console.log('باقی‌ماندهٔ سقف مشترک کیف پول: '+status.paygBudget.remainingToman.toLocaleString('fa-IR')+' تومان');console.log('مدیریت حساب: '+url);}
+    else{console.log('مدیریت اشتراک و مصرف در مرورگر حساب پاستا باز می‌شود:\n'+url);openBrowser(url);}return;
+  }
   if(command==="models"){
     const context=await account.context();
     for(const model of codingModels(context.models))console.log(model.id+" · "+model.name+" · "+Number(model.input_toman_per_million).toLocaleString("fa-IR")+" / "+Number(model.output_toman_per_million).toLocaleString("fa-IR")+" تومان برای هر میلیون توکن ورودی / خروجی");return;

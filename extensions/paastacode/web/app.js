@@ -1,4 +1,4 @@
-import {promptInput,labelDialog,icon} from "./components.js";
+import {enhanceSelects,promptInput,labelDialog,icon} from "./components.js";
 import {deploymentUI} from "./deployment.js";
 import {connectHosted,hostedOrigin,runtimeRequest,invalidateHosted} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
@@ -8,10 +8,13 @@ import {workbench} from "./workbench.js";
 import {gitUI} from "./git-ui.js";
 import {updatesUI} from "./updates.js";
 const $=id=>document.getElementById(id);
+enhanceSelects();
+$("send").replaceChildren(icon("arrowUp"));
+$("send").title="ارسال درخواست (Enter)";
 let theme="dark";try{theme=localStorage.getItem("paastacode-theme")==="light"?"light":"dark";}catch{}
 function setTheme(value){theme=value;document.documentElement.dataset.theme=value;$("theme-toggle").replaceChildren(icon(value==="dark"?"sun":"moon"),document.createTextNode(value==="dark"?"نمای روشن":"نمای تیره"));$("theme-toggle").setAttribute("aria-pressed",String(value==="light"));}
 setTheme(theme);$("theme-toggle").onclick=()=>{setTheme(theme==="dark"?"light":"dark");try{localStorage.setItem("paastacode-theme",theme);}catch{}};
-for(const [id,name] of Object.entries({attach:"attach","hosted-open":"folder","deploy-open":"deploy","import-open":"import","devices-open":"devices","updates-open":"update","open-workspace":"folder",save:"save"}))$(id).prepend(icon(name));
+for(const [id,name] of Object.entries({attach:"attach","hosted-open":"folder","deploy-open":"deploy","import-open":"import","devices-open":"devices","billing-open":"wallet","updates-open":"update","open-workspace":"folder",save:"save"}))$(id).prepend(icon(name));
 document.querySelector(".session-search").prepend(icon("search"));document.querySelector(".empty").prepend(icon("code"));
 const bench=workbench();
 const resizePrompt=promptInput($("prompt"));
@@ -133,6 +136,7 @@ async function loadState(){
   devices.update(state);
   if(!state.configured)conversationSync.hide();
   $("account-name").textContent=state.account?.name||"حساب پاستا";
+  $('billing-open').hidden=!state.billingUrl;if(state.billingUrl)$('billing-open').href=state.billingUrl;
   $("account-detail").textContent=state.account?Number(state.account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار":"هنوز وارد نشدی";
   $("logout").hidden=!state.connected;$("login").hidden=state.connected;
   $("budget-form").hidden=!state.connected||state.configured;

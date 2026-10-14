@@ -3,7 +3,7 @@ import {randomBytes,timingSafeEqual,createHash} from "node:crypto";
 import {readFile,mkdir,rm,realpath,open,stat} from "node:fs/promises";
 import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
-import {PaastaAccount,stateHome,readPrivate,writePrivate} from "./account.mjs";
+import {PaastaAccount,billingUrl,stateHome,readPrivate,writePrivate} from "./account.mjs";
 import {CodeRuntime,providerConfig,workspaceKey,normalizedPath,paastaMcpConfig} from "./runtime.mjs";
 import {codingModels,workflowModels} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
@@ -217,7 +217,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-account:context?.account,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+        account:context?.account,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
