@@ -11,6 +11,8 @@ const name="paastacode-cloud-qa-"+randomBytes(6).toString("hex"),volume=name+"-d
 await writeFile(join(directory,"token"),secret,{mode:0o444});await chmod(directory,0o755);
 const docker=async args=>(await execute("docker",args,{timeout:120_000,maxBuffer:1024*1024})).stdout.trim();
 let created=false,createdVolume=false;
+const archiveCheck="const fs=require('fs'),{spawnSync}=require('child_process');if(!fs.existsSync('/data/workspace/account-link'))fs.symlinkSync('/data/account','/data/workspace/account-link');const result=spawnSync('/opt/paastacode/engine/paasta',['workspace-export','/data/workspace','--private-root','/data/account'],{maxBuffer:1048576});if(result.status!==0)throw Error('Native workspace export failed');fs.writeFileSync('/data/qa-project.zip',result.stdout);";
+const verifyArchive="import zipfile; z=zipfile.ZipFile('/data/qa-project.zip'); assert z.testzip() is None; assert z.read('persistence.txt') == b'retained synthetic project'; assert not any(n.startswith('account-link') for n in z.namelist()); print('native ZIP verified')";
 const restoreCheck=`
 import assert from "node:assert/strict";
 import {readFile,writeFile} from "node:fs/promises";
@@ -53,11 +55,13 @@ try{
   await docker(["exec",name,"/opt/paastacode/engine/paasta","--version"]);
   await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"write"]);
   await docker(["exec",name,"node","-e","const fs=require('fs');fs.mkdirSync('/data/account',{recursive:true});fs.writeFileSync('/data/account/account.json',JSON.stringify({origin:'http://127.0.0.1:1',token:'paasta_'+ 'a'.repeat(43)}),{mode:0o600});"]);
+  await docker(['exec',name,'node','-e',archiveCheck]);assert.equal(await docker(['exec',name,'python3','-c',verifyArchive]),'native ZIP verified');
   await docker(["stop","--time","40",name]);await docker(["rm",name]);created=false;
   url=await launch();const state=await fetch(url+"/api/state",{headers});assert.equal(state.status,200);assert.equal((await state.json()).connected,false);
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(String(require('fs').existsSync('/data/account/account.json')))"]),"true");
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(require('fs').readFileSync('/data/workspace/persistence.txt','utf8'))"]),"retained synthetic project");
   await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"read"]);
+  await docker(['exec',name,'node','-e',archiveCheck]);assert.equal(await docker(['exec',name,'python3','-c',verifyArchive]),'native ZIP verified');
   console.log("Cloud container acceptance passed: required owner, unverified login recovery, private API, non-root/read-only runtime, real engine/CLI, project and restored-session persistence across container replacement; no tool/inference replay");
 }finally{
   if(created){await docker(["stop","--time","40",name]).catch(()=>{});await docker(["rm","--force",name]).catch(()=>{});}
