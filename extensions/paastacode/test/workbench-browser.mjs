@@ -30,6 +30,15 @@ try{
   messages.at(-2).parts[0].state.output+="\n// Streaming output";
   await page.getByText("// Streaming output",{exact:false}).waitFor();
   assert(await page.locator(".tool").evaluate(e=>e.open),"Expanded tool reports survive updates");
+  messages.at(-2).parts[0].tool="bash";
+  messages.at(-2).parts[0].state={status:"running",input:{command:"npm run build"},time:{start:Date.now()-65000},metadata:{output:"Building project: live stdout"}};
+  await page.getByText("Building project: live stdout",{exact:true}).waitFor();
+  await page.waitForFunction(()=>document.querySelector('.tool-status').textContent.includes('ثانیه'));
+  messages.at(-2).parts[0].state.metadata.output="";
+  await page.getByText("هنوز خروجی‌ای دریافت نشده است.",{exact:true}).waitFor();
+  messages.at(-2).parts[0].state={status:"completed",input:{command:"npm run build"},output:"Build completed"};
+  await page.getByText("Build completed",{exact:true}).waitFor();
+  assert.equal(await page.locator('.tool-status').innerText(),"انجام شد");
   await page.evaluate(()=>document.querySelector("#conversation").scrollTo(0,0));
   await page.waitForTimeout(80);
   messages.push({info:{id:"msg_new",role:"assistant"},parts:[{type:"text",text:"این خروجی تازه است و نباید اسکرول دستی را جابه‌جا کند."}]});
