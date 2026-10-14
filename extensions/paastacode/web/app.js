@@ -29,7 +29,7 @@ async function addAttachments(files){
   if(attachments.length+selected.length>8){notice("حداکثر ۸ فایل به هر درخواست پیوست کنید.",true);return;}
   if(selected.some(file=>file.size>4*1024*1024)||[...attachments,...selected].reduce((sum,file)=>sum+file.size,0)>6*1024*1024){notice("هر فایل حداکثر ۴ مگابایت و مجموع پیوست‌ها حداکثر ۶ مگابایت است.",true);return;}
   attachmentLoading=true;$("send").disabled=true;renderAttachments();
-  try{const added=await Promise.all(selected.map(file=>new Promise((done,fail)=>{const reader=new FileReader();reader.onerror=()=>fail(new Error("خواندن فایل انجام نشد؛ دوباره انتخاب کنید."));reader.onload=()=>done({name:file.name,size:file.size,data:String(reader.result).split(",")[1]});reader.readAsDataURL(file);})));if(revision===attachmentRevision){attachments.push(...added);notice("");}}
+  try{const added=await Promise.all(selected.map(async file=>{if(["image/png","image/jpeg","image/gif","image/webp"].includes(file.type)){try{const image=await createImageBitmap(file);image.close();}catch{throw new Error("تصویر "+file.name+" قابل خواندن نیست؛ فایل سالمی انتخاب کنید.");}}return new Promise((done,fail)=>{const reader=new FileReader();reader.onerror=()=>fail(new Error("خواندن فایل انجام نشد؛ دوباره انتخاب کنید."));reader.onload=()=>done({name:file.name,size:file.size,data:String(reader.result).split(",")[1]});reader.readAsDataURL(file);});}));if(revision===attachmentRevision){attachments.push(...added);notice("");}}
   catch(error){if(revision===attachmentRevision)notice(error.message,true);}
   finally{if(revision===attachmentRevision){attachmentLoading=false;$("attachment-files").value="";$("send").disabled=promptPending;renderAttachments();}}
 }
