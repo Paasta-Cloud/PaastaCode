@@ -21,7 +21,7 @@ export function providerConfig(models,key,origin){
   if(!eligible.length)throw new Error("مدل مناسب کدنویسی در کاتالوگ فعال پاستا پیدا نشد.");
   return {enabled_providers:["paasta"],model:"paasta/"+eligible[0].id,small_model:"paasta/"+eligible[0].id,
     provider:{paasta:{npm:"@ai-sdk/openai-compatible",name:"پاستا",options:{baseURL:origin+"/api/ai/v1",apiKey:key},
-      models:Object.fromEntries(eligible.map(m=>[m.id,{name:m.name||m.id,toolcall:true,
+      models:Object.fromEntries(eligible.map(m=>[m.id,{name:m.name||m.id,toolcall:true,attachment:m.input_modalities?.some(v=>v==="image"||v==="file")||false,modalities:{input:["text",...(m.input_modalities||[]).filter(v=>["image","pdf"].includes(v)||v==="file").map(v=>v==="file"?"pdf":v)],output:["text"]},
         limit:{context:Number(m.context_length)||32000,output:Number(m.max_output_tokens)||4096}}]))}},
     share:"disabled",autoupdate:false,plugin:[],permission:{"*":"ask",read:{"*":"allow","*.env":"deny","*.env.*":"deny","*.pem":"deny","*.key":"deny"},glob:"allow",grep:"allow",external_directory:"deny",question:"deny"},
     agent:{build:{prompt:"با کاربر فارسی صحبت کن. کد، مسیرها، شناسه‌ها و دستورها را با زبان و قالب اصلی نگه دار. پیش از تغییر، پروژه را بررسی کن. نتیجهٔ واقعی و محدودیت‌ها را شفاف بگو."},

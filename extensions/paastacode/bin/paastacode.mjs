@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
-import {resolve,join,dirname} from "node:path";
+import {resolve,join,dirname,basename} from "node:path";
 import {realpath,readFile,stat} from "node:fs/promises";
 import {pathToFileURL} from "node:url";
 import {createInterface} from "node:readline/promises";
@@ -47,9 +47,14 @@ async function main(){
       if(!args.includes("--apply")){console.log("فقط پیش‌نمایش؛ برای ورود همین متن، دستور را با --apply اجرا کنید.");return;}
       const result=await api("import",{token:preview.token});console.log("گفتگو وارد شد: "+result.session.id);return;
     }
-    if(!value("model")||(!value("text")&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
+    const paths=args.filter(arg=>arg.startsWith("--attach=")).map(arg=>arg.slice(9)),attachments=[];
+    if(paths.length>8)throw new Error("حداکثر ۸ فایل پیوست کنید.");
+    if(paths.length&&!(await api("state")).features?.promptAttachments)throw new Error("برای پیوست فایل، اجرای پاستاکد این پروژه را به‌روز کنید.");
+    let attachmentBytes=0;
+    for(const path of paths){const info=await stat(path);attachmentBytes+=info.size;if(!info.isFile()||info.size>4*1024*1024||attachmentBytes>6*1024*1024)throw new Error("هر فایل حداکثر ۴ مگابایت و مجموع پیوست‌ها حداکثر ۶ مگابایت است.");attachments.push({name:basename(path),data:(await readFile(path)).toString("base64")});}
+    if(!value("model")||(!value("text")&&!attachments.length&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
     const id=value("session")||(await api("sessions",{})).id;
-    const result=await api("prompt",{id,text:value("text")||"ادامهٔ درخواست",model:value("model"),phase:args.includes("--auto")?"plan":value("phase")||"build",executionModel:value("execution-model"),autoExecute:args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
+    const result=await api("prompt",{id,text:value("text")||(attachments.length?"پیوست‌ها را بررسی کن.":"ادامهٔ درخواست"),attachments,model:value("model"),phase:args.includes("--auto")?"plan":value("phase")||"build",executionModel:value("execution-model"),autoExecute:args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
     console.log("درخواست پذیرفته شد: "+id+" · "+result.workflow.phase+"\nبرای مشاهدهٔ خروجی: paastacode cli یا paastacode web");return;
   }
   if(command==="login"){

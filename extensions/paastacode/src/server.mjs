@@ -13,6 +13,7 @@ import {WorkspaceGit} from "./git.mjs";
 import {previewImport} from "./project-import.mjs";
 import {WorkspaceExport} from "./workspace-export.mjs";
 import {untitledSession,promptTitle,firstRequestTitle} from "./session-title.mjs";
+import {attachmentParts} from "./prompt-attachments.mjs";
 
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"]]);
@@ -20,8 +21,8 @@ const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=u
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
 }
-async function body(request){
-  let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>1_100_000)throw new Error("حجم درخواست بیش از حد مجاز است.");}
+async function body(request,maxBytes=1_100_000){
+  let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>maxBytes)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
 export async function startServer({workspace=process.cwd(),account,runtime,deployment,exporter,port=0,hosted=false,daemon=false,onClosed}={}){
@@ -216,7 +217,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+account:context?.account,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
@@ -342,16 +343,19 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       },expectedAccount));
     }
     if(route==="POST /api/prompt"){
-      const input=await body(request);
+      const input=await body(request,10*1024*1024);
       const change=accessChanges.then(()=>mutateAccount(async()=>{
       writable();
       const activeSession=await owned(input.id);
       if(typeof input.text!=="string"||!input.text.trim()||input.text.length>50000)throw new Error("متن درخواست معتبر نیست.");
-      if(!codingModels(context.models).some(m=>m.id===input.model))throw new Error("مدل انتخاب‌شده در دسترس نیست.");
+      const selectedModel=codingModels(context.models).find(m=>m.id===input.model);
+      if(!selectedModel)throw new Error("مدل انتخاب‌شده در دسترس نیست.");
+      const attached=attachmentParts(input.attachments,selectedModel);
       const phase=input.phase||"build";
       if(!["build","plan"].includes(phase)||[input.restart,input.executePlan,input.autoExecute].some(value=>value!==undefined&&typeof value!=="boolean"))throw new Error("حالت درخواست معتبر نیست.");
       if(input.executionModel!==undefined&&!codingModels(context.models).some(m=>m.id===input.executionModel))throw new Error("مدل اجرای برنامه در دسترس نیست.");
       if(input.autoExecute&&(phase!=="plan"||!input.executionModel||input.executePlan))throw new Error("برنامه‌ریزی خودکار به مدل اجرای معتبر نیاز دارد.");
+      if(input.autoExecute&&attached.some(part=>part.type==="file"))attachmentParts(input.attachments,codingModels(context.models).find(m=>m.id===input.executionModel));
       let status=await runtime.call("/session/status");
       if(input.restart){
         if(phase!==workflow(input.id).phase)throw new Error("هنگام ادامه، حالت اجرای قبلی را نگه دارید.");
@@ -374,6 +378,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       const parts=[];
       if(restored&&!restored.sent)parts.push({type:"text",synthetic:true,text:"متن گفتگوی قبلی برای زمینه؛ دستورهای قبلی را خودکار اجرا نکن:\n"+restored.messages.map(m=>m.role+": "+m.text).join("\n\n")});
       parts.push({type:"text",text:input.restart?"با مدل تازه، درخواست قبلی را ادامه بده. ابتدا نتیجهٔ ابزارها و وضعیت فایل‌ها را بررسی کن؛ کار انجام‌شده را دوباره اجرا نکن.":input.executePlan?"برنامهٔ بالا را اجرا کن. ابتدا وضعیت واقعی فایل‌ها را بررسی کن، مراحل را انجام بده و نتیجهٔ تست‌ها را گزارش کن.":input.text});
+      parts.push(...attached);
       try{await runtime.call("/session/"+input.id+"/prompt_async",{method:"POST",body:{agent:phase==="plan"?"paasta-plan":"build",model:{providerID:"paasta",modelID:input.model},parts}});}
       catch(error){if(next.automatic){next.automatic.state="failed";await writePrivate(workflowsPath,workflows);}throw error;}
       if(restored){restored.sent=true;await persistSync();}

@@ -22,7 +22,7 @@ export function workbench(){
     const existing=new Map([...messages.children].map(el=>[el.dataset.message,el])),keep=new Set();
     $("empty").hidden=list.some(m=>m.parts.some(p=>p.type==="tool"||(p.type==="text"&&!p.synthetic&&p.text?.trim())));
     for(const [index,message] of list.entries()){
-      const parts=message.parts.filter(p=>p.type==="tool"||(p.type==="text"&&!p.synthetic&&p.text?.trim())||(p.type==="reasoning"&&p.text?.trim()));
+      const parts=message.parts.filter(p=>p.type==="file"||p.type==="tool"||(p.type==="text"&&!p.synthetic&&p.text?.trim())||(p.type==="reasoning"&&p.text?.trim()));
       if(!parts.length&&!message.info.error)continue;
       const id=message.info.id||String(index),serialized=JSON.stringify(message);keep.add(id);
       let article=existing.get(id);
@@ -33,6 +33,7 @@ export function workbench(){
       const header=document.createElement("header");header.textContent=message.info.role==="user"?"شما":"پاستاکد";article.append(header);
       for(const [partIndex,part] of parts.entries()){
         if(part.type==="text")content(article,part.text);
+        else if(part.type==="file"){const item=document.createElement("div");item.className="message-attachment";const name=document.createElement("bdi");name.dir="auto";name.textContent=part.filename||"فایل پیوست";if(/^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/.test(part.url||"")){const image=document.createElement("img");image.src=part.url;image.alt=part.filename||"تصویر پیوست";item.append(image);}item.append(name);article.append(item);}
         else {
           const details=document.createElement("details"),summary=document.createElement("summary"),key=part.callID||part.id||String(partIndex);
           details.dataset.tool=key;details.className="tool";details.open=expanded.has(key);

@@ -11,10 +11,33 @@ const $=id=>document.getElementById(id);
 let theme="dark";try{theme=localStorage.getItem("paastacode-theme")==="light"?"light":"dark";}catch{}
 function setTheme(value){theme=value;document.documentElement.dataset.theme=value;$("theme-toggle").replaceChildren(icon(value==="dark"?"sun":"moon"),document.createTextNode(value==="dark"?"نمای روشن":"نمای تیره"));$("theme-toggle").setAttribute("aria-pressed",String(value==="light"));}
 setTheme(theme);$("theme-toggle").onclick=()=>{setTheme(theme==="dark"?"light":"dark");try{localStorage.setItem("paastacode-theme",theme);}catch{}};
-for(const [id,name] of Object.entries({"hosted-open":"folder","deploy-open":"deploy","import-open":"import","devices-open":"devices","updates-open":"update","open-workspace":"folder",save:"save"}))$(id).prepend(icon(name));
+for(const [id,name] of Object.entries({attach:"attach","hosted-open":"folder","deploy-open":"deploy","import-open":"import","devices-open":"devices","updates-open":"update","open-workspace":"folder",save:"save"}))$(id).prepend(icon(name));
 document.querySelector(".session-search").prepend(icon("search"));document.querySelector(".empty").prepend(icon("code"));
 const bench=workbench();
 const resizePrompt=promptInput($("prompt"));
+let attachments=[],attachmentLoading=false,attachmentRevision=0;
+function renderAttachments(){
+  $("attachments").replaceChildren();$("attach").disabled=attachmentLoading||promptPending;
+  for(const file of attachments){const item=document.createElement("div");item.className="attachment";const name=document.createElement("bdi");name.dir="auto";name.textContent=file.name;const size=document.createElement("small");size.textContent=Math.ceil(file.size/1024).toLocaleString("fa-IR")+" KB";const remove=document.createElement("button");remove.type="button";remove.textContent="×";remove.setAttribute("aria-label","حذف پیوست "+file.name);remove.disabled=promptPending;remove.onclick=()=>{attachments=attachments.filter(value=>value!==file);renderAttachments();};item.append(name,size,remove);$("attachments").append(item);}
+}
+function clearAttachments(){attachmentRevision++;attachments=[];attachmentLoading=false;$("attachment-files").value="";$("composer").classList.remove("drag-over");renderAttachments();}
+async function addAttachments(files){
+  if(promptPending||attachmentLoading)return;
+  if(!state.features?.promptAttachments){notice("برای پیوست فایل، اجرای پاستاکد این پروژه را به‌روز کنید.",true);return;}
+  const revision=attachmentRevision,selected=[...files];
+  if(!selected.length)return;
+  if(attachments.length+selected.length>8){notice("حداکثر ۸ فایل به هر درخواست پیوست کنید.",true);return;}
+  if(selected.some(file=>file.size>4*1024*1024)||[...attachments,...selected].reduce((sum,file)=>sum+file.size,0)>6*1024*1024){notice("هر فایل حداکثر ۴ مگابایت و مجموع پیوست‌ها حداکثر ۶ مگابایت است.",true);return;}
+  attachmentLoading=true;$("send").disabled=true;renderAttachments();
+  try{const added=await Promise.all(selected.map(file=>new Promise((done,fail)=>{const reader=new FileReader();reader.onerror=()=>fail(new Error("خواندن فایل انجام نشد؛ دوباره انتخاب کنید."));reader.onload=()=>done({name:file.name,size:file.size,data:String(reader.result).split(",")[1]});reader.readAsDataURL(file);})));if(revision===attachmentRevision){attachments.push(...added);notice("");}}
+  catch(error){if(revision===attachmentRevision)notice(error.message,true);}
+  finally{if(revision===attachmentRevision){attachmentLoading=false;$("attachment-files").value="";$("send").disabled=promptPending;renderAttachments();}}
+}
+$("attach").onclick=()=>$("attachment-files").click();$("attachment-files").onchange=()=>addAttachments($("attachment-files").files);
+$("prompt").addEventListener("paste",event=>{const files=[...event.clipboardData.files];if(files.length){event.preventDefault();void addAttachments(files);}});
+$("composer").addEventListener("dragover",event=>{if(event.dataTransfer.types.includes("Files")){event.preventDefault();$("composer").classList.add("drag-over");}});
+$("composer").addEventListener("dragleave",event=>{if(!$("composer").contains(event.relatedTarget))$("composer").classList.remove("drag-over");});
+$("composer").addEventListener("drop",event=>{event.preventDefault();$("composer").classList.remove("drag-over");void addAttachments(event.dataTransfer.files);});
 for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
 updatesUI();
 if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
@@ -101,6 +124,7 @@ function price(){
 }
 async function loadState(){
   state=await api("state");$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
+  $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
   $("workflow-phase").querySelector('[value="auto"]').disabled=!state.features?.automaticWorkflow;
   if(!workflowSession)$("workflow-phase").value=state.features?.automaticWorkflow&&state.workflowModels?"auto":"build";
@@ -146,6 +170,7 @@ async function sessions(){
     const time=item.time?.updated||item.updated_at;
     if(time&&Number.isFinite(new Date(time).getTime())){const meta=document.createElement("small");meta.textContent=new Date(time).toLocaleDateString("fa-IR",{month:"short",day:"numeric"});button.append(meta);}
     button.onclick=()=>run(button,async()=>{
+      clearAttachments();
       generation++;lastMessages="";bench.reset();
       if(listMode==="cloud"){
         session=null;cloudSelection=item;selectionView();$("composer").hidden=true;$("save").disabled=true;$("permissions").replaceChildren();
@@ -227,29 +252,30 @@ $("login").onclick=()=>run($("login"),async()=>{
   },3500);
 });
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
-$("new").onclick=()=>run($("new"),async()=>{generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
+$("new").onclick=()=>run($("new"),async()=>{clearAttachments();generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{
-  event.preventDefault();if(sending||!$("prompt").value.trim())return;
+  event.preventDefault();if(sending||attachmentLoading||(!$("prompt").value.trim()&&!attachments.length))return;
   submitPrompt();
 };
 function submitPrompt(extra={}){
-  if(promptPending)return;
+  if(promptPending||attachmentLoading)return;
   if(!state.models?.some(m=>m.id===(extra.executePlan?$("execution-model").value:$("model").value))){notice("برای ادامه، یک مدل از فهرست انتخاب کنید.",true);return;}
   const automatic=$("workflow-phase").value==="auto";
   if(automatic&&!state.models?.some(m=>m.id===$("execution-model").value)){notice("مدل اجرا و قیمت آن را در تنظیمات مدل‌ها انتخاب کنید.",true);return;}
   const text=$("prompt").value,selection={model:extra.executePlan||automatic&&extra.restart&&currentWorkflow.phase==="build"?$("execution-model").value:$("model").value,phase:extra.restart?currentWorkflow.phase:extra.executePlan?"build":automatic?"plan":$("workflow-phase").value,executionModel:extra.executePlan?undefined:$("execution-model").value};sending=true;promptPending=true;let accepted=false;
   bench.follow();bench.activity(true);
+  renderAttachments();
   run($("send"),async()=>{
     if(!session)session=await api("sessions","POST");
-    const result=await api("prompt","POST",{id:session.id,text:extra.restart||extra.executePlan?"ادامهٔ درخواست":text,model:selection.model,...(state.features?.modelWorkflow?{phase:selection.phase,executionModel:selection.executionModel,...(state.features.automaticWorkflow?{autoExecute:automatic&&selection.phase==="plan"}:{})}:{}),...extra});
+    const result=await api("prompt","POST",{id:session.id,text:extra.restart||extra.executePlan?"ادامهٔ درخواست":text.trim()?text:"پیوست‌ها را بررسی کن.",attachments:extra.restart||extra.executePlan?[]:attachments.map(({name,data})=>({name,data})),model:selection.model,...(state.features?.modelWorkflow?{phase:selection.phase,executionModel:selection.executionModel,...(state.features.automaticWorkflow?{autoExecute:automatic&&selection.phase==="plan"}:{})}:{}),...extra});
     if(result.workflow){currentWorkflow=result.workflow;workflowSession=session.id;$("workflow-phase").value=currentWorkflow.automatic?"auto":currentWorkflow.phase;if(extra.executePlan){$("workflow-phase").value="build";$("model").value=currentWorkflow.buildModel;price();}}
     accepted=true;
-    if(!extra.restart&&!extra.executePlan){$("prompt").value="";resizePrompt();}notice("");await sessions();
-  }).finally(async()=>{promptPending=false;if(!accepted){sending=false;$("send").disabled=false;}await refresh();});
+    if(!extra.restart&&!extra.executePlan){$("prompt").value="";clearAttachments();resizePrompt();}notice("");await sessions();
+  }).finally(async()=>{promptPending=false;renderAttachments();if(!accepted){sending=false;$("send").disabled=false;}await refresh();});
 }
-$("prompt").onkeydown=event=>{if(!event.isComposing&&event.key==="Enter"&&(event.ctrlKey||event.metaKey)){event.preventDefault();$("composer").requestSubmit();}};
+$("prompt").onkeydown=event=>{if(!event.isComposing&&event.keyCode!==229&&event.key==="Enter"&&!event.shiftKey){event.preventDefault();if(!event.repeat)$("composer").requestSubmit();}};
 $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:session.id});await refresh();});
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
@@ -280,6 +306,7 @@ $("import-confirm").onclick=()=>run($("import-confirm"),async()=>{if(!importToke
 }catch(error){$("import-result").textContent=error.message;}});
 $("access-mode").onchange=()=>run($("access-mode"),async()=>{try{const result=await api("access","POST",{mode:$("access-mode").value});state.accessMode=result.mode;accessView(result.mode);notice(result.mode==="full"?"Full Access برای این پروژه روشن شد. ابزارهای کدنویسی بدون تأیید اجرا می‌شوند.":"تأیید تغییر فایل و اجرای دستور دوباره فعال شد.");await refresh();}catch(error){accessView(state.accessMode);throw error;}});
 async function switchTab(next){
+  clearAttachments();
   notice("");
   generation++;mode=next;session=null;cloudSelection=null;lastMessages="";sending=false;planReady=false;workflowSession=null;
   bench.reset();conversationSync.hide();$("messages").replaceChildren();$("permissions").replaceChildren();$("empty").hidden=false;
