@@ -36,6 +36,7 @@ export class CodeRuntime{
       ...process.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
       OPENCODE_SERVER_PASSWORD:this.password,OPENCODE_CONFIG_CONTENT:JSON.stringify(config),
       OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});
+    const engineProcess=this.process;
     await new Promise((resolveReady,reject)=>{
       const timeout=setTimeout(()=>reject(new Error("موتور کدنویسی شروع نشد. دوباره تلاش کنید.")),45000);
       const done=(error)=>{clearTimeout(timeout);error?reject(error):resolveReady();};
@@ -46,7 +47,7 @@ export class CodeRuntime{
         if(match){this.url=match[0];done();}
       });
       this.process.stderr.resume(); // Never copy engine diagnostics, prompts or credentials to the console.
-      this.process.once("error",done);this.process.once("exit",()=>{this.url=null;done(new Error("موتور کدنویسی متوقف شد."));});
+      engineProcess.once("error",done);engineProcess.once("exit",()=>{if(this.process===engineProcess)this.url=null;done(new Error("موتور کدنویسی متوقف شد."));});
     }).catch(error=>{this.stop();throw error;});
     await this.call("/global/health");
     return this;
