@@ -1,4 +1,5 @@
 @font-face{font-family:YekanBakh;src:url('/fonts/YekanBakh.ttf') format('truetype');font-weight:100 900;font-display:swap}
+@font-face{font-family:Geist;src:url('/fonts/Geist.woff2') format('woff2');font-weight:100 900;font-display:swap}
 @font-face{font-family:Vazirmatn;src:url('/fonts/Vazirmatn.woff2') format('woff2');font-weight:100 900;font-display:swap}
 :root{color-scheme:dark;--bg:#1c1d21;--rail:#15161a;--soft:#24262b;--ink:#f0f1f3;--muted:#b0b3bd;--line:#363941;--blue:#8fbaff;--hover:#2e3138;--selected:#24344d;--danger:#ffaaa0;--success:#8bd2aa}
 :root[data-theme=light]{color-scheme:light;--bg:#fafafa;--rail:#f0f1f3;--soft:#fff;--ink:#20232b;--muted:#606570;--line:#d7dae0;--blue:#175aca;--hover:#e7e9ee;--selected:#e1ebfb;--danger:#a72c23;--success:#226a45}
@@ -72,6 +73,8 @@ main .sync-controls{padding:6px 28px;border-bottom:0;gap:8px}main .sync-controls
 .model-picker .vf-select,.access-picker .vf-select,.model-settings-body>.vf-select{width:100%}
 .model-picker select,.access-picker select{padding-inline:12px 36px;border-radius:8px;min-height:40px}
 .model-picker select{padding-inline:36px 12px;text-align:right}
+.wordmark [lang=en]{font-family:Geist,YekanBakh,sans-serif;font-weight:600;line-height:1.25}.brand.wordmark span{font-size:12px}.topbar-brand{display:none}
+@media(max-width:640px){.topbar-brand{display:flex;align-items:center;gap:8px;min-height:40px;margin-inline-end:auto}.topbar-brand strong{font-size:18px}.topbar-brand img{flex:none}.topbar .workspace-name{flex-basis:100%;font-size:12px;justify-content:space-between}.topbar .workspace-name strong{font-size:12px}.topbar .workspace-name #open-workspace{margin-inline-start:auto}}
 .composer-toolbar .send{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;min-height:40px;border-radius:10px;font-size:inherit;transition:background .16s ease,transform .16s ease}
 .composer-toolbar .send>.ui-icon{width:20px;height:20px;stroke-width:2}
 .composer-toolbar .send:active:not(:disabled){transform:scale(.95)}
