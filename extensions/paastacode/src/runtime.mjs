@@ -32,7 +32,7 @@ export class CodeRuntime{
   async start(config){
     this.workspace=await realpath(this.workspace);
     const home=join(stateHome,"engine",this.identity||"local");await mkdir(home,{recursive:true,mode:0o700});
-    this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
+    this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
       ...process.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
       OPENCODE_SERVER_PASSWORD:this.password,OPENCODE_CONFIG_CONTENT:JSON.stringify(config),
       OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});
@@ -61,7 +61,8 @@ export class CodeRuntime{
   async stop(){
     const child=this.process;this.process=null;this.url=null;
     if(child&&child.exitCode===null)await new Promise(resolveStop=>{
-      const timer=setTimeout(resolveStop,3000);child.once("exit",()=>{clearTimeout(timer);resolveStop();});child.kill();
+      const kill=signal=>{try{if(process.platform!=="win32"&&child.pid)process.kill(-child.pid,signal);else child.kill(signal);}catch(error){if(error.code!=="ESRCH")throw error;}};
+      const timer=setTimeout(()=>{kill("SIGKILL");resolveStop();},3000);child.once("exit",()=>{clearTimeout(timer);if(process.platform!=="win32")kill("SIGKILL");resolveStop();});kill("SIGTERM");
     });
   }
 }
