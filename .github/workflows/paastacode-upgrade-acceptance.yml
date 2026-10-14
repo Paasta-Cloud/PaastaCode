@@ -1,0 +1,93 @@
+name: PaastaCode installed desktop upgrade acceptance
+on:
+  pull_request:
+    paths:
+      - .github/workflows/paastacode-upgrade-acceptance.yml
+      - extensions/paastacode/scripts/smoke-desktop.mjs
+      - extensions/paastacode/test/release-upgrade.test.mjs
+  workflow_dispatch:
+    inputs:
+      from_tag:
+        description: Installed prerelease to upgrade
+        required: true
+        default: v0.2.0-beta.8
+        type: string
+      to_tag:
+        description: Published prerelease to install over it
+        required: true
+        default: v0.2.0-beta.9
+        type: string
+permissions:
+  contents: read
+jobs:
+  installed-upgrade:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: extensions/paastacode
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FROM_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.from_tag || 'v0.2.0-beta.8' }}
+      TO_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.to_tag || 'v0.2.0-beta.9' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Download and verify published installers
+        shell: pwsh
+        run: |
+          $pattern = '^v(?<base>[0-9]+\.[0-9]+\.[0-9]+)-(?<channel>beta|alpha)\.(?<number>[0-9]+)$'
+          $from = [regex]::Match($env:FROM_TAG, $pattern)
+          $to = [regex]::Match($env:TO_TAG, $pattern)
+          if (-not $from.Success -or -not $to.Success -or $from.Groups['base'].Value -ne $to.Groups['base'].Value -or $from.Groups['channel'].Value -ne $to.Groups['channel'].Value -or [int]$to.Groups['number'].Value -le [int]$from.Groups['number'].Value) { throw 'Upgrade tags must be increasing releases from the same prerelease channel.' }
+          New-Item -ItemType Directory -Path .artifacts/upgrade-installers -Force | Out-Null
+          foreach ($tag in @($env:FROM_TAG, $env:TO_TAG)) {
+            $version = $tag.Substring(1)
+            $name = "PaastaCode-Setup-$version-x64.exe"
+            $release = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" | ConvertFrom-Json
+            $asset = @($release.assets | Where-Object name -eq $name)
+            if ($asset.Count -ne 1 -or $asset[0].digest -notmatch '^sha256:[0-9a-f]{64}$' -or $asset[0].size -le 0) { throw "Release $tag does not contain one verified Windows installer." }
+            gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $name --dir .artifacts/upgrade-installers
+            $path = Join-Path .artifacts/upgrade-installers $name
+            if ((Get-Item -LiteralPath $path).Length -ne $asset[0].size -or (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant() -ne $asset[0].digest.Substring(7)) { throw "Installer integrity check failed for $tag." }
+          }
+      - name: Install, upgrade in place and run both versions
+        shell: pwsh
+        run: |
+          $install = Join-Path $env:RUNNER_TEMP 'paastacode-upgrade-install'
+          $profile = Join-Path $env:RUNNER_TEMP 'paastacode-upgrade-profile'
+          $fromVersion = $env:FROM_TAG.Substring(1)
+          $toVersion = $env:TO_TAG.Substring(1)
+          $fromInstaller = Resolve-Path ".artifacts/upgrade-installers/PaastaCode-Setup-$fromVersion-x64.exe"
+          $toInstaller = Resolve-Path ".artifacts/upgrade-installers/PaastaCode-Setup-$toVersion-x64.exe"
+          $first = Start-Process -FilePath $fromInstaller -ArgumentList @('/S', "/D=$install") -Wait -PassThru
+          if ($first.ExitCode -ne 0) { throw "Initial installer exited with $($first.ExitCode)." }
+          $binary = Join-Path $install 'PaastaCode.exe'
+          if (-not (Test-Path -LiteralPath $binary)) { throw 'The installed application executable is missing.' }
+          $env:PAASTACODE_SMOKE_BINARY = $binary
+          $env:PAASTACODE_SMOKE_ROOT = $profile
+          $env:PAASTACODE_EXPECT_VERSION = $fromVersion
+          $env:PAASTACODE_SMOKE_OUTPUT = Join-Path $profile 'before'
+          node scripts/smoke-desktop.mjs
+          New-Item -ItemType Directory -Path (Join-Path $profile 'account') -Force | Out-Null
+          Set-Content -LiteralPath (Join-Path $profile 'account/upgrade-marker') -Value 'preserve-me' -NoNewline
+          $second = Start-Process -FilePath $toInstaller -ArgumentList @('/S', "/D=$install") -Wait -PassThru
+          if ($second.ExitCode -ne 0) { throw "Upgrade installer exited with $($second.ExitCode)." }
+          if (-not (Test-Path -LiteralPath (Join-Path $profile 'account/upgrade-marker'))) { throw 'The upgrade removed the existing profile.' }
+          $env:PAASTACODE_EXPECT_VERSION = $toVersion
+          $env:PAASTACODE_SMOKE_OUTPUT = Join-Path $profile 'after'
+          node scripts/smoke-desktop.mjs
+          @{from=$fromVersion;to=$toVersion;sameInstallPath=$true;profilePreserved=$true} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $profile 'upgrade-result.json')
+      - name: Retain upgrade evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: paastacode-installed-desktop-upgrade
+          path: |
+            ${{ runner.temp }}/paastacode-upgrade-profile/before/desktop.png
+            ${{ runner.temp }}/paastacode-upgrade-profile/after/desktop.png
+            ${{ runner.temp }}/paastacode-upgrade-profile/upgrade-result.json
+          if-no-files-found: ignore
+          retention-days: 30
