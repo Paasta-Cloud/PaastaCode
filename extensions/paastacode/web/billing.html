@@ -1,0 +1,33 @@
+<!doctype html>
+<html class="billing-document" lang="fa" dir="rtl">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>اشتراک و مصرف | پاستاکد</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./billing.css"><script type="module" src="./billing.js"></script></head>
+<body class="billing-page">
+<!-- Direction: owned allowance and explicit funding; Codex-style developer workbench;
+     charcoal/light ledger and Yekan; clear remaining/reserved quota hierarchy;
+     protected review, durable retry and compact mobile navigation. -->
+<div class="billing-shell">
+  <aside class="billing-rail" aria-label="حساب پاستاکد">
+    <a class="brand" href="/"><img src="./brand.png" width="30" height="30" alt=""><strong>پاستاکد</strong></a>
+    <a class="billing-nav" href="#usage" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 10h16m-5 4h2"/></svg>اشتراک و مصرف</a>
+    <a class="billing-nav billing-return" href="/">بازگشت به محیط کار</a>
+    <div class="billing-identity"><span class="muted">حساب پاستا</span><strong id="billing-name">در حال بررسی ورود…</strong><span id="billing-balance" class="muted"></span></div>
+    <button id="billing-theme" type="button" aria-pressed="false">نمای روشن</button>
+    <small class="billing-attribution">Powered by OpenCode · <a href="https://github.com/Paasta-Cloud/PaastaCode" target="_blank" rel="noopener noreferrer">فورک متن‌باز پاستا</a></small>
+  </aside>
+  <main class="billing-main" id="usage">
+    <header class="billing-header"><div><p class="muted">حساب مشترک بین همهٔ دستگاه‌ها</p><h1>اشتراک و مصرف</h1></div><button id="billing-refresh" type="button">تازه‌سازی</button></header>
+    <p id="billing-feedback" class="billing-feedback" role="status" aria-live="polite"></p>
+    <button id="billing-resume" type="button" hidden>بررسی نتیجهٔ درخواست قبلی</button>
+    <section id="billing-loading" class="billing-loading" aria-label="دریافت اطلاعات حساب"><div></div><div></div><div></div></section>
+    <section id="billing-login" class="billing-empty" hidden><h2>با حساب پاستا وارد شوید</h2><p>برای مدیریت هزینه، حساب مرورگر باید همان حساب پاستاکد باشد. اطلاعات ورود دستگاه مجوز خرید یا تغییر سقف نیست.</p><a class="button-link" href="https://console.paasta.cloud/login" target="_blank" rel="noopener noreferrer">ورود به پاستا</a></section>
+    <div id="billing-content" hidden>
+      <section class="billing-section"><div class="billing-section-title"><h2>روش مصرف فعلی</h2><span id="billing-mode" class="billing-state"></span></div><p id="billing-unavailable" class="billing-note" hidden>خرید اشتراک و تغییر سقف کیف پول فعلاً در دسترس نیست. توقف مصرف تازه همچنان ممکن است.</p><p id="billing-review" class="billing-note" hidden>هزینهٔ یک درخواست به بررسی نیاز دارد. مصرف تازه متوقف است و برداشت اضافه انجام نمی‌شود.</p></section>
+      <section class="billing-section" aria-labelledby="subscription-title"><div class="billing-section-title"><h2 id="subscription-title">اشتراک شما</h2><span id="subscription-period" class="muted"></span></div><div id="subscription-detail"></div><div id="subscription-quotas" class="billing-quotas"></div><p id="subscription-pending" class="billing-note" hidden></p><p id="subscription-upcoming" class="billing-note" hidden></p><button id="subscription-cancel" type="button" hidden>بررسی لغو تمدید آینده</button><p id="subscription-refund" class="billing-note" hidden></p><button id="subscription-use" type="button" hidden>استفاده از اشتراک</button></section>
+      <section class="billing-section" aria-labelledby="wallet-title"><div class="billing-section-title"><h2 id="wallet-title">مصرف با کیف پول</h2><span id="wallet-state" class="muted"></span></div><div id="wallet-quota"></div><p id="wallet-pending" class="billing-note" hidden></p><form id="wallet-form" class="billing-wallet-form"><label for="wallet-limit">سقف کل هزینه از زمان فعال‌سازی <span class="muted">تومان</span></label><div class="billing-input-row"><input id="wallet-limit" name="limit" type="text" inputmode="numeric" autocomplete="off" required aria-describedby="wallet-help"><button id="wallet-submit" type="submit" class="primary">بررسی و انتخاب سقف</button></div><label id="wallet-resume-label"><input id="wallet-resume" type="checkbox"> ادامه فقط تا بازنشانی سهمیه؛ سپس بازگشت به اشتراک</label><p id="wallet-help" class="billing-help">سقف بین همهٔ کلیدها و دستگاه‌ها مشترک است و خودکار بازنشانی نمی‌شود. تغییر دستگاه یا روش مصرف، هزینهٔ قبلی را پاک نمی‌کند. محدودیت کلید و حساب پاستا نیز اعمال می‌شود.</p></form><div class="billing-stop-row"><div><strong>توقف مصرف تازه</strong><p class="billing-help">رزروهای قبلی تا تعیین هزینهٔ نهایی باقی می‌مانند. این انتخاب اشتراک یا پروژه را حذف نمی‌کند.</p></div><button id="billing-pause" type="button">توقف مصرف</button></div></section>
+      <section class="billing-section" aria-labelledby="plans-title"><div class="billing-section-title"><h2 id="plans-title">بسته‌های قابل خرید</h2></div><p class="billing-help">پرداخت دوره پیش از فعال‌سازی انجام می‌شود. سهمیه‌های دوره و هفته محدودیت‌های یک اعتبارند و با هم جمع نمی‌شوند.</p><label for="discount-code">کد تخفیف</label><input id="discount-code" type="text" dir="ltr" autocomplete="off" maxlength="32" placeholder="اختیاری"><div id="billing-plans"></div></section>
+    </div>
+  </main>
+</div>
+<dialog id="billing-confirm" class="billing-confirm"><div class="dialog-heading"><h2 id="confirm-title">بررسی انتخاب</h2><button id="confirm-close" type="button">بستن</button></div><p id="confirm-description"></p><dl id="confirm-facts"></dl><p id="confirm-terms" class="billing-help"></p><p id="confirm-feedback" class="billing-feedback" role="status"></p><div class="billing-confirm-actions"><button id="confirm-cancel" type="button">انصراف</button><button id="confirm-submit" class="primary" type="button"></button></div></dialog>
+</body>
+</html>

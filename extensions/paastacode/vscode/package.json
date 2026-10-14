@@ -19,7 +19,8 @@
   ],
   "activationEvents": [
     "onCommand:paastacode.open",
-    "onCommand:paastacode.update"
+    "onCommand:paastacode.update",
+    "onCommand:paastacode.billing"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -35,6 +36,10 @@
       {
         "command": "paastacode.update",
         "title": "PaastaCode: بررسی و نصب به‌روزرسانی"
+      },
+      {
+        "command": "paastacode.billing",
+        "title": "PaastaCode: مدیریت اشتراک و مصرف"
       }
     ],
     "configuration": {

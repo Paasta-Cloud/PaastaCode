@@ -22,6 +22,15 @@ function activate(context){
     finally{updating=false;}
   }
   context.subscriptions.push(vscode.commands.registerCommand("paastacode.update",()=>update(true)));
+  context.subscriptions.push(vscode.commands.registerCommand('paastacode.billing',async()=>{
+    try{
+      const custom=vscode.workspace.getConfiguration('paastacode').get('clientPath');
+      if(custom&&!vscode.workspace.isTrusted)return vscode.window.showErrorMessage('برای استفاده از مسیر نصب سفارشی، اعتماد به پروژه را بررسی کنید.');
+      const root=custom?path.dirname(path.dirname(custom)):fs.existsSync(path.join(__dirname,'client/src/account.mjs'))?path.join(__dirname,'client'):path.resolve(__dirname,'..');
+      const {PaastaAccount,billingUrl}=await import(pathToFileURL(path.join(root,'src/account.mjs')).href),account=await new PaastaAccount().load(),current=await account.context(),url=billingUrl(account.origin,current.account);
+      if(!url)throw new Error();await vscode.env.openExternal(vscode.Uri.parse(url));
+    }catch{await vscode.window.showErrorMessage('مدیریت مصرف باز نشد؛ ابتدا از پاستاکد با حساب پاستا وارد شوید و دوباره تلاش کنید.');}
+  }));
   const timer=setInterval(()=>void update(),6*60*60*1000);timer.unref();context.subscriptions.push({dispose:()=>clearInterval(timer)});
   if(!process.env.PAASTACODE_VSCODE_SMOKE&&!process.env.PAASTACODE_TEST_CDP)void update();
   context.subscriptions.push(vscode.commands.registerCommand("paastacode.open",async()=>{

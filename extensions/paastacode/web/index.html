@@ -24,6 +24,7 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
     <p id="session-no-results" class="muted" hidden>گفتگویی با این نام پیدا نشد.</p>
     <button id="theme-toggle" class="rail-action theme-toggle" type="button" aria-pressed="false">نمای روشن</button>
     <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
+    <a id="billing-open" class="rail-action" href="https://code.paasta.cloud/billing.html" target="_blank" rel="noopener noreferrer" hidden>اشتراک و مصرف</a>
     <button id="updates-open" class="rail-action" type="button" hidden>به‌روزرسانی برنامه</button>
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
@@ -34,7 +35,7 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
     <div id="notice" class="notice" role="status" hidden></div>
     <section id="hosted-hub" class="hosted-hub" hidden aria-label="فضاهای کار پاستاکد">
       <header class="hosted-heading"><div><span class="intro-label">پاستاکد تحت وب</span><h1>از اینجا شروع کنید.</h1><p>یک فضای کار انتخاب کنید و ادامهٔ پروژه را به پاستاکد بسپارید.</p></div><span class="hosted-mark" aria-hidden="true">⌘</span></header>
-      <div class="hosted-account"><div><strong id="hosted-account-name">حساب پاستا</strong><span id="hosted-account-detail" class="muted">در حال بررسی ورود…</span></div><div class="hosted-actions"><a id="hosted-login" class="button-link" href="https://console.paasta.cloud/login" target="_blank" rel="noopener noreferrer" hidden>ورود با پاستا ↗</a><button id="hosted-refresh" type="button">تازه‌سازی</button></div></div>
+      <div class="hosted-account"><div><strong id="hosted-account-name">حساب پاستا</strong><span id="hosted-account-detail" class="muted">در حال بررسی ورود…</span></div><div class="hosted-actions"><a id="hosted-login" class="button-link" href="https://console.paasta.cloud/login" target="_blank" rel="noopener noreferrer" hidden>ورود با پاستا ↗</a><a id="hosted-billing" class="button-link" href="/billing.html" target="_blank" rel="noopener noreferrer" hidden>اشتراک و مصرف</a><button id="hosted-refresh" type="button">تازه‌سازی</button></div></div>
       <p id="hosted-feedback" class="hosted-feedback" role="status" aria-live="polite"></p>
       <p id="hosted-export-note" class="hosted-project-note" hidden>خروجی پروژه شامل فایل‌های کد، تاریخچهٔ گیت و فایل‌های تنظیمات مانند <bdi dir="ltr">.env</bdi> است؛ فایل ZIP را در جای امن نگه دارید.</p>
       <section class="hosted-projects" aria-labelledby="hosted-projects-title"><div class="hosted-section-heading"><h2 id="hosted-projects-title">فضاهای کار ابری</h2><span class="hosted-badge">بدون نصب</span></div><p class="muted">فایل‌ها و اجرای پروژه روی پاستا می‌مانند؛ بستن این صفحه کار را متوقف نمی‌کند.</p><div id="hosted-list" aria-live="polite"></div></section>
