@@ -1,0 +1,70 @@
+name: PaastaCode Android
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'extensions/paastacode/android/**'
+      - 'extensions/paastacode/web/**'
+      - 'extensions/paastacode/scripts/android-release.mjs'
+      - 'extensions/paastacode/test/android*'
+      - '.github/workflows/paastacode-android.yml'
+  push:
+    branches: [android-client]
+permissions:
+  contents: read
+concurrency:
+  group: paastacode-android-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: extensions/paastacode/android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - run: chmod +x gradlew
+      - run: ./gradlew --no-daemon assembleDebug lintDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PaastaCode-Android-debug
+          path: extensions/paastacode/android/app/build/outputs/apk/debug/*.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PaastaCode-Android-lint
+          path: extensions/paastacode/android/app/build/reports/lint-results-debug.html
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: extensions/paastacode
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extensions/paastacode/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check
+      - run: node --test test/android.test.mjs test/hosted.test.mjs
+      - run: node test/android-browser.mjs
+      - run: node test/browser.mjs
+      - run: node test/cloud-hub-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PaastaCode-Android-web-captures
+          path: extensions/paastacode/.artifacts/*.png

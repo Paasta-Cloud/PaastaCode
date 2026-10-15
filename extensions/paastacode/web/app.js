@@ -7,6 +7,8 @@ import {syncUI} from "./sync.js";
 import {workbench} from "./workbench.js";
 import {gitUI} from "./git-ui.js";
 import {updatesUI} from "./updates.js";
+import {setupPwa,submitWithEnter} from "./pwa.js";
+setupPwa();
 const $=id=>document.getElementById(id);
 enhanceSelects();
 $("send").replaceChildren(icon("arrowUp"));
@@ -301,7 +303,7 @@ function submitPrompt(extra={}){
     if(!extra.restart&&!extra.executePlan){$("prompt").value="";clearAttachments();resizePrompt();}notice("");await sessions();
   }).finally(async()=>{promptPending=false;renderAttachments();if(!accepted){sending=false;$("send").disabled=false;}await refresh();});
 }
-$("prompt").onkeydown=event=>{if(!event.isComposing&&event.keyCode!==229&&event.key==="Enter"&&!event.shiftKey){event.preventDefault();if(!event.repeat)$("composer").requestSubmit();}};
+$("prompt").onkeydown=event=>{if(submitWithEnter(event)){event.preventDefault();if(!event.repeat)$("composer").requestSubmit();}};
 $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:session.id});await refresh();});
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
