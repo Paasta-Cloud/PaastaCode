@@ -114,14 +114,14 @@ jobs:
         run: choco install ripgrep --yes --no-progress
 
       - name: Run unit tests
-        timeout-minutes: 20
+        timeout-minutes: ${{ github.repository == 'anomalyco/opencode' && 20 || 30 }}
         run: |
           # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            GITHUB_ACTIONS=false bun turbo test --concurrency="$TEST_CONCURRENCY"
+            GITHUB_ACTIONS=false bun turbo test --concurrency="$TEST_CONCURRENCY" --continue=dependencies-successful
             exit 0
           fi
-          GITHUB_ACTIONS=false bun turbo test --affected --concurrency="$TEST_CONCURRENCY"
+          GITHUB_ACTIONS=false bun turbo test --affected --concurrency="$TEST_CONCURRENCY" --continue=dependencies-successful
         env:
           TEST_CONCURRENCY: ${{ github.repository == 'anomalyco/opencode' && '3' || '1' }}
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
