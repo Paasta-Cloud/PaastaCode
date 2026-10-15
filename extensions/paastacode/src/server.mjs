@@ -18,9 +18,9 @@ import {WorkspaceIntegrations,integrationName,mcpConfig} from "./integrations.mj
 
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"],["/fonts/Geist.woff2","fonts/Geist.woff2"]]);
-const mime={".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
+const mime={".webmanifest":"application/manifest+json; charset=utf-8",".png":"image/png",".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
-assets.set('/pwa.js','pwa.js');
+for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
 }

@@ -11,7 +11,9 @@ const candidates=process.env.PAASTACODE_SMOKE_BINARY?[process.env.PAASTACODE_SMO
 const binary=candidates.map(path=>resolve(path)).find(path=>existsSync(path));
 if(!binary)throw new Error("Packaged desktop executable not found; Linux acceptance requires installing the built deb first.");
 const resources=process.platform==='darwin'?join(dirname(binary),'../Resources'):join(dirname(binary),'resources');
-await smokeBrowser(binary,join(resources,'app.asar.unpacked'),qa);
+// Historical installed releases predate the browser helper; the source release must always provide it.
+const sourceVersion=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8')).version;
+if(version===sourceVersion||existsSync(join(resources,'app.asar.unpacked/bin/browser-mcp.cjs')))await smokeBrowser(binary,join(resources,'app.asar.unpacked'),qa);
 const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",...(process.env.CI?{PAASTACODE_DESKTOP_VISIBLE_SMOKE:"1"}:{}),PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:capture};
 let output="",diagnostic="";
 await new Promise((done,reject)=>{
