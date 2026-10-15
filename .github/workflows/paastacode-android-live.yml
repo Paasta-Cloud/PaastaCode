@@ -1,0 +1,55 @@
+name: PaastaCode Android live acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Draft release containing the publisher APK
+        required: true
+        default: android-0.1.1-candidate
+        type: string
+      apk_sha256:
+        description: Verified publisher APK file SHA-256
+        required: true
+        default: 1F9FFB6F8D9FD6E3C4B424EA515016FB42E4A9B1BD12BF6B16730BCCB1C12A69
+        type: string
+permissions:
+  contents: read
+jobs:
+  live:
+    # GitHub requires push access to read draft releases. This job can only be
+    # dispatched by a maintainer; PR and push builds retain read-only permissions.
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Fetch and verify the publisher artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          APK_SHA256: ${{ inputs.apk_sha256 }}
+        run: |
+          [[ "$APK_SHA256" =~ ^[0-9A-Fa-f]{64}$ ]]
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir publisher-apk
+          test "$(find publisher-apk -name '*.apk' | wc -l)" -eq 1
+          mkdir -p launch-apk
+          cp publisher-apk/*.apk launch-apk/app-release.apk
+          printf '%s  %s\n' "$APK_SHA256" launch-apk/app-release.apk | sha256sum -c -
+      - run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis_playstore
+          arch: x86_64
+          disable-animations: true
+          script: bash extensions/paastacode/android/test-launch.sh
+        env:
+          VERIFY_LIVE_TWA: 'true'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PaastaCode-Android-live-evidence
+          path: launch-evidence/
