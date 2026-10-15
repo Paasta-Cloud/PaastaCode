@@ -125,8 +125,18 @@ function price(){
   const m=state.models?.find(model=>model.id===(active||$("model").value)),executor=state.models?.find(model=>model.id===$("execution-model").value);
   $("price").textContent=m?(active?"مدل فعال: "+(m.name||m.id)+" · ":automatic?"برنامه‌ریزی: ":"")+modelCost(m)+(automatic&&!active&&executor?" · اجرا با "+(executor.name||executor.id)+": "+modelCost(executor):""):"";
 }
+async function refreshQuota(){
+  const summary=$('subscription-summary');if(!state.configured||!state.features?.subscriptionUsage){summary.hidden=true;return;}
+  const owner=state.account?.tenantId+':'+state.account?.id;
+  try{const quota=await api('quota');if(owner!==state.account?.tenantId+':'+state.account?.id)return;summary.hidden=false;if(!quota.active){$('subscription-plan').textContent='اشتراک فعال ندارید';$('subscription-dates').textContent='';$('subscription-week-label').textContent='مصرف و خرید را در کنسول بررسی کنید.';$('subscription-week').hidden=true;$('subscription-reset').textContent='';return;}
+    $('subscription-plan').textContent=quota.plan;$('subscription-dates').textContent='اعتبار تا '+new Date(quota.endsAt).toLocaleDateString('fa-IR',{timeZone:'Asia/Tehran'});const remaining=quota.quotas.week.remainingPercent;$('subscription-week-label').textContent='سهمیهٔ هفتگی: '+Number(remaining).toLocaleString('fa-IR')+'٪ باقی‌مانده';$('subscription-week').hidden=false;$('subscription-week').value=remaining;$('subscription-reset').textContent=(quota.mode==='payg'?'مصرف فعلی با کیف پول · ':quota.mode==='paused'?'مصرف متوقف است · ':'')+'بازنشانی '+new Date(quota.quotas.week.resetAt).toLocaleString('fa-IR',{timeZone:'Asia/Tehran',month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  }catch{if(owner===state.account?.tenantId+':'+state.account?.id){summary.hidden=false;$('subscription-plan').textContent='وضعیت اشتراک دریافت نشد';$('subscription-dates').textContent='از «اشتراک و مصرف» بررسی کنید.';$('subscription-week-label').textContent='';$('subscription-week').hidden=true;$('subscription-reset').textContent='';}}
+}
+setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
-  state=await api("state");$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
+  state=await api("state");
+  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){await api('connect','POST',{});state=await api('state');}
+  void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
   $("workflow-phase").querySelector('[value="auto"]').disabled=!state.features?.automaticWorkflow;
@@ -139,7 +149,9 @@ async function loadState(){
   $('billing-open').hidden=!state.billingUrl;if(state.billingUrl)$('billing-open').href=state.billingUrl;
   $("account-detail").textContent=state.account?Number(state.account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار":"هنوز وارد نشدی";
   $("logout").hidden=!state.connected;$("login").hidden=state.connected;
-  $("budget-form").hidden=!state.connected||state.configured;
+  $("budget-form").hidden=!state.connected||state.configured||!!state.billingStatus;
+  const onboarding=state.connected&&!state.configured&&!!state.billingStatus;$('subscription-onboarding').hidden=!onboarding;
+  if(onboarding){for(const id of ['subscription-buy','subscription-wallet'])$(id).href=state.billingUrl;$('subscription-continue').hidden=!state.billingStatus.canConnectWithoutLimit;$('subscription-buy').hidden=!!state.billingStatus.canConnectWithoutLimit;$('subscription-heading').textContent=state.billingStatus.active?'اشتراک شما آماده است':'با اشتراک کدنویسی شروع کنید';$('subscription-description').textContent=state.billingStatus.mode==='paused'?'مصرف حساب متوقف است. برای ادامه، روش مصرف را در حساب پاستا انتخاب کنید.':'اشتراک و سهمیهٔ شما بین پاستاکد و ابزارهای کدنویسی مشترک است.';}
   $("onboarding").hidden=state.configured;$("conversation").hidden=!state.configured;$("composer").hidden=!state.configured;
   document.querySelector(".thread-heading").hidden=!state.configured;
   $("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
@@ -233,8 +245,9 @@ async function refresh(){
       workflowView();
       await conversationSync.refresh();
     }else bench.activity(promptPending);
-    const permissions=await api("permissions");if(version!==generation||session!==selected)return;$("permissions").replaceChildren();
-    for(const permission of permissions.filter(p=>p.sessionID===session?.id)){
+    const permissions=await api("permissions");if(version!==generation||session!==selected)return;const currentPermissions=permissions.filter(p=>p.sessionID===session?.id),signature=JSON.stringify(currentPermissions);
+    if($('permissions').dataset.signature!==signature){$('permissions').dataset.signature=signature;$("permissions").replaceChildren();
+    for(const permission of currentPermissions){
       const box=document.createElement("section");box.className="permission";
       const title=document.createElement("h3");title.textContent="این کار به تأیید تو نیاز داره";
       const info=document.createElement("pre");info.textContent=permission.permission+"\n"+(permission.patterns||[]).join("\n")+"\n"+(permission.metadata?.diff||permission.metadata?.command||JSON.stringify(permission.metadata||{},null,2));
@@ -244,19 +257,26 @@ async function refresh(){
       }
       box.append(title,info,actions);$("permissions").append(box);
     }
+    }
     bench.activity(sending,{approval:$("permissions").children.length>0,status:runtimeStatus});
   }catch(error){if(!error.stale)notice(error.message,true);}finally{refreshing=false;}
 }
-$("login").onclick=()=>run($("login"),async()=>{
+$("login").onclick=()=>{const approval=window.open("about:blank","_blank");if(approval)approval.opener=null;return run($("login"),async()=>{
+  try{
   const result=await api("login","POST");$("device").hidden=false;$("device-code").textContent=result.code;$("device-link").href=result.url;
-  notice("صفحهٔ تأیید پاستا را باز کن؛ اینجا منتظر می‌مونیم.");
+  const authorization=new URL(result.url);if(authorization.protocol==='https:'&&['paasta.cloud','console.paasta.cloud'].includes(authorization.hostname)&&authorization.pathname==='/cli/authorize'){if(approval&&!approval.closed)approval.location.replace(authorization.href);else window.open(authorization.href,'_blank','noopener,noreferrer');}else{approval?.close();throw new Error('نشانی ورود معتبر نیست.');}
+  notice("ورود را در مرورگر تأیید کنید. اگر مرورگر باز نشد، از پیوند زیر استفاده کنید.");
   clearInterval(loginTimer);loginTimer=setInterval(async()=>{
     try{const result=await api("login/poll","POST");if(!result.pending){clearInterval(loginTimer);$("device").hidden=true;notice("");await loadState();}}
     catch(error){clearInterval(loginTimer);notice(error.message,true);}
   },3500);
-});
+  }catch(error){approval?.close();throw error;}
+});};
+$('subscription-continue').onclick=()=>run($('subscription-continue'),async()=>{await api('connect','POST',{});await loadState();});
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
-function clearAccountView(){clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
+function clearAccountView(){
+  delete $("permissions").dataset.signature;
+  $("subscription-summary").hidden=true;clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
 $("new").onclick=()=>run($("new"),async()=>{clearAttachments();generation++;bench.reset();session=await api("sessions","POST");mode="local";lastMessages="";$("composer").hidden=false;$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");await sessions();await refresh();drawer(false);$("prompt").focus();});
 $("composer").onsubmit=event=>{

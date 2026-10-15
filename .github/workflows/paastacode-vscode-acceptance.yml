@@ -60,10 +60,14 @@ jobs:
           sudo apt-get install -y xvfb dbus-x11 libnss3 libatk-bridge2.0-0 libgbm1 libasound2t64 libgtk-3-0
       - name: Install and run customer VSIX in VS Code on Linux
         if: runner.os == 'Linux'
-        run: dbus-run-session -- xvfb-run -a node scripts/smoke-vscode.mjs
+        run: |
+          dbus-run-session -- xvfb-run -a node scripts/smoke-vscode.mjs
+          dbus-run-session -- xvfb-run -a node scripts/smoke-vscode.mjs --empty
       - name: Install and run customer VSIX in VS Code on Windows and macOS
         if: runner.os != 'Linux'
-        run: node scripts/smoke-vscode.mjs
+        run: |
+          node scripts/smoke-vscode.mjs
+          node scripts/smoke-vscode.mjs --empty
       - name: Retain native renderer evidence
         if: always()
         uses: actions/upload-artifact@v6
@@ -72,5 +76,7 @@ jobs:
           path: |
             extensions/paastacode/.artifacts/vscode-acceptance/vscode.png
             extensions/paastacode/.artifacts/vscode-acceptance/vscode-result.json
+            extensions/paastacode/.artifacts/vscode-acceptance/vscode-empty.png
+            extensions/paastacode/.artifacts/vscode-acceptance/vscode-empty-result.json
           if-no-files-found: ignore
           retention-days: 30

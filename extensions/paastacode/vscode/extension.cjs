@@ -5,6 +5,7 @@ const path=require("node:path");
 const {pathToFileURL}=require("node:url");
 let child;
 function activate(context){
+
   let updating=false;
   async function update(manual=false){
     if(updating)return;if(!manual&&!vscode.workspace.getConfiguration("paastacode").get("autoUpdate",true))return;updating=true;
@@ -33,15 +34,20 @@ function activate(context){
   }));
   const timer=setInterval(()=>void update(),6*60*60*1000);timer.unref();context.subscriptions.push({dispose:()=>clearInterval(timer)});
   if(!process.env.PAASTACODE_VSCODE_SMOKE&&!process.env.PAASTACODE_TEST_CDP)void update();
-  context.subscriptions.push(vscode.commands.registerCommand("paastacode.open",async()=>{
-    if(!vscode.workspace.isTrusted)return vscode.window.showErrorMessage("ابتدا اعتماد به پوشهٔ پروژه را تأیید کنید.");
-    const folder=vscode.workspace.workspaceFolders?.[0];
-    if(!folder)return vscode.window.showErrorMessage("ابتدا یک پوشهٔ پروژه باز کنید.");
+  const {attachNative}=require('./native-workbench.cjs');
+  const output=vscode.window.createOutputChannel('PaastaCode');context.subscriptions.push(output);
+  let connecting,connectedWorkspace;
+  async function connect(){
+    if(!vscode.workspace.isTrusted)throw new Error('اعتماد به پروژه لازم است.');
+    const folder=vscode.workspace.workspaceFolders?.[0];if(!folder)throw new Error('ابتدا پوشهٔ پروژه را باز کنید.');
+    if(connectedWorkspace===folder.uri.fsPath&&connecting)return connecting;
+    connectedWorkspace=folder.uri.fsPath;
+    connecting=(async()=>{
     const workspace=fs.realpathSync(folder.uri.fsPath);
     const custom=vscode.workspace.getConfiguration("paastacode").get("clientPath");
     const bundled=path.join(__dirname,"client/bin/paastacode.mjs");
     const client=custom||(fs.existsSync(bundled)?bundled:path.resolve(__dirname,"../bin/paastacode.mjs"));
-    if(!path.isAbsolute(client)||!fs.existsSync(client))return vscode.window.showErrorMessage("مسیر نصب پاستاکد را در تنظیمات VS Code وارد کنید.");
+    if(!path.isAbsolute(client)||!fs.existsSync(client))throw new Error("مسیر نصب پاستاکد را در تنظیمات VS Code بررسی کنید.");
     const node=custom||!fs.existsSync(bundled)?"node":path.join(__dirname,"runtime",process.platform==="win32"?"node.exe":"node");
     child=spawn(node,[client,"web","--no-open","--workspace="+workspace],{cwd:workspace,windowsHide:true,stdio:["ignore","pipe","pipe"]});
     child.stdout.resume();child.stderr.resume();
@@ -61,13 +67,22 @@ function activate(context){
       }catch{/* A previous editor may have crashed; wait for the new runtime. */}
       await new Promise(resolve=>setTimeout(resolve,500));
     }
-    if(!connection)return vscode.window.showErrorMessage("پاستاکد آماده نشد. یک بار آن را از ترمینال اجرا کنید.");
+    if(!connection)throw new Error("موتور پروژه آماده نشد؛ خروجی PaastaCode را بررسی کنید و دوباره تلاش کنید.");
     const url=new URL(connection.url);
     if(url.hostname!=="127.0.0.1"||url.protocol!=="http:"||!/^[A-Za-z0-9_-]{43}$/.test(connection.capability))return;
-    const panel=vscode.window.createWebviewPanel("paastacode","پاستاکد",vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true,
-      portMapping:[{webviewPort:Number(url.port),extensionHostPort:Number(url.port)}]});
-    panel.webview.html='<!doctype html><html lang="fa" dir="rtl"><head><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; frame-src '+url.origin+'; style-src \'unsafe-inline\';"><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}</style></head><body><iframe title="پاستاکد" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads allow-popups allow-popups-to-escape-sandbox" src="'+url.origin+'/embed/'+connection.capability+'#cap='+connection.capability+'"></iframe></body></html>';
-  }));
+
+      return {async request(route,method='GET',body,revision){
+        try{
+          const response=await fetch(url.origin+'/api/'+route,{method,headers:{Authorization:'Bearer '+connection.capability,...(revision===undefined?{}:{'X-PaastaCode-Account':String(revision)}),...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(90000)});
+          const text=await response.text();let result;try{result=JSON.parse(text);}catch{throw new Error('پاسخ موتور کامل دریافت نشد؛ تازه‌سازی را بزنید.');}
+          if(!response.ok)throw new Error(result.error||'درخواست انجام نشد.');return result;
+        }catch(error){output.appendLine(method+' '+route.split('?')[0]+': '+(error.name==='TypeError'?'runtime connection failed':error.name));if(error.name==='TypeError'){connecting=null;throw new Error('ارتباط با موتور پروژه قطع شد. تازه‌سازی را بزنید؛ دستور قبلی خودکار تکرار نمی‌شود.');}throw error;}
+      }};
+    })().catch(error=>{connecting=null;throw error;});return connecting;
+  }
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('paastacode.home',{resolveWebviewView(view){const bridge=attachNative(view.webview,context,connect);view.onDidDispose(()=>bridge.dispose());}},{webviewOptions:{retainContextWhenHidden:true}}));
+  context.subscriptions.push(vscode.commands.registerCommand('paastacode.open',async()=>{if(!vscode.workspace.isTrusted)return vscode.window.showErrorMessage('ابتدا اعتماد به پوشهٔ پروژه را بررسی کنید.');if(!vscode.workspace.workspaceFolders?.length)return vscode.commands.executeCommand('workbench.action.files.openFolder');return vscode.commands.executeCommand('workbench.view.extension.paastacode');}));
+  context.subscriptions.push(vscode.commands.registerCommand('paastacode.openEditor',()=>{const panel=vscode.window.createWebviewPanel('paastacode','پاستاکد',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});const bridge=attachNative(panel.webview,context,connect);panel.onDidDispose(()=>bridge.dispose());}));
 }
 function deactivate(){}
 module.exports={activate,deactivate};

@@ -2,7 +2,7 @@
   "name": "paastacode",
   "displayName": "PaastaCode | پاستاکد",
   "description": "رابط پاستاکد در VS Code با نشست مشترک وب و CLI",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "icon": "icon.png",
   "publisher": "paasta",
   "license": "MIT",
@@ -20,7 +20,9 @@
   "activationEvents": [
     "onCommand:paastacode.open",
     "onCommand:paastacode.update",
-    "onCommand:paastacode.billing"
+    "onCommand:paastacode.billing",
+    "onView:paastacode.home",
+    "onCommand:paastacode.openEditor"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
@@ -31,15 +33,23 @@
     "commands": [
       {
         "command": "paastacode.open",
-        "title": "PaastaCode: باز کردن پاستاکد"
+        "title": "PaastaCode: باز کردن پاستاکد",
+        "icon": "media/paasta-mark.svg"
       },
       {
         "command": "paastacode.update",
-        "title": "PaastaCode: بررسی و نصب به‌روزرسانی"
+        "title": "PaastaCode: بررسی و نصب به‌روزرسانی",
+        "icon": "$(sync)"
       },
       {
         "command": "paastacode.billing",
-        "title": "PaastaCode: مدیریت اشتراک و مصرف"
+        "title": "PaastaCode: مدیریت اشتراک و مصرف",
+        "icon": "$(credit-card)"
+      },
+      {
+        "command": "paastacode.openEditor",
+        "title": "PaastaCode: باز کردن در تب ویرایشگر",
+        "icon": "$(open-preview)"
       }
     ],
     "configuration": {
@@ -58,6 +68,52 @@
           "scope": "machine"
         }
       }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "paastacode",
+          "title": "PaastaCode",
+          "icon": "media/paasta-mark.svg"
+        }
+      ]
+    },
+    "views": {
+      "paastacode": [
+        {
+          "id": "paastacode.home",
+          "name": "پاستاکد",
+          "icon": "media/paasta-mark.svg",
+          "contextualTitle": "PaastaCode",
+          "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "paastacode.open",
+          "when": "workspaceFolderCount > 0",
+          "group": "navigation@99"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "paastacode.openEditor",
+          "when": "view == paastacode.home",
+          "group": "navigation"
+        },
+        {
+          "command": "paastacode.billing",
+          "when": "view == paastacode.home",
+          "group": "paastacode@1"
+        },
+        {
+          "command": "paastacode.update",
+          "when": "view == paastacode.home",
+          "group": "paastacode@2"
+        }
+      ]
     }
   }
 }
