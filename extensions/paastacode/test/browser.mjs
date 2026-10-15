@@ -149,6 +149,6 @@ try{
   assert.equal(await page.locator('#composer').isVisible(),false,'no subscription cannot silently enable PAYG');
   coding={active:true,mode:'subscription',canConnectWithoutLimit:true};await page.locator('#composer').waitFor({state:'visible',timeout:18000});assert.equal(lastDailyLimit,undefined,'purchase while app stays open must connect without asking for a daily cap');
   await page.locator('#logout').click();coding={active:false,mode:'payg',canConnectWithoutLimit:true};await page.locator('#login').click();await page.locator('#subscription-continue').waitFor({state:'visible',timeout:10000});await page.locator('#subscription-continue').click();await page.locator('#composer').waitFor({state:'visible'});
-  assert.deepEqual(errors,[]);
+  assert(!await page.locator('#notice').textContent().then(text=>text.includes('پاسخ قدیمی')),'superseded login polling must not show an error');assert.deepEqual(errors,[]);
   console.log("PaastaCode browser tests passed: login, budget, permission, save/readback, XSS, desktop, 390/320px, dark, send.");
 }finally{await browser.close();await app.close();}
