@@ -9,9 +9,9 @@ const sessionId="ses_browserSynthetic";
 const sessions=[{id:sessionId,title:"بررسی ساختار پروژه",directory:process.cwd()}];
 const messages=[{info:{role:"user"},parts:[{type:"text",text:"ساختار پروژه را بررسی کن."}]},
   {info:{role:"assistant"},parts:[{type:"text",text:"مسیرهای پروژه بررسی شدن. برای شروع، فایل ورودی را باز کن.\n\n```js\nconst message = '<script>alert(1)</script>';\nconsole.log(message);\n```"}]}];
-let grants=0,saves=0,deletes=0,safeDelete=true,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
+let coding;let grants=0,saves=0,deletes=0,safeDelete=true,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
 const account={origin:"https://console.paasta.cloud",credentials:null,
-  async context(){return {account:{id:identity,tenantId:"synthetic-tenant",name:"حساب آزمایشی",balanceToman:100000},models:[{id:"synthetic",name:"مدل آزمایشی",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"test/kimi-k2.7-code",name:"Kimi K2.7 Code",supported_parameters:["tools"],input_toman_per_million:200,output_toman_per_million:400}]};},
+  async context(){return {...(coding?{coding}:{}),account:{id:identity,tenantId:"synthetic-tenant",name:"حساب آزمایشی",balanceToman:100000},models:[{id:"synthetic",name:"مدل آزمایشی",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"test/kimi-k2.7-code",name:"Kimi K2.7 Code",supported_parameters:["tools"],input_toman_per_million:200,output_toman_per_million:400}]};},
   async begin(){return {url:"https://console.paasta.cloud/cli/authorize?code=TEST-TEST",code:"TEST-TEST"};},
   async poll(){this.credentials={token:"synthetic"};return {pending:false};},
   async connect(){this.credentials.aiKey="synthetic";connected=true;return {dailyLimitToman:50000};},
@@ -39,14 +39,14 @@ const runtime={url:null,password:"synthetic",
     throw new Error("Unexpected mock route "+path);
   }};
 await mkdir(".artifacts",{recursive:true});
-const app=await startServer({account,runtime});
+const app=await startServer({account,runtime});console.log("Browser fixture started");
 const browser=await chromium.launch({headless:true,channel:process.env.PAASTACODE_BROWSER_CHANNEL||(process.platform==="win32"?"msedge":undefined)});
-const page=await browser.newPage({viewport:{width:1440,height:1000}});
+console.log("Browser launched");const page=await browser.newPage({viewport:{width:1440,height:1000}});
 const errors=[];page.on("pageerror",error=>errors.push(error.message));
 try{
   assert.equal((await fetch(app.url+"/api/state")).status,401);
   assert.equal((await fetch(app.url+"/api/login",{method:"POST",headers:{Authorization:"Bearer "+app.capability,Origin:"https://evil.test"}})).status,403);
-  await page.goto(app.launchUrl);await page.locator("#login").waitFor();
+  console.log("Opening workbench");await page.goto(app.launchUrl);await page.locator("#login").waitFor();
   await page.evaluate(()=>document.fonts.ready);
   assert(await page.evaluate(()=>document.fonts.check("16px YekanBakh")||document.fonts.check("16px Vazirmatn")),"Licensed Yekan or bundled open-source fallback must load");
   assert.equal(await page.evaluate(()=>document.documentElement.dir),"rtl");
@@ -138,6 +138,14 @@ try{
   await page.locator("#sessions button").first().click();await page.locator("#prompt").fill("حساب دوم");await page.locator("#send").click();
   await page.waitForFunction(()=>document.querySelector("#prompt").value==="");
   assert.equal(lastParts.length,1,"previous account context must never enter another account prompt");
+  await page.locator('#logout').click();coding={active:true,mode:'subscription',canConnectWithoutLimit:true};
+  let opened=0;page.on('popup',()=>{opened++;});await page.context().route('https://console.paasta.cloud/cli/authorize**',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic approval page</p>'}));
+  await page.locator('#login').click();await page.locator('#composer').waitFor({state:'visible',timeout:15000});
+  assert.equal(await page.locator('#budget-form').isVisible(),false,'active subscriber must bypass the legacy daily-budget form');assert(opened>0,'approval browser opens automatically');
+  await page.locator('#logout').click();coding={active:false,mode:'paused',canConnectWithoutLimit:false};await page.locator('#login').click();await page.locator('#subscription-onboarding').waitFor({state:'visible',timeout:10000});
+  assert.equal(await page.locator('#budget-form').isVisible(),false);assert(await page.locator('#subscription-buy').isVisible());assert.equal(await page.locator('#subscription-continue').isVisible(),false);
+  assert.equal(await page.locator('#composer').isVisible(),false,'no subscription cannot silently enable PAYG');
+  await page.locator('#logout').click();coding={active:false,mode:'payg',canConnectWithoutLimit:true};await page.locator('#login').click();await page.locator('#subscription-continue').waitFor({state:'visible',timeout:10000});await page.locator('#subscription-continue').click();await page.locator('#composer').waitFor({state:'visible'});
   assert.deepEqual(errors,[]);
   console.log("PaastaCode browser tests passed: login, budget, permission, save/readback, XSS, desktop, 390/320px, dark, send.");
 }finally{await browser.close();await app.close();}

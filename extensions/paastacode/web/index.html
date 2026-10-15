@@ -25,6 +25,7 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
     <button id="theme-toggle" class="rail-action theme-toggle" type="button" aria-pressed="false">نمای روشن</button>
     <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
     <a id="billing-open" class="rail-action" href="https://code.paasta.cloud/billing.html" target="_blank" rel="noopener noreferrer" hidden>اشتراک و مصرف</a>
+    <section id="subscription-summary" class="subscription-summary" aria-label="وضعیت اشتراک" hidden><strong id="subscription-plan"></strong><small id="subscription-dates"></small><label id="subscription-week-label" for="subscription-week"></label><progress id="subscription-week" max="100" value="0"></progress><small id="subscription-reset"></small></section>
     <button id="updates-open" class="rail-action" type="button" hidden>به‌روزرسانی برنامه</button>
     <div class="account"><span class="account-dot" aria-hidden="true"></span><div><strong id="account-name">حساب پاستا</strong><small id="account-detail">هنوز وارد نشدی</small></div><button id="logout" class="subtle" hidden>خروج</button></div>
   </aside>
@@ -59,7 +60,7 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
       <p>پروژه‌ات را بررسی کن، تغییرات را بساز و گفتگو را با حساب پاستا نگه دار.</p>
       <div class="onboarding-actions"><button id="login" class="primary">ورود با پاستا <span aria-hidden="true">←</span></button><span>با همان حساب و اعتبار پاستا</span></div>
       <div id="device" class="device" hidden><p>کد را در صفحهٔ ورود پاستا تطبیق بده:</p><strong id="device-code" dir="ltr"></strong><a id="device-link" target="_blank" rel="noopener noreferrer">باز کردن صفحهٔ تأیید</a></div>
-      <form id="budget-form" hidden><h2>سقف مصرف را تعیین کن</h2><p>هزینهٔ مدل از اعتبار پاستا کم میشه. این سقف برای اتصال همین دستگاهه.</p><label for="budget">سقف روزانه، تومان</label><div class="budget-row"><input id="budget" type="number" value="50000" min="1" max="1000000" required><button class="primary">تأیید و شروع</button></div></form>
+      <section id="subscription-onboarding" hidden><h2 id="subscription-heading">با اشتراک کدنویسی شروع کنید</h2><p id="subscription-description">یک اشتراک برای پاستاکد و ابزارهای کدنویسی شما؛ سهمیهٔ مشترک و وضعیت مصرف در حساب پاستا.</p><a id="subscription-buy" class="primary" target="_blank" rel="noopener noreferrer">دیدن بسته‌ها و خرید اشتراک</a><button id="subscription-continue" class="primary" hidden>اتصال و شروع</button><p><a id="subscription-wallet" target="_blank" rel="noopener noreferrer">مصرف با کیف پول و تعیین سقف مشترک</a></p></section><form id="budget-form" hidden><h2>سقف مصرف را تعیین کن</h2><p>هزینهٔ مدل از اعتبار پاستا کم میشه. این سقف برای اتصال همین دستگاهه.</p><label for="budget">سقف روزانه، تومان</label><div class="budget-row"><input id="budget" type="number" value="50000" min="1" max="1000000" required><button class="primary">تأیید و شروع</button></div></form>
       <div class="intro-foot"><span>اجرا روی دستگاه؛ پردازش با مدل پاستا</span><span>تغییر فایل و اجرای دستور با تأیید تو</span></div>
     </section>
     <section id="conversation" class="conversation" aria-label="گفتگو" hidden>

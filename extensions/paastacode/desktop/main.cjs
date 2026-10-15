@@ -1,5 +1,6 @@
 const {app,BrowserWindow,shell,dialog,ipcMain,Menu}=require("electron");
 const path=require("node:path"),fs=require("node:fs/promises");
+const {allowedExternal}=require('./external-links.cjs');
 let service,window,changing=false,updates;
 app.setName("PaastaCode");
 // CI runners lack a usable GPU; keep native renderer acceptance on supported CPU rendering.
@@ -31,10 +32,7 @@ app.whenReady().then(async()=>{
     icon:path.join(__dirname,"icon.png"),show:!process.env.PAASTACODE_DESKTOP_SMOKE||process.env.PAASTACODE_DESKTOP_VISIBLE_SMOKE==="1",autoHideMenuBar:true,backgroundColor:"#f5f7fa",
     webPreferences:{preload:path.join(__dirname,"preload.cjs"),nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}});
   window.webContents.setWindowOpenHandler(({url})=>{
-    let target;try{target=new URL(url);}catch{return {action:"deny"};}
-    const allowed=new URL(process.env.PAASTACODE_CONSOLE||"https://console.paasta.cloud");
-    const attribution=["https://opencode.ai/","https://github.com/Paasta-Cloud/PaastaCode","https://github.com/Paasta-Cloud/PaastaCode/releases"].includes(target.href);
-    if(attribution||(target.origin===allowed.origin&&target.pathname==="/cli/authorize")||(target.protocol==="https:"&&!target.username&&!target.password&&target.origin!==allowed.origin))void shell.openExternal(url);
+    if(allowedExternal(url,process.env.PAASTACODE_CONSOLE||"https://console.paasta.cloud"))void shell.openExternal(url).catch(()=>dialog.showErrorBox('مرورگر باز نشد','صفحهٔ اشتراک را در console.paasta.cloud/paastacode باز کنید.'));
     return {action:"deny"};
   });
   window.webContents.on("page-title-updated",event=>event.preventDefault());

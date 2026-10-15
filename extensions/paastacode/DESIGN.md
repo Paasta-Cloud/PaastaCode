@@ -1,6 +1,8 @@
 # PaastaCode design
 
 ## Overview
+
+VS Code exposes the official Paasta mark in the native Activity Bar, with a native welcome view containing the primary open-workbench action. An empty window shows a folder-picker action. Billing and updates stay in the view menu; the editor title has a workbench shortcut. Preserve the editor theme, focus behavior and workspace-trust boundary; do not auto-start an engine or open a tab on installation.
 Operate mode, redesigned for the owner's Codex-like developer workbench. Developers follow long tasks alongside their editor; charcoal surfaces reduce the bright empty field of the previous interface. A persistent light/dark control supports daylight work. Keep the official Paasta mark.
 
 ## Colors

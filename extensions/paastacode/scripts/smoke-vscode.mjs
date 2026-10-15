@@ -7,7 +7,8 @@ import {downloadAndUnzipVSCode,runVSCodeCommand,runTests} from "@vscode/test-ele
 
 const pkg=JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8"));
 const manifest=JSON.parse(await readFile(new URL("../vscode/package.json",import.meta.url),"utf8"));
-const vsix=resolve(process.argv[2]||`dist/PaastaCode-${pkg.version}-${process.platform}-${process.arch}.vsix`);
+const empty=process.argv.includes('--empty');
+const vsix=resolve(process.argv.slice(2).find(arg=>arg!=='--empty')||`dist/PaastaCode-${pkg.version}-${process.platform}-${process.arch}.vsix`);
 const release=JSON.parse(await readFile(`dist/release-manifest-${process.platform}-${process.arch}.json`,"utf8"));
 assert.equal(release.version,pkg.version);assert.equal(release.platform,process.platform);assert.equal(release.arch,process.arch);
 const expected=release.files.find(file=>file.name===vsix.split(/[\\/]/).at(-1));assert(expected,"VSIX must appear in the native release manifest");
@@ -21,7 +22,7 @@ for(const dir of [extensions,profile,workspace,driver,output])await mkdir(dir,{r
 await writeFile(join(driver,"package.json"),JSON.stringify({name:"paastacode-acceptance-driver",publisher:"paasta-qa",version:"1.0.0",engines:{vscode:"^1.95.0"}}));
 const profileArgs=["--user-data-dir="+profile,"--extensions-dir="+extensions];
 const platform=process.platform==="win32"?"win32-"+process.arch+"-archive":process.platform==="darwin"?(process.arch==="arm64"?"darwin-arm64":"darwin"):"linux-"+process.arch;
-const download={version:"1.141.0",platform,cachePath:resolve(".artifacts/vscode-cache")};
+const download={version:"1.141.0",platform,cachePath:resolve(process.env.PAASTACODE_VSCODE_CACHE||".artifacts/vscode-cache")};
 const socket=createServer();await new Promise(r=>socket.listen(0,"127.0.0.1",r));const port=socket.address().port;await new Promise(r=>socket.close(r));
 try{
   const executable=await downloadAndUnzipVSCode(download);
@@ -32,15 +33,15 @@ try{
   let runnerError;
   try{
     await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:driver,extensionTestsPath:resolve("test/vscode-smoke.cjs"),
-      launchArgs:[workspace,...profileArgs,"--remote-debugging-port="+port,"--disable-gpu"],stdout:stream,stderr:stream,
-      extensionTestsEnv:{PAASTACODE_HOME:join(home,"account"),PAASTACODE_TEST_CDP:String(port),PAASTACODE_INSTALLED_ROOT:extensions,PAASTACODE_EXPECT_EXTENSION_VERSION:manifest.version,PAASTACODE_VSCODE_OUTPUT:output}});
+      launchArgs:[...(empty?[]:[workspace]),...profileArgs,"--remote-debugging-port="+port,"--disable-gpu"],stdout:stream,stderr:stream,
+      extensionTestsEnv:{PAASTACODE_HOME:join(home,"account"),PAASTACODE_TEST_CDP:String(port),PAASTACODE_INSTALLED_ROOT:extensions,PAASTACODE_EXPECT_EXTENSION_VERSION:manifest.version,PAASTACODE_VSCODE_OUTPUT:output,PAASTACODE_VSCODE_EMPTY:empty?'1':'0'}});
   }catch(error){runnerError=error;}finally{await new Promise(r=>stream.end(r));}
   if(runnerError){
     const diagnostic=(await readFile(join(output,"vscode.log"),"utf8")).split(/\r?\n/).filter(line=>/error|failed|assert|ERR_|fatal/i.test(line)).slice(-20).join("\n")
       .replace(/(?:#cap=|\/embed\/)[A-Za-z0-9_-]+/g,"[redacted local capability]").replace(/Bearer [A-Za-z0-9_.-]+/g,"Bearer [redacted]");
     console.error(diagnostic);throw runnerError;
   }
-  const result=JSON.parse(await readFile(join(output,"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
+  const result=JSON.parse(await readFile(join(output,empty?"vscode-empty-result.json":"vscode-result.json"),"utf8"));assert.equal(result.installed,true);assert.equal(result.version,manifest.version);
   console.log(`Installed VS Code ${process.platform}/${process.arch} acceptance passed: VSIX ${result.version}, bundled runtime, RTL and local Persian font`);
 }finally{
   // Stop only this isolated QA workspace after extension-host shutdown.

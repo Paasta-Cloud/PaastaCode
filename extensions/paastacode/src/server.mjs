@@ -215,16 +215,20 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(route==="GET /api/state"){
       let error=null;
-      if(account.credentials&&!context)try{context=await account.context();}catch(caught){error=caught.message;}
+      if(account.credentials)try{context=await account.context();}catch(caught){context=null;error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+    }
+    if(route==="GET /api/quota"){
+      if(!account.credentials?.aiKey)throw new Error('ابتدا اتصال مدل‌ها را تأیید کنید.');
+      return json(response,await account.request('/api/coding/usage',{token:account.credentials.aiKey}));
     }
     if(route==="POST /api/login")return json(response,await mutateAccount(()=>account.begin(),expectedAccount));
     if(route==="POST /api/login/poll"){
       if(!loginPolling)loginPolling=mutateAccount(async()=>{const previous=account.credentials?.token,result=await account.poll();if(!result.pending){if(previous!==account.credentials?.token){await runtime.stop();context=null;}context=await account.context();}return result;},expectedAccount).finally(()=>{loginPolling=null;});
       return json(response,await loginPolling);
     }
-    if(route==="POST /api/connect"){const input=await body(request);return json(response,await mutateAccount(async()=>{const previous=account.credentials?.aiKey,result=await account.connect(Number(input.dailyLimitToman));if(previous!==account.credentials?.aiKey){await runtime.stop();context=null;}await ready();return result;},expectedAccount));}
+    if(route==="POST /api/connect"){const input=await body(request);return json(response,await mutateAccount(async()=>{const previous=account.credentials?.aiKey,result=await account.connect(input.dailyLimitToman===undefined?undefined:Number(input.dailyLimitToman));if(previous!==account.credentials?.aiKey){await runtime.stop();context=null;}await ready();return result;},expectedAccount));}
     if(route==="POST /api/logout"){
       return json(response,await mutateAccount(async()=>{await deployment.disconnect();await account.logout();await runtime.stop();context=null;await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version});return {ok:true};},expectedAccount));
     }
