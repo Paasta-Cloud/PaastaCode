@@ -18,7 +18,9 @@ story("rapidly dismissing the mobile variant picker returns focus and permits re
     await variant.evaluate(async (button, frames) => {
       if (!(button instanceof HTMLButtonElement)) throw new Error("Missing variant button")
       button.click()
+
       for (let frame = 0; frame < frames; frame++) await new Promise(requestAnimationFrame)
+
       button.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
     }, frames)
     await expect(variant).toHaveAttribute("aria-expanded", "false")
