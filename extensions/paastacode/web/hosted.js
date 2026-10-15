@@ -44,7 +44,7 @@ export async function connectHosted({onAccount=()=>{}}={}){
   history.replaceState(null,"",location.pathname+location.search);
   $("hosted-local-content").append(form);form.hidden=false;hub.hidden=false;$("hosted-local").open=!!fragment.get("local");
   $("hosted-local").hidden=mobileApp;
-  if(mobileApp){$("hosted-hub").querySelector(".intro-label").textContent="پاستاکد برای اندروید";$("hosted-hub").querySelector(".hosted-badge").textContent="اجرای ابری";}
+  if(mobileApp){$("hosted-hub").querySelector(".intro-label").textContent="فضای کار شما";$("hosted-hub").querySelector("h1").textContent="پروژه‌ات را ادامه بده";$("hosted-hub").querySelector(".hosted-badge").textContent="اجرای ابری";}
   $("onboarding").hidden=true;$("conversation").hidden=true;$("composer").hidden=true;
   toolbar.classList.add("workspace-selector");for(const node of projectChrome)node.hidden=true;
   document.getElementById("login").disabled=true;document.getElementById("new").disabled=true;

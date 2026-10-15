@@ -94,3 +94,23 @@ main .sync-controls{padding:6px 28px;border-bottom:0;gap:8px}main .sync-controls
 .network-status{position:fixed;inset:0 0 auto;z-index:1000;background:var(--soft);border-bottom:1px solid var(--danger);padding:12px 16px;color:var(--ink);font-size:12px;text-align:center}.network-status[hidden]{display:none}
 html[data-mobile-app=true] .workspace{padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
 @media(pointer:coarse){.prompt-keys{display:none}}
+
+.mobile-navigation{display:none}
+@media(max-width:640px){
+  html[data-mobile-app=true] .mobile-navigation{display:flex;flex-shrink:0;gap:4px;justify-content:space-around;padding:6px 12px max(6px,env(safe-area-inset-bottom));border-top:1px solid var(--line);background:var(--bg)}
+  .mobile-navigation button{display:flex;flex:1;flex-direction:column;align-items:center;gap:2px;border:0;background:transparent;font-size:11px;min-height:52px;border-radius:12px;touch-action:manipulation}
+  .mobile-navigation button:hover,.mobile-navigation button:active{background:var(--hover)}
+  .mobile-navigation .ui-icon{width:22px;height:22px}
+  html[data-mobile-app=true][data-mobile-editing] .mobile-navigation{display:none}
+  html[data-mobile-app=true] .workspace{padding-bottom:0}
+  html[data-mobile-app=true] .hosted-hub{padding:20px 20px 24px;overscroll-behavior-y:contain}
+  html[data-mobile-app=true] .hosted-heading{margin-bottom:24px}
+  html[data-mobile-app=true] .hosted-heading h1{font-size:26px;line-height:1.5}
+  html[data-mobile-app=true] .hosted-mark{display:none}
+  html[data-mobile-app=true] .hosted-account{align-items:stretch;gap:16px}
+  html[data-mobile-app=true] .hosted-actions{gap:8px}
+  html[data-mobile-app=true] .hosted-actions button,html[data-mobile-app=true] .button-link{min-height:44px}
+  html[data-mobile-app=true] .topbar{padding:6px 16px;min-height:56px}
+  html[data-mobile-app=true] .new-session kbd{display:none}
+}
+html[data-mobile-app=true] .hosted-foot{display:none}

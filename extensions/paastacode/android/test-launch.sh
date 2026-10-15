@@ -23,3 +23,4 @@ sleep 5
 adb logcat -d > launch-evidence/relaunch-logcat.txt
 if grep -q 'FATAL EXCEPTION' launch-evidence/relaunch-logcat.txt; then exit 1; fi
 adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | grep 'com.android.chrome'
+if [[ "${VERIFY_LIVE_TWA:-false}" == "true" ]]; then python3 extensions/paastacode/android/test-live-twa.py; fi

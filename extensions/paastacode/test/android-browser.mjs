@@ -24,6 +24,13 @@ try {
   await page.locator("#hosted-login").waitFor({state:"visible"});
   assert.equal(await page.locator("#hosted-local").isVisible(),false);
   assert.equal(new URL(page.url()).search,"?platform=android");
+  await page.getByRole("navigation",{name:"دسترسی سریع"}).getByRole("button",{name:"گفتگوها",exact:true}).click();
+  await page.locator("#rail.open").waitFor();
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator("#rail").evaluate(node=>node.classList.contains("open")),false);
+  assert.equal(await page.locator("main").evaluate(node=>node.inert),false);
+  await page.getByRole("navigation").getByRole("button",{name:"حساب",exact:true}).click();
+  assert.equal(await page.locator("#hosted-login").evaluate(node=>node===document.activeElement),true);
   signedIn=true;await page.locator("#hosted-refresh").click();
   await page.getByText("ساخت فضای کار ابری هنوز فعال نشده است. پروژهٔ تازه را پس از فعال‌شدن سرویس می‌توانید بسازید.",{exact:true}).waitFor();
   assert.equal(await page.locator("#hosted-create").isVisible(),false);

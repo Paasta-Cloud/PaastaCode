@@ -7,7 +7,7 @@ import {syncUI} from "./sync.js";
 import {workbench} from "./workbench.js";
 import {gitUI} from "./git-ui.js";
 import {updatesUI} from "./updates.js";
-import {setupPwa,submitWithEnter} from "./pwa.js";
+import {setupPwa,submitWithEnter,setupMobileNavigation} from "./pwa.js";
 setupPwa();
 const $=id=>document.getElementById(id);
 enhanceSelects();
@@ -344,7 +344,9 @@ async function switchTab(next){
 }
 $("local-tab").onclick=()=>run($("local-tab"),()=>switchTab("local"));
 $("cloud-tab").onclick=()=>run($("cloud-tab"),()=>switchTab("cloud"));
-function drawer(open){$("rail").classList.toggle("open",open);$("menu").setAttribute("aria-expanded",String(open));document.querySelector("main").inert=open;$("rail-backdrop").hidden=!open;if(open)$("rail-close").focus();else if(matchMedia("(max-width:640px)").matches)$("menu").focus();}
+let drawerCloser;
+function drawer(open){drawerCloser?.destroy();drawerCloser=null;if(open&&typeof CloseWatcher!=="undefined"){drawerCloser=new CloseWatcher();drawerCloser.addEventListener("close",()=>drawer(false),{once:true});}$("rail").classList.toggle("open",open);$("menu").setAttribute("aria-expanded",String(open));document.querySelector("main").inert=open;$("rail-backdrop").hidden=!open;if(open)$("rail-close").focus();else if(matchMedia("(max-width:640px)").matches)$("menu").focus();}
+setupMobileNavigation(drawer);
 $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("rail-backdrop").onclick=()=>drawer(false);
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
 document.addEventListener("keydown",event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="n"&&!$("new").disabled&&!document.querySelector("dialog[open]")){event.preventDefault();$("new").click();}if(event.key==="Escape")drawer(false);if(event.key==="Tab"&&$("rail").classList.contains("open")){const items=[...$("rail").querySelectorAll("button:not(:disabled),a[href],input:not(:disabled)")].filter(el=>el.offsetParent);const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});

@@ -161,3 +161,9 @@
 
 - Fix immediate launch crash by registering the required TWA site-settings activity.
 - Add Android 16 emulator coverage for release-mode cold launch, Chrome handoff and relaunch.
+
+## تجربهٔ موبایل اندروید
+
+- دسترسی سریع به پروژه‌ها، گفتگوها و حساب از پایین صفحه.
+- بستن منوی گفتگوها با دکمهٔ برگشت در مرورگرهای پشتیبان، همراه با حفظ رفتار کیبورد.
+- اتصال دامنه به امضای دائمی برنامه برای اجرای تمام‌صفحه؛ ورود در دامنهٔ حساب پاستا همچنان هویت سایت را نمایش می‌دهد.

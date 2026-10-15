@@ -1,6 +1,11 @@
 name: PaastaCode Android
 on:
   workflow_dispatch:
+    inputs:
+      published_apk_tag:
+        description: 'Optional draft release tag containing the publisher-signed APK for live TWA acceptance'
+        required: false
+        type: string
   pull_request:
     paths:
       - 'extensions/paastacode/android/**'
@@ -82,6 +87,16 @@ jobs:
           export EMULATOR_KEY_PASSWORD="$(openssl rand -hex 32)"
           keytool -genkeypair -keystore "$RUNNER_TEMP/emulator.p12" -storepass:env EMULATOR_KEY_PASSWORD -alias emulator -keyalg RSA -validity 2 -dname CN=Emulator -noprompt
           java -jar launch-apk/apksigner.jar sign --ks "$RUNNER_TEMP/emulator.p12" --ks-pass env:EMULATOR_KEY_PASSWORD --out launch-apk/app-release.apk launch-apk/app-release-unsigned.apk
+      - name: Use publisher APK for live acceptance
+        if: github.event_name == 'workflow_dispatch' && inputs.published_apk_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.published_apk_tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir publisher-apk
+          test "$(find publisher-apk -name '*.apk' | wc -l)" -eq 1
+          cp publisher-apk/*.apk launch-apk/app-release.apk
+          java -jar launch-apk/apksigner.jar verify --print-certs launch-apk/app-release.apk
       - name: Enable emulator acceleration
         run: sudo chmod 666 /dev/kvm
       - uses: reactivecircus/android-emulator-runner@v2
@@ -91,6 +106,8 @@ jobs:
           arch: x86_64
           disable-animations: true
           script: bash extensions/paastacode/android/test-launch.sh
+        env:
+          VERIFY_LIVE_TWA: ${{ github.event_name == 'workflow_dispatch' && inputs.published_apk_tag != '' }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
