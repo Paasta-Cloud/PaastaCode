@@ -1,5 +1,8 @@
-import { expect, test } from "bun:test"
+import { expect, setDefaultTimeout, test } from "bun:test"
 import path from "node:path"
+
+// Each case loads the real Playwright configuration in a fresh native process.
+if (process.platform === "win32") setDefaultTimeout(30_000)
 
 test.each([
   { name: "local development", ci: "", build: "", built: false },
