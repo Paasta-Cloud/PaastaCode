@@ -10,7 +10,8 @@
 - Local client validation: syntax checks and all 77 tests passed, including real pinned-engine permissions, command streaming, PDF catalogue refresh, workflow handoff and session persistence.
 - Full upstream lint/type checks and Linux/Windows tests run in the pull request. Native packages still require the existing release and installed-extension acceptance gates before promotion.
 - Compatibility fixes found during acceptance activate the transcript CSS font before rich history, resolve Storybook dependencies from the application's installed public package entry, and retain the inferred Solid owner type instead of an unnecessary assertion.
-- Windows core integration tests start real Git/npm processes and exceeded Bun's five-second default on hosted runners. The test launcher uses a bounded 30-second Windows default; explicit test/caller timeouts and every assertion remain intact. Linux keeps the original default. See [Bun's timeout reference](https://bun.com/docs/test/runtime-behavior#global-timeout).
+- Core integration tests start real Git/npm/PowerShell processes and exceeded Bun's five-second default on hosted runners on both operating systems. The test launcher uses a bounded 30-second default; explicit test/caller timeouts and every assertion remain intact. See [Bun's timeout reference](https://bun.com/docs/test/runtime-behavior#global-timeout).
+- Windows core files use Bun's test isolation so native process handles do not accumulate across thousands of integration cases. Real CLI cold-start, Git packing, MCP startup and PowerShell oracle tests retain their assertions with bounded platform-specific budgets.
 
 ### Runtime compatibility boundary
 

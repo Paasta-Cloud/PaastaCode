@@ -35,14 +35,17 @@ const environment = {
 }
 
 const child = Bun.spawn({
-  // Git/npm integration tests start real child processes; Windows cold starts
-  // exceed Bun's five-second default on the hosted runners. Explicit test and
-  // command-line timeouts still override this bounded platform default.
+  // Git/npm/PowerShell integration tests start real child processes whose cold
+  // starts exceed Bun's five-second default on hosted runners. Explicit test
+  // and command-line timeouts still override this bounded default.
   cmd: [
     process.execPath,
     "test",
     "--only-failures",
-    ...(process.platform === "win32" ? ["--timeout", "30000"] : []),
+    "--timeout",
+    "30000",
+    // Thousands of integration cases must not share leaked handles on Windows.
+    ...(process.platform === "win32" ? ["--isolate"] : []),
     ...process.argv.slice(2),
   ],
   env: environment,
