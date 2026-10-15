@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "پاستاکد | PaastaCode",
+  "short_name": "پاستاکد",
+  "description": "دستیار کدنویسی پاستا برای کار با پروژه‌های ابری",
+  "lang": "fa",
+  "dir": "rtl",
+  "start_url": "/?platform=android",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c1d21",
+  "theme_color": "#1c1d21",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

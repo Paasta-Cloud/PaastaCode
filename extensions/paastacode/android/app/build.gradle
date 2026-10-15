@@ -1,0 +1,43 @@
+plugins { id 'com.android.application' }
+
+def signingKeys = ['PAASTACODE_ANDROID_KEYSTORE', 'PAASTACODE_ANDROID_STORE_PASSWORD', 'PAASTACODE_ANDROID_KEY_ALIAS', 'PAASTACODE_ANDROID_KEY_PASSWORD']
+def signed = signingKeys.every { System.getenv(it) }
+def prepareUnsignedRelease = providers.gradleProperty('prepareUnsignedRelease').orNull == 'true'
+if (signingKeys.any { System.getenv(it) } && !signed) {
+    throw new GradleException('All four PAASTACODE_ANDROID signing variables are required.')
+}
+android {
+    namespace 'cloud.paasta.code'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'cloud.paasta.code'
+        minSdk 24
+        targetSdk 36
+        versionCode 2
+        versionName '0.1.1'
+    }
+    signingConfigs {
+        if (signed) {
+            publisher {
+                storeFile file(System.getenv('PAASTACODE_ANDROID_KEYSTORE'))
+                storePassword System.getenv('PAASTACODE_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('PAASTACODE_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('PAASTACODE_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        debug { applicationIdSuffix '.debug'; versionNameSuffix '-debug' }
+        release {
+            if (signed) signingConfig signingConfigs.publisher
+            minifyEnabled false
+        }
+    }
+}
+// Never substitute an ephemeral debug key for the publisher's release identity.
+tasks.configureEach {
+    if (name in ['packageRelease', 'bundleRelease']) {
+        doFirst { if (!signed && !prepareUnsignedRelease) throw new GradleException('Publisher signing is not configured.') }
+    }
+}
+dependencies { implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4' }

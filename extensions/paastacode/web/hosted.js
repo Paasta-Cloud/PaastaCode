@@ -1,4 +1,5 @@
 import {icon} from "./components.js";
+import {mobileApp} from "./pwa.js";
 export const hostedOrigin="https://code.paasta.cloud";
 export function workspaceConnection(value){
   const url=new URL(value);
@@ -38,10 +39,12 @@ export async function connectHosted({onAccount=()=>{}}={}){
   let restored=false,lastList="",lastRefresh=0;
   const connection=new Promise(resolve=>{resolveConnection=resolve;});
   const fragment=new URLSearchParams(location.hash.slice(1));
-  if(fragment.get("local"))input.value=fragment.get("local")+"/#cap="+fragment.get("cap");
+  if(!mobileApp&&fragment.get("local"))input.value=fragment.get("local")+"/#cap="+fragment.get("cap");
   else input.value=sessionStorage.getItem("paastacode-workspace-link")||"";
-  history.replaceState(null,"",location.pathname);
+  history.replaceState(null,"",location.pathname+location.search);
   $("hosted-local-content").append(form);form.hidden=false;hub.hidden=false;$("hosted-local").open=!!fragment.get("local");
+  $("hosted-local").hidden=mobileApp;
+  if(mobileApp){$("hosted-hub").querySelector(".intro-label").textContent="فضای کار شما";$("hosted-hub").querySelector("h1").textContent="پروژه‌ات را ادامه بده";$("hosted-hub").querySelector(".hosted-badge").textContent="اجرای ابری";}
   $("onboarding").hidden=true;$("conversation").hidden=true;$("composer").hidden=true;
   toolbar.classList.add("workspace-selector");for(const node of projectChrome)node.hidden=true;
   document.getElementById("login").disabled=true;document.getElementById("new").disabled=true;
@@ -106,7 +109,7 @@ export async function connectHosted({onAccount=()=>{}}={}){
     const paidUntil=end=>new Date(end).getTime()>Date.now();
     $("hosted-export-note").hidden=!workspaces.some(row=>row.status==="ready"&&paidUntil(row.current_period_end));
     const key=JSON.stringify(workspaces.map(row=>[row,paidUntil(row.current_period_end)]));if(key===lastList)return;lastList=key;$("hosted-list").replaceChildren();
-    if(!workspaces.length){$("hosted-list").append(element("p","هنوز فضای کار ابری ندارید. یک فضای تازه بسازید یا به پروژه روی کامپیوترتان وصل شوید.","hosted-empty"));return;}
+    if(!workspaces.length){$("hosted-list").append(element("p",mobileApp?"هنوز فضای کار ابری ندارید. پس از فعال‌شدن سرویس، یک فضای تازه بسازید.":"هنوز فضای کار ابری ندارید. یک فضای تازه بسازید یا به پروژه روی کامپیوترتان وصل شوید.","hosted-empty"));return;}
     const labels={starting:"در حال آماده‌سازی",ready:"آماده",suspended:"متوقف",deleting:"در حال پاک‌سازی",failed:"ساخت ناموفق",stopped:"متوقف"};
     for(const row of workspaces){
       const paid=paidUntil(row.current_period_end),expired=!paid&&["ready","suspended"].includes(row.status);
@@ -144,9 +147,9 @@ export async function connectHosted({onAccount=()=>{}}={}){
       if(!restored){restored=true;const pending=saved(intentKey);if(pending?.owner===owner&&pending.quote?.token)review(pending);else remember(intentKey,null);
         const selected=saved(selectedKey);if(selected?.owner!==owner)remember(selectedKey,null);
         const previous=(result.workspaces||[]).find(row=>row.id===selected?.id&&row.status==="ready"&&new Date(row.current_period_end)>new Date());
-        if(!fragment.get("local")&&!intent&&selected?.owner===owner&&previous)open({kind:"cloud",id:previous.id,name:previous.name,owner});
+        if((mobileApp||!fragment.get("local"))&&!intent&&selected?.owner===owner&&previous)open({kind:"cloud",id:previous.id,name:previous.name,owner});
       }
-      if(!catalog.enabled&&!intent)feedback("ساخت فضای کار ابری هنوز فعال نشده است. اتصال به کامپیوترتان در دسترس است.");
+      if(!catalog.enabled&&!intent)feedback(mobileApp?"ساخت فضای کار ابری هنوز فعال نشده است. پروژهٔ تازه را پس از فعال‌شدن سرویس می‌توانید بسازید.":"ساخت فضای کار ابری هنوز فعال نشده است. اتصال به کامپیوترتان در دسترس است.");
     }catch(caught){if(caught.status===403){$("hosted-login").hidden=false;$("hosted-account-detail").textContent="برای دیدن فضاهای کار، وارد حساب پاستا شوید.";$("hosted-list").replaceChildren();}else feedback(caught.message,true);}
     finally{refreshing=false;}
   }
@@ -172,7 +175,7 @@ export async function connectHosted({onAccount=()=>{}}={}){
   const timer=setInterval(()=>{if(!document.hidden&&(!active||dialog.open))refresh();},8000);window.addEventListener("pagehide",()=>clearInterval(timer),{once:true});
   refresh();
   form.onsubmit=async event=>{
-    event.preventDefault();const button=form.querySelector("button");button.disabled=true;error.textContent="";
+    event.preventDefault();if(mobileApp)return;const button=form.querySelector("button");button.disabled=true;error.textContent="";
     try{
       const connection=workspaceConnection(input.value.trim());
       const response=await fetch(connection.origin+"/api/state",{headers:{Authorization:"Bearer "+connection.capability},targetAddressSpace:"loopback",credentials:"omit",signal:AbortSignal.timeout(8000)});
