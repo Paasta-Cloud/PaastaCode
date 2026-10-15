@@ -85,16 +85,22 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   const git=new WorkspaceGit(workspace);
   let accessChanges=Promise.resolve(),permissionPolling=false;
   const appliedAccess=new Map();
-  let syncWrites=Promise.resolve();
+  let syncWrites=Promise.resolve(),engineModels=null;
   const persistSync=()=>{const result=syncWrites.then(()=>writePrivate(syncPath,sync));syncWrites=result.catch(()=>{});return result;};
   const ready=async()=>{
     if(runtime.url)return;
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
-    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);appliedAccess.clear();
+    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config=providerConfig(context.models,account.credentials.aiKey,account.origin);if((await deployment.state()).connected)config.mcp={paasta:paastaMcpConfig(workspace)};await runtime.start(config);engineModels=JSON.stringify(config.provider.paasta.models);appliedAccess.clear();
       await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
+  };
+  const refreshEngineModels=async(models)=>{
+    if(JSON.stringify(providerConfig(models,"",account.origin).provider.paasta.models)===engineModels)return true;
+    // The engine snapshots modalities at startup; a UI catalogue refresh alone drops new PDF attachments.
+    if(Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))return false;
+    await runtime.stop();await ready();return true;
   };
   const accountIdentity=()=>account.origin+":"+context.account.tenantId+":"+context.account.id;
   const restoreKey=id=>"restore:"+accountIdentity()+":"+id;
@@ -158,6 +164,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
           const current=await account.context();
           if(stopRequests.has(key)){record.automatic.state="cancelled";await writePrivate(workflowsPath,workflows);continue;}
           if(current.account.id!==context.account.id||current.account.tenantId!==context.account.tenantId||!codingModels(current.models).some(m=>m.id===record.buildModel))throw new Error("مدل اجرای برنامه یا دسترسی حساب دیگر معتبر نیست.");
+          if(!await refreshEngineModels(current.models))continue;
+          if(stopRequests.has(key)){record.automatic.state="cancelled";await writePrivate(workflowsPath,workflows);continue;}
           record.automatic.state="handoff";record.automatic.planMessage=info.id;await writePrivate(workflowsPath,workflows);
           record.phase="build";
           await runtime.call("/session/"+id,{method:"PATCH",body:{permission:rules(id)}});appliedAccess.delete(id);
@@ -368,6 +376,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
         for(let i=0;i<40;i++){status=await runtime.call("/session/status");if(!status[input.id]||status[input.id].type==="idle")break;await new Promise(r=>setTimeout(r,100));}
       }
       if(status[input.id]&&status[input.id].type!=="idle")throw new Error("پاستاکد هنوز روی درخواست قبلی کار می‌کند.");
+      if(!await refreshEngineModels(context.models))throw new Error("قابلیت‌های مدل‌ها تغییر کرده است؛ پس از پایان اجرای گفتگوهای دیگر، دوباره ارسال کنید.");
       if(input.executePlan){
         const messages=await runtime.call("/session/"+input.id+"/message"),last=messages.at(-1);
         if(phase!=="build"||workflow(input.id).phase!=="plan"||last?.info?.role!=="assistant"||last.info.agent!=="paasta-plan"||!last.info.time?.completed||last.info.error||!last.parts.some(p=>p.type==="text"&&p.text?.trim()))throw new Error("ابتدا برنامه‌ریزی باید با یک پاسخ کامل به پایان برسد.");
