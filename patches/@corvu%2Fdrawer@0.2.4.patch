@@ -1,0 +1,54 @@
+diff --git a/dist/index.js b/dist/index.js
+index c524838..2591903 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -477,6 +477,7 @@ var DrawerRoot = (props) => {
+       if (_open) {
+         setTransitionAwareOpen(true);
+         afterPaint(() => {
++          if (!open()) return;
+           batch(() => {
+             setTransitionState("opening");
+             setActiveSnapPoint(localProps.defaultSnapPoint);
+@@ -492,8 +493,12 @@ var DrawerRoot = (props) => {
+           setActiveSnapPoint(0);
+         });
+         afterPaint(() => {
++          if (open()) return;
+           const transitionDuration = parseFloat(drawerStyles().transitionDuration);
+-          if (transitionDuration === 0) {
++          const transitioning = dialogContext()?.contentRef()?.getAnimations?.().some(
++            (animation) => animation.transitionProperty === "transform" && animation.playState === "running"
++          );
++          if (transitionDuration === 0 || !transitioning) {
+             closeDrawer();
+           }
+         });
+diff --git a/dist/index.jsx b/dist/index.jsx
+index fa3ca91..0249010 100644
+--- a/dist/index.jsx
++++ b/dist/index.jsx
+@@ -567,6 +567,7 @@ var DrawerRoot = (props) => {
+       if (_open) {
+         setTransitionAwareOpen(true);
+         afterPaint(() => {
++          if (!open()) return;
+           batch2(() => {
+             setTransitionState("opening");
+             setActiveSnapPoint(localProps.defaultSnapPoint);
+@@ -584,10 +585,14 @@ var DrawerRoot = (props) => {
+           setActiveSnapPoint(0);
+         });
+         afterPaint(() => {
++          if (open()) return;
+           const transitionDuration = parseFloat(
+             drawerStyles().transitionDuration
+           );
+-          if (transitionDuration === 0) {
++          const transitioning = dialogContext()?.contentRef()?.getAnimations?.().some(
++            (animation) => animation.transitionProperty === "transform" && animation.playState === "running"
++          );
++          if (transitionDuration === 0 || !transitioning) {
+             closeDrawer();
+           }
+         });

@@ -26,12 +26,12 @@ pty.onData((text) => {
 
 try {
   if (raw) {
-    await waitFor("PTY_RAW_READY")
+    await waitFor("PTY_RAW_READY", 15_000)
     pty.write("\x03")
     await waitFor("PTY_KEY:3")
   }
   if (!raw) {
-    await waitFor("PTY_PROMPT>")
+    await waitFor("PTY_PROMPT>", 15_000)
     // Split markers so echoed command text cannot satisfy the output checks.
     pty.write("Write-Output ('PTY_' + 'BUSY'); Start-Sleep -Seconds 60; Write-Output ('PTY_' + 'COMPLETED')\r")
     await waitFor("PTY_BUSY")
@@ -49,12 +49,12 @@ try {
 }
 process.exit(0)
 
-function waitFor(text: string) {
+function waitFor(text: string, timeoutMs = 5_000) {
   return new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
       listeners.delete(check)
       reject(new Error(`Timed out waiting for ${JSON.stringify(text)}: ${output.text}`))
-    }, 5_000)
+    }, timeoutMs)
     const check = () => {
       const index = output.text.indexOf(text, output.cursor)
       if (index === -1) return

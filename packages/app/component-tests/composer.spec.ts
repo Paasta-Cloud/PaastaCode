@@ -1,5 +1,37 @@
 import { expect, story } from "../../storybook/playwright/story"
 
+story("rapidly dismissing the mobile variant picker returns focus and permits reopening", async ({ mount, page }) => {
+  await page.setViewportSize({ width: 360, height: 720 })
+  const component = await mount("opencode-composer-flow--toolbar-overflow", { args: { alternate: "steer" } })
+  const variant = component.getByRole("button", { name: "Choose model variant", exact: true })
+  const drawer = page.getByRole("dialog", { name: "Choose model variant", exact: true })
+
+  // Load the lazy drawer before exercising close requests during its first paint.
+  await variant.click()
+  await expect(drawer).toBeVisible()
+  await expect(drawer).not.toHaveAttribute("data-transitioning", "")
+  await page.keyboard.press("Escape")
+  await expect(drawer).not.toBeVisible()
+  await expect(variant).toBeFocused()
+
+  for (const frames of [0, 1, 2]) {
+    await variant.evaluate(async (button, frames) => {
+      button.click()
+      for (let frame = 0; frame < frames; frame++) await new Promise(requestAnimationFrame)
+      button.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    }, frames)
+    await expect(variant).toHaveAttribute("aria-expanded", "false")
+    await expect(drawer).not.toBeVisible()
+    await expect(variant).toBeFocused()
+  }
+
+  await variant.click()
+  await drawer.getByRole("button", { name: "high", exact: true }).click()
+  await expect(drawer).not.toBeVisible()
+  await expect(variant).toContainText("high")
+  await expect(variant).toBeFocused()
+})
+
 for (const direction of ["ltr", "rtl"]) {
   for (const alternate of ["none", "queue", "steer"]) {
     story(`scrolls overflowing controls beside fixed ${alternate} actions in ${direction}`, async ({ mount, page }) => {
