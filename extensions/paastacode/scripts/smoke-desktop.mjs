@@ -1,7 +1,8 @@
 import {spawn} from "node:child_process";
 import {mkdir,readFile,stat} from "node:fs/promises";
 import {existsSync} from "node:fs";
-import {resolve,join} from "node:path";
+import {resolve,join,dirname} from "node:path";
+import {smokeBrowser} from './smoke-browser.mjs';
 const qa=resolve(process.env.PAASTACODE_SMOKE_ROOT||".artifacts/desktop-installed-"+process.pid);
 const capture=resolve(process.env.PAASTACODE_SMOKE_OUTPUT||join(qa,"capture"));
 const version=process.env.PAASTACODE_EXPECT_VERSION||JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
@@ -9,6 +10,8 @@ await mkdir(qa,{recursive:true});
 const candidates=process.env.PAASTACODE_SMOKE_BINARY?[process.env.PAASTACODE_SMOKE_BINARY]:process.platform==="win32"?["dist/win-unpacked/PaastaCode.exe"]:process.platform==="darwin"?["dist/mac-arm64/PaastaCode.app/Contents/MacOS/PaastaCode","dist/mac/PaastaCode.app/Contents/MacOS/PaastaCode"]:["/opt/PaastaCode/paastacode","/opt/paastacode/paastacode"];
 const binary=candidates.map(path=>resolve(path)).find(path=>existsSync(path));
 if(!binary)throw new Error("Packaged desktop executable not found; Linux acceptance requires installing the built deb first.");
+const resources=process.platform==='darwin'?join(dirname(binary),'../Resources'):join(dirname(binary),'resources');
+await smokeBrowser(binary,join(resources,'app.asar.unpacked'),qa);
 const env={...process.env,PAASTACODE_HOME:join(qa,"account"),PAASTACODE_DESKTOP_SMOKE:"1",...(process.env.CI?{PAASTACODE_DESKTOP_VISIBLE_SMOKE:"1"}:{}),PAASTACODE_EXPECT_VERSION:version,PAASTACODE_SMOKE_OUTPUT:capture};
 let output="",diagnostic="";
 await new Promise((done,reject)=>{

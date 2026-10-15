@@ -11,6 +11,7 @@ const userA="00000000-0000-4000-8000-000000000001",userB="00000000-0000-4000-800
 let loggedIn=false,enabled=true,account={id:userA,tenantId:tenant,name:"حساب آزمایشی",balanceToman:1000000},quotes=0,creates=0,confirmations=0,loseAck=true,exportFailure=false,emptyAccountReply=false;
 const savedId='00000000-0000-4000-8000-000000000006';
 const exportId="A".repeat(32),zip=Buffer.from("504b05060000000000000000000000000000000000000000","hex");
+let quotaFailure=true;
 let workspaces=[{id:existingId,name:"وب‌سایت فروشگاه",status:"ready",current_period_end:new Date(Date.now()+86400000*25).toISOString(),first_ready_at:new Date().toISOString()}];
 const calls=[],errors=[],requests=[];
 try{
@@ -44,7 +45,8 @@ try{
         assert.equal(url.searchParams.get("id"),exportId);assert.equal(url.searchParams.get("owner"),account.id+":"+account.tenantId);
         return route.fulfill({contentType:"application/zip",headers:{"Content-Disposition":'attachment; filename="PaastaCode-project.zip"'},body:zip});
       }
-      if(path.endsWith("/runtime/state"))return json({connected:true,configured:true,workspace:"/data/private-path",account:{...account,balanceToman:1000000},models:[{id:"synthetic",name:"مدل پاستا",input_toman_per_million:100,output_toman_per_million:200}],features:{independentRuntime:true,workspaceAccess:true},accountRevision:1,accessMode:"review"});
+      if(path.endsWith('/runtime/quota'))return quotaFailure?json({error:'مسیر درخواست مجاز نیست.',workspaceError:true},404):json({active:true,plan:'پایه',startsAt:new Date().toISOString(),endsAt:new Date(Date.now()+25*86400000).toISOString(),quotas:{week:{remainingPercent:75,resetAt:new Date(Date.now()+86400000).toISOString()}}});
+      if(path.endsWith("/runtime/state"))return json({connected:true,configured:true,workspace:"/data/private-path",account:{...account,balanceToman:1000000},models:[{id:"synthetic",name:"مدل پاستا",input_toman_per_million:100,output_toman_per_million:200}],features:{independentRuntime:true,workspaceAccess:true,subscriptionUsage:true},accountRevision:1,accessMode:"review"});
       if(path.includes("/runtime/"))return json(path.endsWith("/status")?{}:[]);
       if(path.endsWith("/catalog"))return json({enabled,plans:[{id:"basic",name:"پایه",cpu_millicores:1000,memory_mib:2048,monthly_price_toman:"100000"}],storage:[{id:existingId,name:"دیسک پروژه",region:"تهران",min_size_gb:1,max_size_gb:50,price_per_gb_month_toman:"2000"}]});
       if(path.endsWith("/quote")){quotes++;const body=request.postDataJSON();assert.equal(body.sizeGiB,5);return json({id:createdId,token:"synthetic-create-token",name:body.name,computeToman:100000,storageToman:10000,totalToman:110000,retentionDays:7,expiresAt:new Date(Date.now()+300000).toISOString()});}
@@ -97,6 +99,7 @@ try{
   workspaces.find(row=>row.id===createdId).status="ready";workspaces.find(row=>row.id===createdId).first_ready_at=new Date().toISOString();
   await page.locator("#hosted-refresh").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();
   await page.locator("#composer").waitFor({state:"visible"});assert.equal(await page.locator("#workspace-name").textContent(),"اپلیکیشن تازه");assert.equal(await page.locator("#local-tab").textContent(),"این فضای کار");
+  await page.waitForFunction(()=>document.querySelector('#subscription-plan').textContent.includes('وضعیت اشتراک دریافت نشد'));assert.equal(await page.locator('#hosted-hub').isVisible(),false);assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('paastacode-cloud-workspace')).id),createdId,'Quota failure must preserve the chosen workspace');quotaFailure=false;await page.reload();await page.locator('#composer').waitFor({state:'visible'});await page.waitForFunction(()=>document.querySelector('#subscription-week-label').textContent.includes('۷۵'));assert.equal(await page.locator('#workspace-name').textContent(),'اپلیکیشن تازه');
   assert(await page.locator(".thread-heading").isVisible());assert(await page.locator(".header-actions").isVisible());
   assert(!requests.some(url=>url.startsWith("http://127.0.0.1")),"cloud mode must never need a loopback runtime");
   await page.locator("#prompt").fill("پیش‌نویس پروژهٔ تازه");

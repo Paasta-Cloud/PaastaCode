@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
 import {resolve,join,dirname,basename} from "node:path";
-import {realpath,readFile,stat} from "node:fs/promises";
-import {pathToFileURL} from "node:url";
+import {realpath,readFile,stat,readdir,lstat} from "node:fs/promises";
+import {pathToFileURL,fileURLToPath} from "node:url";
 import {createInterface} from "node:readline/promises";
 import {PaastaAccount,billingUrl} from "../src/account.mjs";
 import {connectWorkspace,stopWorkspace,refreshAccounts} from "../src/workspace-service.mjs";
 import {engineCommand} from "../src/runtime.mjs";
 import {codingModels} from "../src/models.mjs";
 import {PaastaDeployment} from "../src/deployment.mjs";
+import {parseSkillMarkdown} from '../src/integrations.mjs';
 import {checkUpdate,downloadUpdate,installPortable,portableTarget,currentPackage} from "../src/updates.mjs";
 
 export function openBrowser(url){
@@ -32,10 +33,24 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode tools [--file=PATH|--skill=DIR|--browser=on|off|--auth=NAME|--install-browser]\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
+  if(command==='tools'){
+    if(args.includes('--install-browser')){const launcher=fileURLToPath(new URL('./browser-mcp.cjs',import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');const child=spawn(process.execPath,[launcher,'--install'],{stdio:'inherit',windowsHide:true,env:{...process.env,ELECTRON_RUN_AS_NODE:'1',NODE_PATH:join(dirname(launcher),'../vendor/browser')}});const code=await new Promise((done,fail)=>{child.once('error',fail);child.once('exit',done);});if(code!==0)throw new Error('دریافت مرورگر انجام نشد؛ اتصال اینترنت و نیازمندی‌های مرورگر را بررسی کنید.');return;}
+    const value=name=>args.find(arg=>arg.startsWith('--'+name+'='))?.slice(name.length+3),service=await connectWorkspace({workspace});
+    let revision;
+    const call=async(path,body)=>{const response=await fetch(service.url+'/api/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+service.capability,'Content-Type':'application/json',...(revision===undefined?{}:{'X-PaastaCode-Account':String(revision)})},body:body?JSON.stringify(body):undefined});const result=await response.json();if(!response.ok)throw new Error(result.error||'عملیات ابزارها انجام نشد.');return result;};
+    revision=(await call('state')).accountRevision;
+    if(value('file')){const file=value('file');if((await stat(file)).size>1000000)throw new Error('فایل تنظیمات بیش از حد بزرگ است.');await call('integrations',JSON.parse(await readFile(file,'utf8')));}
+    else if(value('skill')){
+      const directory=await realpath(resolve(value('skill'))),main=join(directory,'SKILL.md');if((await stat(main)).size>128000)throw new Error('فایل مهارت بیش از حد بزرگ است.');const skill=parseSkillMarkdown(await readFile(main,'utf8'));let bytes=Buffer.byteLength(skill.instructions);
+      const walk=async(folder,prefix='')=>{for(const entry of await readdir(folder,{withFileTypes:true})){if(entry.isSymbolicLink())throw new Error('پیوند نمادین را از پوشهٔ مهارت حذف کنید.');const relative=prefix+entry.name,target=join(folder,entry.name);if(entry.isDirectory())await walk(target,relative+'/');else if(relative!=='SKILL.md'){const info=await lstat(target);bytes+=info.size;if(!info.isFile()||bytes>750000||skill.files.length>=64)throw new Error('مهارت بیش از حد بزرگ است؛ حداکثر ۷۵۰ کیلوبایت و ۶۴ فایل همراه.');skill.files.push({path:relative,data:(await readFile(target)).toString('base64')});}}};await walk(directory);await call('integrations',{kind:'skill',action:'save',...skill});
+    }else if(value('browser')){if(!['on','off'].includes(value('browser')))throw new Error('برای مرورگر on یا off وارد کنید.');await call('integrations',{kind:'browser',enabled:value('browser')==='on'});}
+    else if(value('auth')){const result=await call('integrations/auth',{name:value('auth'),...(value('callback')?{callback:value('callback')}:{})});if(result.url){console.log('تأیید اتصال را در مرورگر انجام دهید. اگر بازگشت کامل نشد، همین فرمان را با --callback=URL تکرار کنید.');openBrowser(result.url);}}
+    const result=await call('integrations');console.log(JSON.stringify(result,null,2));return;
+  }
   if(command==="ask"||command==="import"){
     const value=name=>args.find(arg=>arg.startsWith("--"+name+"="))?.slice(name.length+3);
     const service=await connectWorkspace({workspace});

@@ -76,6 +76,8 @@ jobs:
       - name: Browser acceptance
         run: |
           node test/native-browser.mjs
+          node test/integrations-browser.mjs
+          node test/browser-mcp.mjs
           node test/browser.mjs
           node test/workbench-browser.mjs
           node test/redesign-browser.mjs

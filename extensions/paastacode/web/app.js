@@ -6,6 +6,7 @@ import {devicesUI} from "./devices.js";
 import {syncUI} from "./sync.js";
 import {workbench} from "./workbench.js";
 import {gitUI} from "./git-ui.js";
+import './integrations-ui.js';
 import {updatesUI} from "./updates.js";
 import {setupPwa,submitWithEnter,setupMobileNavigation} from "./pwa.js";
 setupPwa();
@@ -104,6 +105,7 @@ const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
 const git=gitUI({api,run,notice});
+const integrations=globalThis.paastacodeIntegrations({api,button:$("integrations-open")});
 function accessView(value){$("access-mode").value=value||"review";$("access-mode").dataset.mode=value||"review";$("access-description").textContent=value==="full"?"Full Access: تغییر فایل و اجرای دستور بدون پرسش":"تغییر فایل و اجرای دستور با تأیید شما";}
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
@@ -115,7 +117,7 @@ async function api(path,method="GET",body){
     request={url:"/api/paastacode/sessions"+(path==="cloud"?"":"?id="+encodeURIComponent(new URLSearchParams(path.split("?")[1]).get("id"))),init:{credentials:"same-origin",cache:"no-store",headers:{"X-PaastaCode-Owner":hostedAccountOwner}}};
   }else request=runtimeRequest(runtimeConnection,path,method,body,{capability,accountRevision:state.features?.independentRuntime?state.accountRevision:undefined});
   const response=await fetch(request.url,request.init);
-  if(runtimeConnection?.kind==="cloud"&&[403,404].includes(response.status)){const result=await response.clone().json().catch(()=>({}));if(result.workspaceError){clearAccountView();invalidateHosted();throw new Error("فضای کار را دوباره انتخاب کنید.");}}
+  if(path!=='quota'&&runtimeConnection?.kind==="cloud"&&[403,404].includes(response.status)){const result=await response.clone().json().catch(()=>({}));if(result.workspaceError){clearAccountView();invalidateHosted();throw new Error("فضای کار را دوباره انتخاب کنید.");}}
   const result=await response.json().catch(()=>null);if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}
   if(awaitingWorkspace()&&response.status===403){hostedAccountOwner=null;clearAccountView();$("account-name").textContent="حساب پاستا";$("account-detail").textContent="ورود دوباره لازم است";$("hosted-hub").hidden=false;$("conversation").hidden=true;$("hosted-login").hidden=false;document.querySelector(".thread-heading").hidden=true;throw new Error("دسترسی حساب تغییر کرده است؛ دوباره وارد حساب پاستا شوید.");}
   if(!result||typeof result!=="object")throw new Error("پاسخ سرویس کامل دریافت نشد؛ دوباره تلاش کنید.");
@@ -137,6 +139,8 @@ async function refreshQuota(){
 setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
   state=await api("state");
+  $("integrations-open").disabled=!state.configured||!state.features?.integrations;
+  $("integrations-open").title=state.configured&&!state.features?.integrations?'پس از پایان کار، اجرای پروژه را به نسخهٔ جدید پاستاکد ارتقا دهید.':'';
   if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
   void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
@@ -279,6 +283,8 @@ $("login").onclick=()=>{const approval=window.open("about:blank","_blank");if(ap
 $('subscription-continue').onclick=()=>run($('subscription-continue'),async()=>{await api('connect','POST',{});await loadState();});
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
 function clearAccountView(){
+  integrations.clear();
+  $("integrations-open").disabled=true;
   delete $("permissions").dataset.signature;
   $("subscription-summary").hidden=true;clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});

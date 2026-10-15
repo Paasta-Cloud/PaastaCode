@@ -18,6 +18,10 @@ The shared select and composer send controls also port VibeFarsi's native Select
 
 The English PaastaCode wordmark embeds the same unmodified Geist variable WOFF2 used by Paasta, Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font), under SIL Open Font License 1.1. Its notice is preserved in licenses/Geist-OFL.txt. The font loads locally and requires no external font service.
 
+## Browser automation
+
+Microsoft Playwright MCP 0.0.83 and its pinned Playwright/Playwright Core runtime are distributed unmodified under Apache-2.0. Source: https://github.com/microsoft/playwright-mcp and https://github.com/microsoft/playwright. Their LICENSE/NOTICE files remain inside the bundled vendor packages. The PaastaCode launcher selects an isolated profile; browser binaries are installed separately or supplied in the cloud runtime image.
+
 ## VS Code Codicons
 
 Native toolbar SVG icons are from Microsoft vscode-codicons, revision 8853e0b1b0e2058b099fde515d5f1f478db2f8e1, under Creative Commons Attribution 4.0 International (CC-BY-4.0). Source: https://github.com/microsoft/vscode-codicons/tree/8853e0b1b0e2058b099fde515d5f1f478db2f8e1. SVG geometry is unchanged; accessibility attributes are added at runtime. The full license is bundled at vscode/media/CODICONS_LICENSE.txt in extension packages.
