@@ -35,7 +35,16 @@ const environment = {
 }
 
 const child = Bun.spawn({
-  cmd: [process.execPath, "test", "--only-failures", ...process.argv.slice(2)],
+  // Git/npm integration tests start real child processes; Windows cold starts
+  // exceed Bun's five-second default on the hosted runners. Explicit test and
+  // command-line timeouts still override this bounded platform default.
+  cmd: [
+    process.execPath,
+    "test",
+    "--only-failures",
+    ...(process.platform === "win32" ? ["--timeout", "30000"] : []),
+    ...process.argv.slice(2),
+  ],
   env: environment,
   stdin: "inherit",
   stdout: "inherit",

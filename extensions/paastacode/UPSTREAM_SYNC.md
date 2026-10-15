@@ -9,6 +9,8 @@
 - Upstream publish/deploy workflows retain their `anomalyco/opencode` repository guards. Fork checks use GitHub-hosted runners rather than upstream-only Blacksmith runners.
 - Local client validation: syntax checks and all 77 tests passed, including real pinned-engine permissions, command streaming, PDF catalogue refresh, workflow handoff and session persistence.
 - Full upstream lint/type checks and Linux/Windows tests run in the pull request. Native packages still require the existing release and installed-extension acceptance gates before promotion.
+- Compatibility fixes found during acceptance activate the transcript CSS font before rich history, resolve Storybook dependencies from the application's installed public package entry, and retain the inferred Solid owner type instead of an unnecessary assertion.
+- Windows core integration tests start real Git/npm processes and exceeded Bun's five-second default on hosted runners. The test launcher uses a bounded 30-second Windows default; explicit test/caller timeouts and every assertion remain intact. Linux keeps the original default. See [Bun's timeout reference](https://bun.com/docs/test/runtime-behavior#global-timeout).
 
 ### Runtime compatibility boundary
 
