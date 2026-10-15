@@ -7,5 +7,6 @@ export const Font = () => {
       console.warn("Unable to load the transcript font", error)
     })
   })
+
   return null
 }
