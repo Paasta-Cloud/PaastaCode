@@ -135,7 +135,7 @@ async function refreshQuota(){
 setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
   state=await api("state");
-  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){await api('connect','POST',{});state=await api('state');}
+  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
   void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
@@ -228,6 +228,8 @@ async function refresh(){
       nextAccountPoll=Date.now()+5000;const next=await api("state");
       const identity=value=>JSON.stringify([value.connected,value.configured,value.account?.id,value.account?.tenantId]);
       if(identity(next)!==identity(state)){clearAccountView();await loadState();refreshing=false;return;}
+      const billing=value=>JSON.stringify([value.billingStatus?.active,value.billingStatus?.mode,value.billingStatus?.canConnectWithoutLimit,value.billingStatus?.plan,value.billingStatus?.startsAt,value.billingStatus?.endsAt,value.billingStatus?.models]);
+      if(billing(next)!==billing(state)){await loadState();refreshing=false;return;}
       state.accountRevision=next.accountRevision;state.accessMode=next.accessMode;accessView(state.accessMode);
     }
   }catch(error){if(!error.stale)notice(error.message,true);refreshing=false;return;}
