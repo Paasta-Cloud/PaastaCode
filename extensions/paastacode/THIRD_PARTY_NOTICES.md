@@ -17,3 +17,7 @@ The bundled Paasta deployment helper includes Go's runtime and standard library,
 The shared select and composer send controls also port VibeFarsi's native Select, Button and PromptInput implementations from https://vibefarsi.ir/r/components/select.json, https://vibefarsi.ir/r/components/button.json and https://vibefarsi.ir/r/components/prompt-input.json (retrieved 2026-10-14). The React/Tailwind presentation is translated to the existing DOM/CSS renderer; native selection, RTL inline-end chevrons, keyboard interaction, focus, disabled and reduced-motion behavior are retained. The VibeFarsi MIT notice above applies.
 
 The English PaastaCode wordmark embeds the same unmodified Geist variable WOFF2 used by Paasta, Copyright 2024 The Geist Project Authors (https://github.com/vercel/geist-font), under SIL Open Font License 1.1. Its notice is preserved in licenses/Geist-OFL.txt. The font loads locally and requires no external font service.
+
+## VS Code Codicons
+
+Native toolbar SVG icons are from Microsoft vscode-codicons, revision 8853e0b1b0e2058b099fde515d5f1f478db2f8e1, under the MIT License. The full notice is bundled at vscode/media/CODICONS_LICENSE.txt in extension packages.
