@@ -270,7 +270,7 @@ $("login").onclick=()=>{const approval=window.open("about:blank","_blank");if(ap
   notice("ورود را در مرورگر تأیید کنید. اگر مرورگر باز نشد، از پیوند زیر استفاده کنید.");
   clearInterval(loginTimer);loginTimer=setInterval(async()=>{
     try{const result=await api("login/poll","POST");if(!result.pending){clearInterval(loginTimer);$("device").hidden=true;notice("");await loadState();}}
-    catch(error){clearInterval(loginTimer);notice(error.message,true);}
+    catch(error){clearInterval(loginTimer);if(!error.stale)notice(error.message,true);}
   },3500);
   }catch(error){approval?.close();throw error;}
 });};
@@ -355,4 +355,4 @@ if(runtimeConnection){
   window.addEventListener("paastacode:workspace-switch",()=>{try{sessionStorage.setItem(draftKey,$("prompt").value);}catch{/* Keep switching available. */}});
 }
 window.addEventListener("paastacode:account-changed",clearAccountView);
-loadState().catch(error=>notice(error.message,true));setInterval(refresh,1800);
+loadState().catch(error=>{if(!error.stale)notice(error.message,true);});setInterval(refresh,1800);
