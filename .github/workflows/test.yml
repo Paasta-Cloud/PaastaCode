@@ -189,14 +189,27 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - name: linux
+          - name: linux-1
             host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
-          - name: windows
+            shard: '1/2'
+            components: true
+          - name: linux-2
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+            shard: '2/2'
+            components: false
+          - name: windows-1
             host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
+            shard: '1/2'
+            components: true
+          - name: windows-2
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
+            shard: '2/2'
+            components: false
     runs-on: ${{ matrix.settings.host }}
     env:
       E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'dev' && github.head_ref != 'dev' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+      PLAYWRIGHT_WORKERS: ${{ github.repository == 'anomalyco/opencode' && '5' || '2' }}
     defaults:
       run:
         shell: bash
@@ -245,26 +258,26 @@ jobs:
 
       - name: Run app e2e tests against production build
         if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:built
+        run: bun --cwd packages/app test:e2e:built --shard "${{ matrix.settings.shard }}"
         env:
           CI: true
         timeout-minutes: 30
 
       - name: Verify service worker precaching and upgrades
-        if: env.E2E_ENABLED == 'true'
+        if: env.E2E_ENABLED == 'true' && matrix.settings.components
         working-directory: packages/app
         run: bunx playwright test --config e2e/service-worker/playwright.config.ts
         timeout-minutes: 5
 
       - name: Run session UI component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' && matrix.settings.components }}
         run: bun --cwd packages/session-ui test:components
         env:
           CI: true
         timeout-minutes: 15
 
       - name: Run app component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' && matrix.settings.components }}
         run: bun --cwd packages/app test:components
         env:
           CI: true
