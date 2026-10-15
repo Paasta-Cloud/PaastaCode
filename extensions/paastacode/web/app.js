@@ -159,7 +159,7 @@ async function loadState(){
     const previous=$("model").value;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
     $("model").value=previous&&state.models.some(m=>m.id===previous)?previous:state.workflowModels?.planModel||state.models[0].id;price();
     const execution=$("execution-model").value;
-    const models=[...state.models].sort((a,b)=>(Number(a.input_toman_per_million)+Number(a.output_toman_per_million))-(Number(b.input_toman_per_million)+Number(b.output_toman_per_million)));
+    const models=[...state.models].sort((a,b)=>Number(b.hostingCountry==='IR')-Number(a.hostingCountry==='IR')||(Number(a.input_toman_per_million)+Number(a.output_toman_per_million))-(Number(b.input_toman_per_million)+Number(b.output_toman_per_million)));
     $("execution-model").replaceChildren(...models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=model.name||model.id;return option;}));
     $("execution-model").value=models.some(m=>m.id===execution)?execution:state.workflowModels?.buildModel||models[0].id;workflowView();
   }

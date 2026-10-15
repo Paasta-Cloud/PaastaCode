@@ -3,6 +3,16 @@ import assert from "node:assert/strict";
 import {codingModels,paidCodingModel,workflowModels} from "../src/models.mjs";
 import {providerConfig} from "../src/runtime.mjs";
 
+test('Iran-hosted Paasta models lead every coding catalogue without relabeling other providers',()=>{
+  const paid={supported_parameters:['tools'],input_toman_per_million:100,output_toman_per_million:300};
+  const models=[{...paid,id:'openai/gpt-sol',name:'GPT Sol'},...['deepseek-v4-flash','gemma-4-31b','glm-5.3'].map(id=>({...paid,id:'paasta/'+id,name:id})),{...paid,id:'other/glm-5.3',name:'GLM 5.3'}];
+  const ranked=codingModels(models);
+  assert.deepEqual(ranked.slice(0,3).map(m=>m.id),models.slice(1,4).map(m=>m.id));
+  assert(ranked.slice(0,3).every(m=>m.hostingCountry==='IR'&&m.name.includes('🇮🇷')&&m.name.includes('میزبانی ایران')));
+  assert.equal(codingModels(ranked)[0].name,ranked[0].name,'labels remain stable after repeated filtering');
+  assert(!ranked.find(m=>m.id==='other/glm-5.3').name.includes('🇮🇷'));
+});
+
 test("Go preferences reorder only available tool models without changing identifiers or prices",()=>{
   const models=[
     {id:"other-a",name:"Other A",input_toman_per_million:100,output_toman_per_million:300,supported_parameters:["tools"]},
