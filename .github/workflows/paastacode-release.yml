@@ -73,6 +73,9 @@ jobs:
         run: go test ./...
       - name: Install browser
         run: npx playwright install --with-deps chromium
+      - name: Allow sandboxed Chromium user namespaces on the ephemeral Linux runner
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Browser acceptance
         run: |
           node test/native-browser.mjs
