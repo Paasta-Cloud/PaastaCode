@@ -14,8 +14,8 @@ test('native webview uses a bounded host bridge, retains account revisions and r
   const webview={cspSource:'vscode-webview://owned',asWebviewUri:value=>'vscode-webview://owned/'+value,onDidReceiveMessage(fn){listener=fn;return {dispose(){}};},async postMessage(message){messages.push(message);}};
   api.attachNative(webview,{extensionUri:{}},async()=>({async request(...args){calls.push(args);return {accountRevision:7};}}));
   assert(!webview.html.includes('<iframe'));assert(webview.html.includes("default-src 'none'"));assert(!webview.html.includes('127.0.0.1'));
-  await listener({id:1,action:'api',path:'state'});await listener({id:2,action:'api',method:'POST',path:'prompt',body:{id:'ses_owned',text:'test'}});
-  assert.equal(calls[1][3],7);
+  await listener({id:1,action:'api',path:'state'});await listener({id:2,action:'api',method:'POST',accountRevision:7,path:'prompt',body:{id:'ses_owned',text:'test'}});
+  assert.equal(calls[1][3],7);await listener({id:20,action:'api',method:'POST',accountRevision:6,path:'prompt',body:{}});assert.equal(calls.length,2);assert(messages.at(-1).error);
   await listener({id:3,action:'api',path:'https://example.test'});assert.equal(calls.length,2);assert(messages.at(-1).error);
   vscode.workspace.isTrusted=false;await listener({id:4,action:'api',method:'POST',path:'prompt',body:{}});assert.equal(calls.length,2);assert(messages.at(-1).error);
 });

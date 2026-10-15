@@ -9,14 +9,15 @@ const sessionId="ses_browserSynthetic";
 const sessions=[{id:sessionId,title:"بررسی ساختار پروژه",directory:process.cwd()}];
 const messages=[{info:{role:"user"},parts:[{type:"text",text:"ساختار پروژه را بررسی کن."}]},
   {info:{role:"assistant"},parts:[{type:"text",text:"مسیرهای پروژه بررسی شدن. برای شروع، فایل ورودی را باز کن.\n\n```js\nconst message = '<script>alert(1)</script>';\nconsole.log(message);\n```"}]}];
-let coding;let grants=0,saves=0,deletes=0,safeDelete=true,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
+let coding,lastDailyLimit;let grants=0,saves=0,deletes=0,safeDelete=true,connected=false,identity="synthetic-user",busy=false,lastParts,failCreate=false;
 const account={origin:"https://console.paasta.cloud",credentials:null,
-  async context(){return {...(coding?{coding}:{}),account:{id:identity,tenantId:"synthetic-tenant",name:"حساب آزمایشی",balanceToman:100000},models:[{id:"synthetic",name:"مدل آزمایشی",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"test/kimi-k2.7-code",name:"Kimi K2.7 Code",supported_parameters:["tools"],input_toman_per_million:200,output_toman_per_million:400}]};},
+  async context(){return {...(coding?{coding,features:{codingUsage:true}}:{}),account:{id:identity,tenantId:"synthetic-tenant",name:"حساب آزمایشی",balanceToman:100000},models:[{id:"synthetic",name:"مدل آزمایشی",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300},{id:"test/kimi-k2.7-code",name:"Kimi K2.7 Code",supported_parameters:["tools"],input_toman_per_million:200,output_toman_per_million:400}]};},
   async begin(){return {url:"https://console.paasta.cloud/cli/authorize?code=TEST-TEST",code:"TEST-TEST"};},
   async poll(){this.credentials={token:"synthetic"};return {pending:false};},
-  async connect(){this.credentials.aiKey="synthetic";connected=true;return {dailyLimitToman:50000};},
+  async connect(dailyLimit){lastDailyLimit=dailyLimit;this.credentials.aiKey="synthetic";connected=true;return {dailyLimitToman:50000};},
   async logout(){this.credentials=null;},
   async request(_path,options={}){
+    if(_path==='/api/coding/usage')return {...coding,plan:'حرفه‌ای',startsAt:'2026-10-01T00:00:00Z',endsAt:'2026-11-01T00:00:00Z',quotas:{week:{remainingPercent:75,resetAt:'2026-10-22T00:00:00Z'}}};
     if(options.method==="PUT"){saves++;this.saved={...options.body,revision:1};return {id:this.saved.id,revision:1};}
     if(options.method==="DELETE"){
       const revision=Number(new URL(_path,this.origin).searchParams.get("revision"));
@@ -141,6 +142,7 @@ try{
   await page.locator('#logout').click();coding={active:true,mode:'subscription',canConnectWithoutLimit:true};
   let opened=0;page.on('popup',()=>{opened++;});await page.context().route('https://console.paasta.cloud/cli/authorize**',route=>route.fulfill({contentType:'text/html',body:'<p>Synthetic approval page</p>'}));
   await page.locator('#login').click();await page.locator('#composer').waitFor({state:'visible',timeout:15000});
+  await page.locator('#subscription-summary').waitFor({state:'visible'});assert.match(await page.locator('#subscription-week-label').textContent(),/۷۵/);assert.equal(lastDailyLimit,undefined,'subscription connect must not invent a per-device cap');
   assert.equal(await page.locator('#budget-form').isVisible(),false,'active subscriber must bypass the legacy daily-budget form');assert(opened>0,'approval browser opens automatically');
   await page.locator('#logout').click();coding={active:false,mode:'paused',canConnectWithoutLimit:false};await page.locator('#login').click();await page.locator('#subscription-onboarding').waitFor({state:'visible',timeout:10000});
   assert.equal(await page.locator('#budget-form').isVisible(),false);assert(await page.locator('#subscription-buy').isVisible());assert.equal(await page.locator('#subscription-continue').isVisible(),false);
