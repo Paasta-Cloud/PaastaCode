@@ -42,7 +42,7 @@ export default defineMain({
           { find: "@solidjs/router", replacement: path.resolve(mocks, "solid-router.tsx") },
           {
             find: "@tanstack/solid-query",
-            replacement: path.dirname(require.resolve("@tanstack/solid-query/package.json")),
+            replacement: path.dirname(path.dirname(require.resolve("@tanstack/solid-query"))),
           },
           { find: /^@\/providers\/models\/selection$/, replacement: path.resolve(mocks, "app/context/local.ts") },
           { find: /^@\/workspaces\/files\/model$/, replacement: path.resolve(mocks, "app/context/file.ts") },
