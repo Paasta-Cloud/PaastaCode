@@ -116,3 +116,20 @@ PaastaCode remains an independent MIT fork powered by OpenCode. Existing source,
 brand and font notices remain in `../THIRD_PARTY_NOTICES.md` and `../licenses/`.
 Android Browser Helper and the Gradle wrapper are Apache-2.0 components; their
 upstream licenses are retained under `licenses/`.
+
+## Offline publisher signing
+
+CI also builds an explicitly **unsigned**, non-installable release APK/AAB with
+`-PprepareUnsignedRelease=true`. This opt-in never substitutes a debug certificate.
+Ordinary release packaging still fails without publisher credentials, and CI
+checks that guard. The artifact is named `PaastaCode-Android-UNSIGNED-offline-signing`.
+It includes the Android SDK apksigner JAR and APK metadata for local verification.
+
+Keep the permanent private key on the publisher's machine. Sign the aligned APK
+locally using `java -jar apksigner.jar sign --ks /private/release.p12
+--ks-key-alias paastacode-release --ks-pass env:PAASTACODE_SIGN_PASS
+--out PaastaCode-release.apk app-release-unsigned.apk`, then run
+`java -jar apksigner.jar verify --verbose --print-certs PaastaCode-release.apk`.
+Compare its certificate SHA-256 with the saved publisher certificate and deployed
+assetlinks.json. Use JDK jarsigner to sign/verify the AAB separately; an AAB is not
+an installable APK. Never upload private signing keys or passwords as artifacts.

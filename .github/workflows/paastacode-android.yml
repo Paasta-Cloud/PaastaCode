@@ -34,6 +34,26 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
       - run: ./gradlew --no-daemon assembleDebug lintDebug
+      - name: Check release signing guard
+        run: |
+          if ./gradlew --no-daemon assembleRelease > release-guard.log 2>&1; then
+            echo 'Release packaging unexpectedly accepted missing signing configuration'
+            exit 1
+          fi
+          grep -q 'Publisher signing is not configured' release-guard.log
+      - name: Prepare unsigned release for offline signing
+        run: |
+          ./gradlew --no-daemon assembleRelease bundleRelease lintRelease -PprepareUnsignedRelease=true
+          mkdir -p offline-signing
+          cp app/build/outputs/apk/release/*-unsigned.apk offline-signing/
+          cp app/build/outputs/bundle/release/*.aab offline-signing/
+          cp "$ANDROID_HOME/build-tools/36.0.0/lib/apksigner.jar" offline-signing/
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging app/build/outputs/apk/release/*-unsigned.apk > offline-signing/apk-metadata.txt
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -P 16 4 app/build/outputs/apk/release/*-unsigned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PaastaCode-Android-UNSIGNED-offline-signing
+          path: extensions/paastacode/android/offline-signing/*
       - uses: actions/upload-artifact@v4
         with:
           name: PaastaCode-Android-debug
@@ -42,7 +62,7 @@ jobs:
         if: always()
         with:
           name: PaastaCode-Android-lint
-          path: extensions/paastacode/android/app/build/reports/lint-results-debug.html
+          path: extensions/paastacode/android/app/build/reports/lint-results-*.html
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 15
