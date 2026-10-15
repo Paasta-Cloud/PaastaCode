@@ -133,3 +133,13 @@ locally using `java -jar apksigner.jar sign --ks /private/release.p12
 Compare its certificate SHA-256 with the saved publisher certificate and deployed
 assetlinks.json. Use JDK jarsigner to sign/verify the AAB separately; an AAB is not
 an installable APK. Never upload private signing keys or passwords as artifacts.
+
+## Android 16 startup regression
+
+Version 0.1.0 omitted ManageDataLauncherActivity. LauncherActivity calls
+addSiteSettingsShortcut on startup, which enables/disables this component even
+when the browser does not support site settings. Android then throws
+IllegalArgumentException and the app closes. Version 0.1.1 declares the component
+without exposing it to other apps. CI now installs a release-mode APK on Android
+16 with Chrome and checks cold launch, foreground browser handoff and relaunch.
+The emulator uses a disposable signing key; publisher APKs are signed locally.

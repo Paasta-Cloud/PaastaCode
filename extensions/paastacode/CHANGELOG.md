@@ -149,3 +149,8 @@
 ## اصلاح تکمیلی مدل‌های رایگان، در حال آماده‌سازی
 
 - درخواست مدل رایگان از نصب‌های قدیمی پاستاکد هم پیش از اجرا رد می‌شود؛ برای ادامه، یک مدل پولی با قیمت مشخص انتخاب کنید.
+
+### Android 0.1.1
+
+- Fix immediate launch crash by registering the required TWA site-settings activity.
+- Add Android 16 emulator coverage for release-mode cold launch, Chrome handoff and relaunch.

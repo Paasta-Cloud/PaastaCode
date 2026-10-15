@@ -27,5 +27,11 @@
             </intent-filter>
         </activity>
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
+        <!-- LauncherActivity toggles this component on every launch, even without site settings support. -->
+        <activity android:name="com.google.androidbrowserhelper.trusted.ManageDataLauncherActivity"
+            android:exported="false">
+            <meta-data android:name="android.support.customtabs.trusted.MANAGE_SPACE_URL"
+                android:value="https://code.paasta.cloud/" />
+        </activity>
     </application>
 </manifest>
