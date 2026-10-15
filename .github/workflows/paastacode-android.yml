@@ -63,6 +63,30 @@ jobs:
         with:
           name: PaastaCode-Android-lint
           path: extensions/paastacode/android/app/build/reports/lint-results-*.html
+  launch:
+    needs: android
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: PaastaCode-Android-debug
+          path: launch-apk
+      - name: Enable emulator acceleration
+        run: sudo chmod 666 /dev/kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis_playstore
+          arch: x86_64
+          disable-animations: true
+          script: bash extensions/paastacode/android/test-launch.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: PaastaCode-Android-launch
+          path: launch-evidence/
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 15
