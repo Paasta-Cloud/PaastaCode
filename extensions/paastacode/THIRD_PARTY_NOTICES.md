@@ -20,4 +20,4 @@ The English PaastaCode wordmark embeds the same unmodified Geist variable WOFF2 
 
 ## VS Code Codicons
 
-Native toolbar SVG icons are from Microsoft vscode-codicons, revision 8853e0b1b0e2058b099fde515d5f1f478db2f8e1, under the MIT License. The full notice is bundled at vscode/media/CODICONS_LICENSE.txt in extension packages.
+Native toolbar SVG icons are from Microsoft vscode-codicons, revision 8853e0b1b0e2058b099fde515d5f1f478db2f8e1, under Creative Commons Attribution 4.0 International (CC-BY-4.0). Source: https://github.com/microsoft/vscode-codicons/tree/8853e0b1b0e2058b099fde515d5f1f478db2f8e1. SVG geometry is unchanged; accessibility attributes are added at runtime. The full license is bundled at vscode/media/CODICONS_LICENSE.txt in extension packages.
