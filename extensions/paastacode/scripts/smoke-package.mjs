@@ -4,6 +4,7 @@ import {mkdtemp,realpath,rm,readFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
+import {smokeBrowser} from './smoke-browser.mjs';
 const packageVersion=JSON.parse(await readFile(new URL("../package.json",import.meta.url),"utf8")).version;
 const bundle=resolve(process.argv[2]||".artifacts/package/PaastaCode-"+packageVersion+"-"+process.platform+"-"+process.arch);
 const node=join(bundle,"runtime",process.platform==="win32"?"node.exe":"node");
@@ -14,6 +15,7 @@ const {readPrivate}=await import(pathToFileURL(join(client,"src/account.mjs")).h
 const {workspaceKey}=await import(pathToFileURL(join(client,"src/runtime.mjs")).href);
 let child;
 try{
+  await smokeBrowser(node,client,home);
   const version=spawnSync(node,[bin,"--version"],{encoding:"utf8",cwd:home});assert.equal(version.status,0);assert.match(version.stdout,/PaastaCode 0\.2/);
   const engine=spawnSync(join(client,"engine",process.platform==="win32"?"opencode.exe":"opencode"),["--version"],{encoding:"utf8",cwd:home,timeout:30000});assert.equal(engine.status,0);assert.match(engine.stdout,/1\.19\.0/);
   const launcher=process.platform==="win32"?join(bundle,"paastacode.cmd"):join(bundle,"paastacode");

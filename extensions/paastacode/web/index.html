@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="fa" dir="rtl" translate="no">
-<head><meta charset="utf-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1c1d21"><link rel="manifest" href="/manifest.webmanifest"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.js"></script></head>
+<head><meta charset="utf-8"><meta name="google" content="notranslate"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#1c1d21"><link rel="manifest" href="/manifest.webmanifest"><title>پاستاکد | PaastaCode</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/integrations.css"><script type="module" src="/app.js"></script></head>
 <body>
 <div id="network-status" class="network-status" role="status" hidden>اتصال اینترنت قطع شده؛ پس از اتصال، وضعیت درخواست قبلی را بررسی کنید.</div>
 <dialog id="hosted-dialog" class="hosted-dialog"><div class="dialog-heading"><h2>فضاهای کار</h2><button id="hosted-close" type="button">بستن</button></div><div id="hosted-dialog-body"></div></dialog>
@@ -25,6 +25,7 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
     <p id="session-no-results" class="muted" hidden>گفتگویی با این نام پیدا نشد.</p>
     <button id="theme-toggle" class="rail-action theme-toggle" type="button" aria-pressed="false">نمای روشن</button>
     <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
+    <button id="integrations-open" class="rail-action" type="button" disabled>ابزارها و مهارت‌ها</button>
     <a id="billing-open" class="rail-action" href="https://code.paasta.cloud/billing.html" target="_blank" rel="noopener noreferrer" hidden>اشتراک و مصرف</a>
     <section id="subscription-summary" class="subscription-summary" aria-label="وضعیت اشتراک" hidden><strong id="subscription-plan"></strong><small id="subscription-dates"></small><label id="subscription-week-label" for="subscription-week"></label><progress id="subscription-week" max="100" value="0"></progress><small id="subscription-reset"></small></section>
     <button id="updates-open" class="rail-action" type="button" hidden>به‌روزرسانی برنامه</button>

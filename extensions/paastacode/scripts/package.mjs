@@ -12,13 +12,23 @@ const target=process.argv[2]||"portable",arch=process.arch,platform=process.plat
 const stage=join(root,".artifacts/package"),client=join(stage,"client"),dist=join(root,"dist");
 await mkdir(client,{recursive:true});await mkdir(dist,{recursive:true});
 // Rebuild only our known staging files; never copy credentials, workspaces or node_modules.
-const included=["bin","src","web","licenses","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
+const included=["bin","src","web","licenses","docs","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
 for(const file of included)await cp(join(root,file),join(client,file),{recursive:true});
 // Commercial font stays outside the MIT source tree; licensed distributors supply it.
 const yekan=process.env.PAASTACODE_YEKAN_FONT||resolve(root,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf");
 if(process.env.PAASTACODE_YEKAN_FONT&&!existsSync(yekan))throw new Error("Publisher Yekan font path is invalid; refusing a release with a missing font");
 if(existsSync(yekan))await copyFile(yekan,join(client,"web/fonts/YekanBakh.ttf"));
 await writeFile(join(client,"package.json"),JSON.stringify({...pkg,name:"paastacode",dependencies:{},devDependencies:{},scripts:{}},null,2));
+// Preserve driver assets outside node_modules (VSIX excludes dependency folders).
+const browserPackages=new Map();
+async function bundleBrowser(name,resolver,destination){
+  const metadataPath=resolver.resolve(name+'/package.json'),source=dirname(metadataPath),metadata=JSON.parse(await readFile(metadataPath,'utf8')),target=join(destination,...name.split('/'));
+  if(browserPackages.has(name)){if(browserPackages.get(name)!==metadata.version)throw new Error('Conflicting browser dependency '+name);return;}browserPackages.set(name,metadata.version);
+  await cp(source,target,{recursive:true,filter:file=>!file.slice(source.length).split(/[\\/]/).includes('node_modules')});
+  const from=createRequire(metadataPath);
+  for(const dependency of Object.keys(metadata.dependencies||{}))await bundleBrowser(dependency,from,destination);
+}
+await bundleBrowser('@playwright/mcp',require,join(client,'vendor/browser'));
 const engineMeta=require("opencode-ai/package.json"),engineRoot=dirname(require.resolve("opencode-ai/package.json"));
 let engine=join(engineRoot,engineMeta.bin.opencode);
 const bytes=await readFile(engine);

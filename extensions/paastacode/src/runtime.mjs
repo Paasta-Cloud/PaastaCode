@@ -23,14 +23,16 @@ export function providerConfig(models,key,origin){
     provider:{paasta:{npm:"@ai-sdk/openai-compatible",name:"پاستا",options:{baseURL:origin+"/api/ai/v1",apiKey:key},
       models:Object.fromEntries(eligible.map(m=>[m.id,{name:m.name||m.id,toolcall:true,attachment:m.input_modalities?.some(v=>v==="image"||v==="file")||false,modalities:{input:["text",...(m.input_modalities||[]).filter(v=>["image","pdf"].includes(v)||v==="file").map(v=>v==="file"?"pdf":v)],output:["text"]},
         limit:{context:Number(m.context_length)||32000,output:Number(m.max_output_tokens)||4096}}]))}},
-    share:"disabled",autoupdate:false,plugin:[],permission:{"*":"ask",read:{"*":"allow","*.env":"deny","*.env.*":"deny","*.pem":"deny","*.key":"deny"},glob:"allow",grep:"allow",external_directory:"deny",question:"deny"},
+    share:"disabled",autoupdate:false,plugin:[],permission:{"*":"ask",read:{"*":"allow","*.env":"deny","*.env.*":"deny","*.pem":"deny","*.key":"deny"},glob:"allow",grep:"allow",skill:"allow",external_directory:"deny",question:"deny"},
     agent:{build:{prompt:"با کاربر فارسی صحبت کن. کد، مسیرها، شناسه‌ها و دستورها را با زبان و قالب اصلی نگه دار. پیش از تغییر، پروژه را بررسی کن. نتیجهٔ واقعی و محدودیت‌ها را شفاف بگو."},
-      "paasta-plan":{mode:"primary",description:"برنامه‌ریزی فقط‌خواندنی",permission:{"*":"deny",read:"allow",glob:"allow",grep:"allow"},prompt:"با کاربر فارسی صحبت کن. پروژه را فقط با خواندن و جستجو بررسی کن. هیچ فایل، دستور، عامل دیگر یا ابزار MCP اجرا نکن. یک برنامهٔ کوتاه شامل مراحل، فایل‌های مرتبط، معیار پذیرش و تست‌ها بنویس. اگر درخواست صرفاً پرسش است، پاسخ آن را مشخص کن و تغییر فایل پیشنهاد نده. مرحلهٔ بعد به مدل کدنویسی سپرده می‌شود."}}};
+      "paasta-plan":{mode:"primary",description:"برنامه‌ریزی فقط‌خواندنی",permission:{"*":"deny",read:"allow",glob:"allow",grep:"allow",skill:"allow"},prompt:"با کاربر فارسی صحبت کن. پروژه را فقط با خواندن و جستجو بررسی کن و مهارت مرتبط را بخوان. هیچ فایل، دستور، عامل دیگر یا ابزار MCP اجرا نکن. یک برنامهٔ کوتاه شامل مراحل، فایل‌های مرتبط، معیار پذیرش و تست‌ها بنویس. اگر درخواست صرفاً پرسش است، پاسخ آن را مشخص کن و تغییر فایل پیشنهاد نده. مرحلهٔ بعد به مدل کدنویسی سپرده می‌شود."}}};
 }
 export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}
   async start(config){
     this.workspace=await realpath(this.workspace);
+    this.skillPaths=config.skills?.paths||[];
+    if(this.skillPaths.length)config={...config,permission:{...config.permission,external_directory:{'*':'deny',...Object.fromEntries(this.skillPaths.flatMap(path=>[[path,'allow'],[path.replaceAll('\\','/')+'/**','allow']]))}}};
     const home=join(stateHome,"engine",this.identity||"local");await mkdir(home,{recursive:true,mode:0o700});
     this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
       ...process.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),

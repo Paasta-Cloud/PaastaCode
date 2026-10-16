@@ -2,9 +2,9 @@ const vscode=require('vscode');
 const fs=require('node:fs/promises');
 const path=require('node:path');
 const {randomBytes}=require('node:crypto');
-const {existsSync}=require('node:fs');
+const {existsSync,readFileSync}=require('node:fs');
 
-const routes={GET:['state','quota','sessions','messages','status','permissions','workflow','git','git/diff','sync'],POST:['login','login/poll','connect','sessions','prompt','abort','permission','access','save','sync','logout']};
+const routes={GET:['state','quota','sessions','messages','status','permissions','workflow','git','git/diff','sync','integrations'],POST:['login','login/poll','connect','sessions','prompt','abort','permission','access','save','sync','logout','integrations','integrations/auth']};
 function allowedRoute(method,value){
   if(typeof value!=='string'||value.length>500||!['GET','POST'].includes(method))return false;
   const [route,query]=value.split('?');if(!routes[method].includes(route))return false;
@@ -18,6 +18,8 @@ const icon=name=>nativeIcons[name].replace('<svg ','<svg class="icon" aria-hidde
 const action=(id,name,label,extra='')=>`<button id="${id}" class="icon-button" type="button" aria-label="${label}" title="${label}" ${extra}>${icon(name)}</button>`;
 function attachNative(webview,context,connect){
   const nonce=randomBytes(24).toString('hex');
+  const sharedRoot=existsSync(path.join(context.extensionUri.fsPath,'client/web'))?path.join(context.extensionUri.fsPath,'client/web'):path.resolve(context.extensionUri.fsPath,'../web');
+  const integrationScript=readFileSync(path.join(sharedRoot,'integrations-ui.js'),'utf8'),integrationStyle=readFileSync(path.join(sharedRoot,'integrations.css'),'utf8');
   const media=vscode.Uri.joinPath(context.extensionUri,'media');
   let fontStyle='',fontRoot;
   if(context.extensionUri.fsPath){
@@ -34,6 +36,7 @@ function attachNative(webview,context,connect){
 <section id="work" hidden><p id="quota" role="status"></p><label class="sr-only" for="sessions">گفتگو</label><div class="select-shell session-select"><select id="sessions"></select>${icon('chevron-down')}</div><main id="messages" aria-label="پیام‌ها"><div class="empty-state"><h2>روی چه چیزی کار کنیم؟</h2><p>درخواستت را بنویس یا بخشی از کد را پیوست کن.</p></div></main><button id="latest" hidden>رفتن به آخرین خروجی ↓</button><div id="activity" role="status"></div><section id="permissions" aria-label="تأیید ابزارها"></section>
 <form id="composer"><div id="files"></div><label class="sr-only" for="prompt">درخواست شما</label><textarea id="prompt" placeholder="چه تغییری می‌خواهید؟" rows="3"></textarea><div class="model-row"><label class="sr-only" for="model">مدل اجرا</label><div class="select-shell"><select id="model" title="مدل اجرا"></select>${icon('chevron-down')}</div></div><div class="controls">${action('attach','attach','پیوست فایل')}${action('selection','code','پیوست کد انتخاب‌شده')}<label class="sr-only" for="access">دسترسی</label><div class="select-shell access-select"><select id="access" title="دسترسی"><option value="review">با تأیید شما</option><option value="full">Full Access</option></select>${icon('chevron-down')}</div><span class="control-spacer"></span><button id="send" class="icon-button send-button" type="submit" aria-label="ارسال درخواست" title="ارسال · Enter">${icon('arrow-up')}</button>${action('stop','debug-stop','توقف اجرا','hidden')}</div><details class="model-settings"><summary>${icon('settings-gear')}مدل برنامه‌ریزی</summary><label>مدل برنامه‌ریزی<select id="planner"></select></label><p>برنامه‌ریزی با مدل بالا و اجرا با مدل کدنویسی انجام می‌شود.</p></details></form>
 <footer>${action('save','cloud-upload','ذخیرهٔ گفتگو در حساب')}${action('changes','git-compare','تغییرات پروژه')}<span>Powered by OpenCode</span></footer></section><script nonce="${nonce}" src="${script}"></script></body></html>`;
+  webview.html=webview.html.replace('</head>',`<style nonce="${nonce}">${integrationStyle}</style></head>`).replace('<button id="refresh"',`<button id="integrations-open" type="button">${icon('settings-gear')}ابزارها و مهارت‌ها</button><button id="refresh"`).replace(`<script nonce="${nonce}" src=`,`<script nonce="${nonce}">${integrationScript}</script><script nonce="${nonce}" src=`);
   let revision,disposed=false;
   const subscription=webview.onDidReceiveMessage(async message=>{
     const id=message?.id;if(!Number.isSafeInteger(id)||id<1)return;
@@ -43,8 +46,15 @@ function attachNative(webview,context,connect){
       if(message.action==='folder'){await vscode.commands.executeCommand('workbench.action.files.openFolder');result={};}
       else if(message.action==='billing'){await vscode.commands.executeCommand('paastacode.billing');result={};}
       else if(message.action==='sourceControl'){await vscode.commands.executeCommand('workbench.view.scm');result={};}
+      else if(message.action==='oauth'){
+        const uri=new URL(message.url);if(uri.protocol!=='https:'||uri.username||uri.password)throw new Error('نشانی ورود معتبر نیست.');
+        await vscode.env.openExternal(vscode.Uri.parse(uri.href));result={};
+      }
       else if(!vscode.workspace.workspaceFolders?.length){result={noWorkspace:true};}
-      else if(message.action==='attach'){
+      else if(message.action==='skillFile'){
+        const uris=await vscode.window.showOpenDialog({canSelectMany:false,canSelectFolders:false,filters:{'Skill Markdown':['md']},openLabel:'انتخاب SKILL.md'});result=[];
+        for(const uri of uris||[]){if(uri.scheme!=='file')throw new Error('فایل محلی انتخاب کنید.');const info=await fs.stat(uri.fsPath);if(!info.isFile()||info.size>128000)throw new Error('فایل مهارت باید حداکثر ۱۲۸ کیلوبایت باشد.');result.push({name:'SKILL.md',data:(await fs.readFile(uri.fsPath)).toString('base64')});}
+      }else if(message.action==='attach'){
         const uris=await vscode.window.showOpenDialog({canSelectMany:true,canSelectFolders:false,openLabel:'پیوست به درخواست'});result=[];
         for(const uri of uris||[]){if(uri.scheme!=='file')throw new Error('فایل محلی انتخاب کنید.');const stat=await fs.stat(uri.fsPath);if(!stat.isFile()||stat.size>4*1024*1024)throw new Error('هر فایل باید حداکثر ۴ مگابایت باشد.');result.push({name:path.basename(uri.fsPath),data:(await fs.readFile(uri.fsPath)).toString('base64')});}
       }else if(message.action==='selection'){

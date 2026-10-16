@@ -67,15 +67,21 @@ jobs:
           npm run check
           npm audit --omit=dev
       - name: Test real engine, MCP, permissions and deployment review
+        timeout-minutes: 6
         run: npm test
       - name: Test deployment CLI source
         working-directory: extensions/paastacode/paasta-cli
         run: go test ./...
       - name: Install browser
         run: npx playwright install --with-deps chromium
+      - name: Allow sandboxed Chromium user namespaces on the ephemeral Linux runner
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Browser acceptance
         run: |
           node test/native-browser.mjs
+          node test/integrations-browser.mjs
+          node test/browser-mcp.mjs
           node test/browser.mjs
           node test/workbench-browser.mjs
           node test/redesign-browser.mjs
