@@ -17,7 +17,7 @@
   },
   "scripts": {
     "start": "node bin/paastacode.mjs web",
-    "test": "node --test test/*.test.mjs",
+    "test": "node --test --test-reporter=tap test/*.test.mjs",
     "check": "node scripts/check.mjs",
     "desktop": "electron desktop/main.cjs",
     "package": "node scripts/package.mjs",

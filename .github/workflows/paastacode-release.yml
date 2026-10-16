@@ -67,6 +67,7 @@ jobs:
           npm run check
           npm audit --omit=dev
       - name: Test real engine, MCP, permissions and deployment review
+        timeout-minutes: 6
         run: npm test
       - name: Test deployment CLI source
         working-directory: extensions/paastacode/paasta-cli
