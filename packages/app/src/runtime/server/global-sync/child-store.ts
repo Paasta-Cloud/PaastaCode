@@ -92,7 +92,7 @@ export function createChildStoreManager(input: {
     if (!current) return
 
     if (current === input.owner) return
-    const key = current as object
+    const key = current
     const set = ownerPins.get(key)
 
     if (set?.has(directory)) return
@@ -110,7 +110,9 @@ export function createChildStoreManager(input: {
         if (set.size === 0) ownerPins.delete(key)
       }
 
-      unpin(directory)
+      // A re-running memo cleans up before it pins its directories again. Unpinning at once lets
+      // eviction dispose them mid-run, so the memo recreates them, and their hydration re-runs it.
+      queueMicrotask(() => unpin(directory))
     })
   }
 

@@ -23,7 +23,7 @@ env:
 jobs:
   affected:
     name: affected packages
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
     outputs:
       app: ${{ steps.packages.outputs.app }}
     steps:
@@ -58,9 +58,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -102,16 +102,28 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
+      # Upstream's private runners already provide rg. Tests deliberately block
+      # network access, so GitHub runners must install it before the test process.
+      - name: Install ripgrep (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Install ripgrep (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install ripgrep --yes --no-progress
+
       - name: Run unit tests
-        timeout-minutes: 20
+        timeout-minutes: ${{ github.repository == 'anomalyco/opencode' && 20 || 30 }}
         run: |
           # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            GITHUB_ACTIONS=false bun turbo test --concurrency=3
+            GITHUB_ACTIONS=false bun turbo test --concurrency="$TEST_CONCURRENCY" --continue=dependencies-successful
             exit 0
           fi
-          GITHUB_ACTIONS=false bun turbo test --affected --concurrency=3
+          GITHUB_ACTIONS=false bun turbo test --affected --concurrency="$TEST_CONCURRENCY" --continue=dependencies-successful
         env:
+          TEST_CONCURRENCY: ${{ github.repository == 'anomalyco/opencode' && '3' || '1' }}
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
           TURBO_SCM_HEAD: ${{ github.sha }}
@@ -177,14 +189,27 @@ jobs:
       fail-fast: false
       matrix:
         settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
+          - name: linux-1
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+            shard: '1/2'
+            components: true
+          - name: linux-2
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-ubuntu-2404' || 'ubuntu-latest' }}
+            shard: '2/2'
+            components: false
+          - name: windows-1
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
+            shard: '1/2'
+            components: true
+          - name: windows-2
+            host: ${{ github.repository == 'anomalyco/opencode' && 'blacksmith-4vcpu-windows-2025' || 'windows-latest' }}
+            shard: '2/2'
+            components: false
     runs-on: ${{ matrix.settings.host }}
     env:
       E2E_ENABLED: ${{ needs.affected.outputs.app == 'true' && github.ref_name != 'dev' && github.head_ref != 'dev' }}
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
+      PLAYWRIGHT_WORKERS: ${{ github.repository == 'anomalyco/opencode' && '5' || '2' }}
     defaults:
       run:
         shell: bash
@@ -233,26 +258,26 @@ jobs:
 
       - name: Run app e2e tests against production build
         if: env.E2E_ENABLED == 'true'
-        run: bun --cwd packages/app test:e2e:built
+        run: bun --cwd packages/app test:e2e:built --shard "${{ matrix.settings.shard }}"
         env:
           CI: true
         timeout-minutes: 30
 
       - name: Verify service worker precaching and upgrades
-        if: env.E2E_ENABLED == 'true'
+        if: env.E2E_ENABLED == 'true' && matrix.settings.components
         working-directory: packages/app
         run: bunx playwright test --config e2e/service-worker/playwright.config.ts
         timeout-minutes: 5
 
       - name: Run session UI component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' && matrix.settings.components }}
         run: bun --cwd packages/session-ui test:components
         env:
           CI: true
         timeout-minutes: 15
 
       - name: Run app component tests
-        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' && matrix.settings.components }}
         run: bun --cwd packages/app test:components
         env:
           CI: true

@@ -59,7 +59,8 @@ it.live(
       expect(
         yield* count.pipe(
           Effect.repeat({ while: (n) => n === 0, schedule: Schedule.spaced("25 millis") }),
-          Effect.timeout("5 seconds"),
+            // This observes a real MCP subprocess, whose Windows cold start can exceed five seconds.
+            Effect.timeout(process.platform === "win32" ? "15 seconds" : "5 seconds"),
         ),
       ).toBe(1)
 
@@ -75,7 +76,7 @@ it.live(
       expect(yield* loaded).toEqual([{ directory: current }])
       expect(yield* count).toBe(1)
     }),
-  15_000,
+  process.platform === "win32" ? 30_000 : 15_000,
 )
 
 it.live(

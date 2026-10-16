@@ -2,6 +2,8 @@ import { expect, test } from "bun:test"
 import { ShellScan } from "../../src/shell/scan.js"
 
 const pwsh = process.env.SHELL_SCAN_PWSH ?? Bun.which("pwsh")
+// The oracle covers thousands of fixtures, including real probe-only executions.
+const oracleTimeout = process.platform === "win32" ? 120_000 : 45_000
 
 // These ordinary forms must stay accepted, not disappear behind the oracle's opaque-result filter.
 const supported = [
@@ -546,7 +548,7 @@ test.skipIf(!pwsh)(
       stdin: new Blob([JSON.stringify(fixtures)]),
       stdout: "pipe",
       stderr: "pipe",
-      timeout: 45_000,
+      timeout: oracleTimeout,
     })
     const [output, error, code] = await Promise.all([
       new Response(process.stdout).text(),
@@ -600,5 +602,5 @@ test.skipIf(!pwsh)(
     expect(executed).toBeGreaterThan(100)
     expect(failures).toEqual([])
   },
-  60_000,
+  oracleTimeout + 15_000,
 )

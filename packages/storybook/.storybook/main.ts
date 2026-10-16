@@ -1,6 +1,7 @@
 import { defineMain } from "storybook-solidjs-vite"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
+import { createRequire } from "node:module"
 import tailwindcss from "@tailwindcss/vite"
 import { playgroundCss } from "./playground-css-plugin.ts"
 
@@ -10,6 +11,7 @@ const sessionUi = path.resolve(here, "../../session-ui")
 const app = path.resolve(here, "../../app/src")
 const extensions = path.resolve(here, "../../gui-extensions/src")
 const mocks = path.resolve(here, "./mocks")
+const require = createRequire(path.resolve(app, "../package.json"))
 
 export default defineMain({
   framework: {
@@ -38,6 +40,10 @@ export default defineMain({
         dedupe: ["solid-js", "solid-js/web", "@solidjs/meta"],
         alias: [
           { find: "@solidjs/router", replacement: path.resolve(mocks, "solid-router.tsx") },
+          {
+            find: "@tanstack/solid-query",
+            replacement: path.dirname(path.dirname(require.resolve("@tanstack/solid-query"))),
+          },
           { find: /^@\/providers\/models\/selection$/, replacement: path.resolve(mocks, "app/context/local.ts") },
           { find: /^@\/workspaces\/files\/model$/, replacement: path.resolve(mocks, "app/context/file.ts") },
           { find: /^@\/shell\/state\/layout$/, replacement: path.resolve(mocks, "app/context/layout.ts") },
