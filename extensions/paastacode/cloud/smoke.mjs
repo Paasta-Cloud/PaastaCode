@@ -54,6 +54,19 @@ try{
   await docker(["exec",name,"node","-e","require('fs').writeFileSync('/data/workspace/persistence.txt','retained synthetic project')"]);
   assert.match(await docker(["exec",name,"node","--input-type=module","-e","import {engineCommand} from './src/runtime.mjs'; const child=engineCommand(['--version'],{stdio:'inherit'}); child.once('exit',code=>process.exit(code));"]),/1\.19\.0/);
   await docker(["exec",name,"/opt/paastacode/engine/paasta","--version"]);
+  console.log(await docker(['exec',name,'python3','-c',`
+import ctypes, json, os
+from pathlib import Path
+status = Path('/proc/self/status').read_text().splitlines()
+report = {'uid': os.getuid(), 'security': [line for line in status if line.startswith(('NoNewPrivs:', 'Seccomp:', 'CapEff:'))]}
+for path in ['/proc/sys/kernel/unprivileged_userns_clone', '/proc/sys/user/max_user_namespaces', '/proc/sys/kernel/apparmor_restrict_unprivileged_userns', '/proc/self/attr/current']:
+    try: report[path] = Path(path).read_text().strip()
+    except OSError as error: report[path] = error.strerror
+libc = ctypes.CDLL(None, use_errno=True)
+result = libc.unshare(0x10000000)
+report['user_namespace_probe'] = {'allowed': result == 0, 'errno': ctypes.get_errno() if result else 0}
+print('Chromium sandbox preflight: ' + json.dumps(report, sort_keys=True))
+` ]));
   await docker(['exec',name,'node','--input-type=module','-e',`import assert from 'node:assert/strict';import {createRequire} from 'node:module';const from=createRequire(import.meta.resolve('@playwright/mcp/package.json'));const {chromium}=from('playwright-core');const browser=await chromium.launch({headless:true,chromiumSandbox:true});try{const page=await browser.newPage();await page.goto('data:text/html,<title>PaastaCode browser acceptance</title><input aria-label="Synthetic input">');await page.getByRole('textbox').fill('synthetic browser input');assert.equal(await page.getByRole('textbox').inputValue(),'synthetic browser input');assert.equal((await page.screenshot()).subarray(0,8).toString('hex'),'89504e470d0a1a0a');console.log('Isolated non-root browser navigation, interaction and screenshot passed');}finally{await browser.close();}`]);
   await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"write"]);
   await docker(["exec",name,"node","-e","const fs=require('fs');fs.mkdirSync('/data/account',{recursive:true});fs.writeFileSync('/data/account/account.json',JSON.stringify({origin:'http://127.0.0.1:1',token:'paasta_'+ 'a'.repeat(43)}),{mode:0o600});"]);
