@@ -1,3 +1,4 @@
+import {relayCloud} from './cloud-relay.mjs';
 import {createServer} from "node:http";
 import {randomBytes,timingSafeEqual,createHash} from "node:crypto";
 import {readFile,mkdir,rm,realpath,open,stat} from "node:fs/promises";
@@ -19,6 +20,7 @@ import {WorkspaceIntegrations,integrationName,mcpConfig} from "./integrations.mj
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"],["/fonts/Geist.woff2","fonts/Geist.woff2"]]);
 const mime={".webmanifest":"application/manifest+json; charset=utf-8",".png":"image/png",".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
+assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
 for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
 export function validCapability(value,secret){
@@ -28,7 +30,7 @@ async function body(request,maxBytes=1_100_000){
   let raw="";for await(const chunk of request){raw+=chunk;if(Buffer.byteLength(raw)>maxBytes)throw new Error("حجم درخواست بیش از حد مجاز است.");}
   return raw?JSON.parse(raw):{};
 }
-export async function startServer({workspace=process.cwd(),account,runtime,deployment,exporter,port=0,hosted=false,daemon=false,onClosed}={}){
+export async function startServer({workspace=process.cwd(),account,runtime,deployment,exporter,port=0,hosted=false,daemon=false,cloud=false,onClosed}={}){
   const version=JSON.parse(await readFile(join(here,"package.json"),"utf8")).version;
   workspace=await realpath(resolve(workspace));
   const key=workspaceKey(workspace),statePath=join(stateHome,"workspace-"+key+".json");
@@ -63,7 +65,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   const capability=randomBytes(32).toString("base64url");
   let origin,context=null,starting=null,loginPolling=null,closed=false,accountChanging=false,updating=false,reconfiguring=false;
   const managers=new Map(),oauthFlows=new Map();
-  const integrations=()=>{const identity=accountIdentity();if(!managers.has(identity))managers.set(identity,new WorkspaceIntegrations(workspace,identity));return managers.get(identity);};
+  const integrations=()=>{const identity=accountIdentity();if(!managers.has(identity))managers.set(identity,new WorkspaceIntegrations(workspace,identity,{cloud}));return managers.get(identity);};
   const syncPath=join(stateHome,"sync-"+key+".json");
   let sync=await readPrivate(syncPath)||{};
   const accessPath=join(stateHome,"access-"+key+".json"),access=await readPrivate(accessPath)||{};
@@ -192,9 +194,11 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     }
     if(request.method!=="GET"&&!["DELETE /api/export","POST /api/logout","POST /api/abort","POST /api/account/reload"].includes(route))writable();
     if(route==="POST /api/update/prepare"){
-      if(starting||accountChanging||git.busy)throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
-      if(runtime.url&&Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))throw new Error("پروژه هنوز در حال کار است؛ پس از پایان اجرا، به‌روزرسانی را نصب کنید.");
-      updating=true;return json(response,{ok:true});
+      if(updating||starting||accountChanging||git.busy||exporter.busy||reconfiguring||Object.values(workflows).some(value=>['planning','handoff'].includes(value?.automatic?.state)))throw new Error("پروژه هنوز در حال کار است؛ ابتدا اجرا را تمام یا متوقف کنید.");
+      updating=true;
+      try{if(runtime.url&&Object.values(await runtime.call("/session/status")).some(value=>value.type!=="idle"))throw new Error("پروژه هنوز در حال کار است؛ ابتدا اجرا را تمام یا متوقف کنید.");}
+      catch(error){updating=false;throw error;}
+      return json(response,{ok:true});
     }
     if(route==="POST /api/update/cancel"){updating=false;return json(response,{ok:true});}
     if(updating&&request.method!=="GET"&&!url.pathname.endsWith("/shutdown"))throw new Error("برنامه برای به‌روزرسانی آماده می‌شود. پس از نصب، پروژه را دوباره باز کنید.");
@@ -202,7 +206,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(daemon)await reloadAccount();
     await accountMutations;
     const expectedAccount=request.headers["x-paastacode-account"];
-    if(request.method!=="GET"&&expectedAccount!==undefined&&String(accountRevision)!==expectedAccount)return json(response,{error:"حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.",accountChanged:true},409);
+    if(request.method!=="GET"&&!url.pathname.startsWith("/api/remote/")&&expectedAccount!==undefined&&String(accountRevision)!==expectedAccount)return json(response,{error:"حساب این پنجره تغییر کرده است؛ دوباره آن را بررسی کنید.",accountChanged:true},409);
     if(url.pathname==="/api/export"){
       if(!account.credentials?.token)throw new Error("برای دریافت پروژه، با پاستا وارد شوید.");
       const token=account.credentials.token,next=context||await account.context();
@@ -231,6 +235,10 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       if(account.credentials)try{context=await account.context();}catch(caught){context=null;error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
         account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+    }
+    if(!cloud&&url.pathname.startsWith('/api/remote/')){
+      const result=await relayCloud({account,url,method:request.method,headers:request.headers,body:request.method==='GET'?undefined:await body(request,url.pathname.endsWith('/prompt')?10*1024*1024:1_100_000)});
+      return json(response,result.data,result.status);
     }
     if(route==="GET /api/quota"){
       if(!account.credentials?.aiKey)throw new Error('ابتدا اتصال مدل‌ها را تأیید کنید.');

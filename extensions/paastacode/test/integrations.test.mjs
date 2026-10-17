@@ -7,6 +7,20 @@ process.env.PAASTACODE_HOME=resolve('.artifacts/integrations-tests');
 const {WorkspaceIntegrations,mcpConfig,skillBundle,parseSkillMarkdown}=await import('../src/integrations.mjs');
 const {startServer}=await import('../src/server.mjs');
 
+test('cloud project tools persist independently and cannot enable an unsupported browser',async()=>{
+  const home=await realpath(await mkdtemp(join(tmpdir(),'paastacode-cloud-tools-')));
+  try{
+    const first=new WorkspaceIntegrations('/cloud/one','owner',{home,cloud:true}),second=new WorkspaceIntegrations('/cloud/two','owner',{home,cloud:true});
+    await first.update({kind:'mcp',action:'preset',name:'figma'});await first.update({kind:'skill',action:'preset',name:'persian-writing'});
+    await assert.rejects(first.update({kind:'browser',enabled:true}));await assert.rejects(first.update({kind:'mcp',action:'preset',name:'figma-desktop'}));
+    await first.change(state=>{state.browser=true;});
+    assert.equal((await first.config()).mcp.browser,undefined);
+    const restored=new WorkspaceIntegrations('/cloud/one','owner',{home,cloud:true}),view=await restored.publicState({call:async()=>({})});
+    assert.equal(view.cloud,true);assert.equal(view.browser.available,false);assert.equal(view.browser.enabled,false);assert.equal(view.servers.length,1);assert.equal(view.skills.length,1);assert(!view.catalog.mcp.some(p=>p.id==='figma-desktop'));
+    const other=await second.publicState({call:async()=>({})});assert.equal(other.servers.length,0);assert.equal(other.skills.length,0);
+  }finally{assert(home.startsWith(join(await realpath(tmpdir()),'paastacode-cloud-tools-')));await rm(home,{recursive:true,force:true});}
+});
+
 test('curated installs are opt-in, preserve existing settings and materialize licensed references',async()=>{
   const home=await realpath(await mkdtemp(join(tmpdir(),'paastacode-presets-')));
   try{

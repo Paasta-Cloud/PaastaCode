@@ -20,7 +20,7 @@ process.env.PAASTACODE_HOME="/data/acceptance";
 const {startServer}=await import("./src/server.mjs");
 const saved={id:"00000000-0000-4000-8000-000000000021",title:"Restored cloud session",revision:1,updated_at:"2026-10-13T00:00:00Z",snapshot:{version:1,messages:[{role:"user",text:"Saved project context"},{role:"assistant",text:"Reviewed without replaying tools"}]}};
 const account={origin:"http://127.0.0.1:1",credentials:{token:"synthetic",aiKey:"synthetic"},context:async()=>({account:{id:"00000000-0000-4000-8000-000000000011",tenantId:"00000000-0000-4000-8000-000000000012"},models:[{id:"fixture",name:"Synthetic paid model",supported_parameters:["tools"],input_toman_per_million:100,output_toman_per_million:300}]}),request:async path=>{assert.equal(path,"/api/paastacode/sessions?id="+saved.id);return saved;}};
-const app=await startServer({workspace:"/data/workspace",account});
+const app=await startServer({workspace:"/data/workspace",account,cloud:true});
 const api=async(path,body)=>{const result=await fetch(app.url+"/api/"+path,{method:body?"POST":"GET",headers:{Authorization:"Bearer "+app.capability,"Content-Type":"application/json"},body:body?JSON.stringify(body):undefined});assert.equal(result.status,200);return result.json();};
 try{
   const mode=process.argv[1];let id;
@@ -31,7 +31,10 @@ try{
   assert(text.includes(saved.snapshot.messages[0].text));assert(text.includes(saved.snapshot.messages[1].text));
   assert(messages.every(message=>message.parts.every(part=>part.type!=="tool")));assert.equal((await app.runtime.call("/session/"+id+"/message")).length,0,"Restore must not replay tools or inference");
   const transfer=await api('export',{});await new Promise(resolve=>setTimeout(resolve,300));const chunk=await api('export?id='+transfer.id+'&offset=0');assert(chunk.done);const zip=Buffer.from(chunk.data,'base64');assert.equal(zip.readUInt32LE(0),0x04034b50);assert(zip.includes(Buffer.from('persistence.txt')),'The real broker retains a fast archive before its first read');
-  console.log("Real engine restored cloud session "+mode+" passed");
+  await api('integrations',{kind:'skill',action:mode==='write'?'preset':'toggle',name:'persian-writing',enabled:true});
+  const integrations=await api('integrations');assert(integrations.skills.some(skill=>skill.name==='persian-writing'&&skill.enabled));assert.equal(integrations.browser.available,false);
+  const denied=await fetch(app.url+'/api/integrations',{method:'POST',headers:{Authorization:'Bearer '+app.capability,'Content-Type':'application/json'},body:JSON.stringify({kind:'browser',enabled:true})});assert.equal(denied.status,400);
+  console.log("Real engine restored cloud session "+mode+" and cloud skills passed");
 }finally{await app.close();}
 `;
 async function launch(){
@@ -54,20 +57,13 @@ try{
   await docker(["exec",name,"node","-e","require('fs').writeFileSync('/data/workspace/persistence.txt','retained synthetic project')"]);
   assert.match(await docker(["exec",name,"node","--input-type=module","-e","import {engineCommand} from './src/runtime.mjs'; const child=engineCommand(['--version'],{stdio:'inherit'}); child.once('exit',code=>process.exit(code));"]),/1\.19\.0/);
   await docker(["exec",name,"/opt/paastacode/engine/paasta","--version"]);
-  console.log(await docker(['exec',name,'python3','-c',`
-import ctypes, json, os
-from pathlib import Path
-status = Path('/proc/self/status').read_text().splitlines()
-report = {'uid': os.getuid(), 'security': [line for line in status if line.startswith(('NoNewPrivs:', 'Seccomp:', 'CapEff:'))]}
-for path in ['/proc/sys/kernel/unprivileged_userns_clone', '/proc/sys/user/max_user_namespaces', '/proc/sys/kernel/apparmor_restrict_unprivileged_userns', '/proc/self/attr/current']:
-    try: report[path] = Path(path).read_text().strip()
-    except OSError as error: report[path] = error.strerror
-libc = ctypes.CDLL(None, use_errno=True)
-result = libc.unshare(0x10000000)
-report['user_namespace_probe'] = {'allowed': result == 0, 'errno': ctypes.get_errno() if result else 0}
-print('Chromium sandbox preflight: ' + json.dumps(report, sort_keys=True))
-` ]));
-  await docker(['exec',name,'node','--input-type=module','-e',`import assert from 'node:assert/strict';import {createRequire} from 'node:module';const from=createRequire(import.meta.resolve('@playwright/mcp/package.json'));const {chromium}=from('playwright-core');const browser=await chromium.launch({headless:true,chromiumSandbox:true});try{const page=await browser.newPage();await page.goto('data:text/html,<title>PaastaCode browser acceptance</title><input aria-label="Synthetic input">');await page.getByRole('textbox').fill('synthetic browser input');assert.equal(await page.getByRole('textbox').inputValue(),'synthetic browser input');assert.equal((await page.screenshot()).subarray(0,8).toString('hex'),'89504e470d0a1a0a');console.log('Isolated non-root browser navigation, interaction and screenshot passed');}finally{await browser.close();}`]);
+  const project={id:'00000000-0000-4000-8000-000000000031',name:'Second cloud project'};
+  const projectApi=async(path,body)=>{const result=await fetch(url+'/api/'+path,{method:body?'POST':'GET',headers:{...headers,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});assert.equal(result.status,200);return result.json();};
+  assert.equal((await projectApi('projects')).projects.length,1);await projectApi('projects',project);await projectApi('projects/select',{id:project.id});
+  assert.equal((await fetch(url+'/api/state',{headers})).status,409,'An old tab cannot reach the new project');
+  assert.equal((await fetch(url+'/api/state',{headers:{...headers,'X-PaastaCode-Project':project.id}})).status,200);
+  await docker(['exec',name,'node','-e',"require('fs').writeFileSync('/data/projects/"+project.id+"/second.txt','persist second project')"]);
+  await projectApi('projects/select',{id:'default'});
   await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"write"]);
   await docker(["exec",name,"node","-e","const fs=require('fs');fs.mkdirSync('/data/account',{recursive:true});fs.writeFileSync('/data/account/account.json',JSON.stringify({origin:'http://127.0.0.1:1',token:'paasta_'+ 'a'.repeat(43)}),{mode:0o600});"]);
   await docker(['exec',name,'node','-e',archiveCheck]);assert.equal(await docker(['exec',name,'python3','-c',verifyArchive]),'native ZIP verified');
@@ -77,6 +73,8 @@ print('Chromium sandbox preflight: ' + json.dumps(report, sort_keys=True))
   assert.equal(await docker(["exec",name,"node","-e","process.stdout.write(require('fs').readFileSync('/data/workspace/persistence.txt','utf8'))"]),"retained synthetic project");
   await docker(["exec",name,"node","--input-type=module","-e",restoreCheck,"read"]);
   await docker(['exec',name,'node','-e',archiveCheck]);assert.equal(await docker(['exec',name,'python3','-c',verifyArchive]),'native ZIP verified');
+  assert.equal((await projectApi('projects')).projects.length,2);await projectApi('projects/select',{id:project.id});
+  assert.equal(await docker(['exec',name,'node','-e',"process.stdout.write(require('fs').readFileSync('/data/projects/"+project.id+"/second.txt','utf8'))"]),'persist second project');
   console.log("Cloud container acceptance passed: required owner, unverified login recovery, private API, non-root/read-only runtime, real engine/CLI, project and restored-session persistence across container replacement; no tool/inference replay");
 }finally{
   if(created){await docker(["stop","--time","40",name]).catch(()=>{});await docker(["rm","--force",name]).catch(()=>{});}

@@ -11,11 +11,11 @@ async function folder(){
   const result=await dialog.showOpenDialog(...(window?[window]:[]),{title:"پوشهٔ پروژه را انتخاب کنید",properties:["openDirectory","createDirectory"],defaultPath:app.getPath("documents"),buttonLabel:"باز کردن پروژه"});
   return result.canceled?null:result.filePaths[0];
 }
-async function openWorkspace(workspace){
+async function openWorkspace(workspace,{local=false}={}){
   const {connectWorkspace}=await import("../src/workspace-service.mjs");
   const next=await connectWorkspace({workspace});
   if(service&&service.url!==next.url)await service.close();service=next;
-  await window.loadURL(service.launchUrl);
+  await window.loadURL(service.launchUrl.replace('/#','/'+(workspace===path.join(app.getPath('userData'),'cloud-client')?'?cloud=1':local?'?local=1':'')+'#'));
   window.setTitle("پاستاکد | PaastaCode "+app.getVersion());
   const {newer}=await import("../src/updates.mjs");
   if(service.version&&newer(app.getVersion(),service.version)){
@@ -26,7 +26,11 @@ async function openWorkspace(workspace){
 app.whenReady().then(async()=>{
   let workspace=requested;
   if(!workspace&&!process.env.PAASTACODE_DESKTOP_SMOKE)try{workspace=JSON.parse(await fs.readFile(preferences(),"utf8")).workspace;await fs.access(workspace);}catch{workspace=null;}
-  if(!workspace)workspace=process.env.PAASTACODE_DESKTOP_SMOKE?process.cwd():await folder();
+  if(!workspace&&!process.env.PAASTACODE_DESKTOP_SMOKE){
+    const choice=await dialog.showMessageBox({type:'question',title:'پاستاکد',message:'پروژه را کجا توسعه می‌دهید؟',buttons:['فضای کار ابری','پوشه روی این کامپیوتر'],defaultId:0,cancelId:1});
+    if(choice.response===0){workspace=path.join(app.getPath('userData'),'cloud-client');await fs.mkdir(workspace,{recursive:true});}else workspace=await folder();
+  }
+  if(!workspace&&process.env.PAASTACODE_DESKTOP_SMOKE)workspace=process.cwd();
   if(!workspace){app.quit();return;}
   window=new BrowserWindow({title:"پاستاکد | PaastaCode",width:1280,height:880,minWidth:360,minHeight:580,
     icon:path.join(__dirname,"icon.png"),show:!process.env.PAASTACODE_DESKTOP_SMOKE||process.env.PAASTACODE_DESKTOP_VISIBLE_SMOKE==="1",autoHideMenuBar:true,backgroundColor:"#f5f7fa",
@@ -43,7 +47,7 @@ app.whenReady().then(async()=>{
     try{
       const workspace=await folder();if(!workspace)return false;
       const result=await dialog.showMessageBox(window,{type:"question",title:"باز کردن پروژه",message:"پروژهٔ دیگری باز شود؟",detail:"کار جاری پروژهٔ قبلی در اجرای مشترک ادامه می‌یابد. بستن این پنجره آن را متوقف نمی‌کند. گفتگوها و فایل‌ها باقی می‌مانند.",buttons:["بازگشت","باز کردن پروژه"],defaultId:0,cancelId:0});
-      if(result.response!==1)return false;await openWorkspace(workspace);return true;
+      if(result.response!==1)return false;await openWorkspace(workspace,{local:true});return true;
     }finally{changing=false;}
   });
   const {createUpdates}=require("./update-controller.cjs");

@@ -1,0 +1,6 @@
+// Drafts are scoped to this tab, account, workspace and project. Files never leave
+// the device until the user submits the prompt.
+function database(){return new Promise((resolve,reject)=>{const request=indexedDB.open('paastacode-drafts',1);request.onupgradeneeded=()=>request.result.createObjectStore('drafts');request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});}
+function tabKey(key){let tab=sessionStorage.getItem('paastacode-draft-tab');if(!tab){tab=crypto.randomUUID();sessionStorage.setItem('paastacode-draft-tab',tab);}return tab+':'+key;}
+export async function saveDraft(key,value){const db=await database();try{await new Promise((resolve,reject)=>{const tx=db.transaction('drafts','readwrite');tx.objectStore('drafts').put(value,tabKey(key));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}}
+export async function takeDraft(key){const db=await database();try{return await new Promise((resolve,reject)=>{const tx=db.transaction('drafts','readwrite'),store=tx.objectStore('drafts'),id=tabKey(key),request=store.get(id);let result;request.onsuccess=()=>{result=request.result;store.delete(id);};tx.oncomplete=()=>resolve(result);tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}}

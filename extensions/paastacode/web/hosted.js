@@ -1,3 +1,4 @@
+import {chooseCloudProject} from './cloud-projects.js';
 import {icon} from "./components.js";
 import {mobileApp} from "./pwa.js";
 export const hostedOrigin="https://code.paasta.cloud";
@@ -18,14 +19,16 @@ export function runtimeRequest(connection,path,method="GET",body,options={}){
   if(connection?.kind==="cloud"){
     if(!uuid.test(connection.id)||!connection.owner?.split(":").every(part=>uuid.test(part))||connection.owner.split(":").length!==2)throw new Error("فضای کار معتبر نیست.");
     headers["X-PaastaCode-Owner"]=connection.owner;
-    return {url:`/api/paastacode/workspaces/${connection.id}/runtime/${path}`,init:{...init,credentials:"same-origin"}};
+    headers["X-PaastaCode-Project"]=connection.project||"default";
+    if(connection.relay)headers.Authorization='Bearer '+options.capability;
+    return {url:`/api/${connection.relay?'remote':'paastacode'}/workspaces/${connection.id}/runtime/${path}`,init:{...init,credentials:connection.relay?'omit':'same-origin'}};
   }
   if(connection?.origin)workspaceConnection(connection.origin+"/#cap="+connection.capability);
   headers.Authorization="Bearer "+(connection?.capability||options.capability);
   return {url:(connection?.origin||"")+"/api/"+path,init:{...init,credentials:"omit",...(connection?.origin?{targetAddressSpace:"loopback"}:{})}};
 }
 export function invalidateHosted(){
-  remember(selectedKey,null);remember(intentKey,null);
+  remember(selectedKey,null);remember(intentKey,null);sessionStorage.removeItem('paastacode-desktop-cloud');
   window.dispatchEvent(new Event("paastacode:account-changed"));
   location.reload();
 }
@@ -50,8 +53,8 @@ export async function connectHosted({onAccount=()=>{}}={}){
   document.getElementById("login").disabled=true;document.getElementById("new").disabled=true;
   document.getElementById("connection-state").textContent="انتخاب فضای کار";
   const feedback=(text,danger=false)=>{$("hosted-feedback").textContent=text;$("hosted-feedback").classList.toggle("error",danger);};
-  async function api(path="",method="GET",body){
-    const response=await fetch("/api/paastacode/workspaces"+path,{method,credentials:"same-origin",headers:{"Content-Type":"application/json",...(owner?{"X-PaastaCode-Owner":owner}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000)});
+  async function api(path="",method="GET",body,project){
+    const response=await fetch("/api/paastacode/workspaces"+path,{method,credentials:"same-origin",headers:{"Content-Type":"application/json",...(project?{"X-PaastaCode-Project":project}:{}),...(owner?{"X-PaastaCode-Owner":owner}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(65000)});
     const result=await response.json().catch(()=>({error:"پاسخ سرویس معتبر نیست."}));
     if(!response.ok){if(response.status===403&&owner){invalidateHosted();throw new Error("حساب فعال تغییر کرده است.");}const caught=new Error(result.error||"ارتباط با فضای کار برقرار نشد.");caught.status=response.status;throw caught;}
     return result;
@@ -60,27 +63,32 @@ export async function connectHosted({onAccount=()=>{}}={}){
     if(busy)return;busy=true;button.disabled=true;hub.setAttribute("aria-busy","true");
     try{await work();}catch(caught){feedback(caught.message,true);}finally{busy=false;button.disabled=false;hub.setAttribute("aria-busy","false");}
   }
+  async function selectProject(row){
+    const project=await chooseCloudProject({name:row.name,current:active?.id===row.id?active.project:null,request:(path,method,body)=>api('/'+row.id+'/runtime/'+path,method,body)});
+    if(project)await open({kind:'cloud',id:row.id,name:row.name+' / '+project.name,workspaceName:row.name,project:project.id,owner});
+  }
   async function exportProject(row){
-    const exportOwner=owner;let transfer;
-    feedback("در حال آماده‌کردن فایل‌های پروژه…");
+    const exportOwner=owner;let transfer;const selected=await api(`/${row.id}/runtime/projects`).catch(error=>{if(error.status===404)return {activeProject:'default'};throw error;}),project=selected.activeProject;
+    feedback('در حال آماده‌کردن فایل‌های '+(selected.projects?.find(p=>p.id===project)?.name||'پروژهٔ اصلی')+'…');
     try{
-      const result=await api(`/${row.id}/runtime/export`,"POST",{});
+      const result=await api(`/${row.id}/runtime/export`,"POST",{},project);
       if(!/^[-_A-Za-z0-9]{32}$/.test(result?.id||""))throw new Error("پاسخ دریافت پروژه معتبر نیست؛ دوباره تلاش کنید.");
       transfer=result.id;
       // The broker retains this bounded first chunk for the download's retry.
       // A failed ZIP process is reported here before opening a browser download.
-      await api(`/${row.id}/runtime/export?id=${transfer}&offset=0`);
+      await api(`/${row.id}/runtime/export?id=${transfer}&offset=0`,"GET",undefined,project);
       if(owner!==exportOwner)throw new Error("حساب فعال تغییر کرده است؛ پروژه را دوباره انتخاب کنید.");
-      const link=element("a");link.href=`/api/paastacode/workspaces/${row.id}/export?`+new URLSearchParams({id:transfer,owner:exportOwner});
+      const link=element("a");link.href=`/api/paastacode/workspaces/${row.id}/export?`+new URLSearchParams({id:transfer,owner:exportOwner,project});
       link.download="PaastaCode-project.zip";link.target="_blank";link.rel="noopener noreferrer";
       document.body.append(link);link.click();link.remove();
       feedback("دریافت فایل ZIP شروع شد. نتیجه را در بخش دانلودهای مرورگر بررسی کنید؛ اگر دریافت قطع شد، دوباره خروجی بگیرید.");
     }catch(caught){
-      if(transfer&&owner===exportOwner)try{await api(`/${row.id}/runtime/export?id=${transfer}`,"DELETE");}catch{/* The runtime also expires abandoned transfers. */}
+      if(transfer&&owner===exportOwner)try{await api(`/${row.id}/runtime/export?id=${transfer}`,"DELETE",undefined,project);}catch{/* The runtime also expires abandoned transfers. */}
       throw caught;
     }
   }
-  function open(value){
+  async function open(value){
+    if(active)await window.paastacodeSaveDraft?.();
     if(value.kind==="cloud")remember(selectedKey,value);else remember(selectedKey,null);
     if(active){window.dispatchEvent(new Event("paastacode:workspace-switch"));location.reload();return;}
     active=value;hub.hidden=true;form.hidden=true;$("login").disabled=false;$("hosted-open").hidden=false;
@@ -118,8 +126,9 @@ export async function connectHosted({onAccount=()=>{}}={}){
       if(row.last_error)copy.append(element("p",row.last_error,"hosted-project-note"));
       const actions=element("div",undefined,"hosted-actions");
       const button=(label,work,cls,symbol)=>{const node=element("button",undefined,cls);if(symbol)node.append(icon(symbol));node.append(document.createTextNode(label));node.type="button";node.onclick=()=>action(node,work);actions.append(node);};
-      if(row.status==="ready"&&paid)button("باز کردن",()=>open({kind:"cloud",id:row.id,name:row.name,owner}),"primary");
-      if(row.status==="ready"&&paid)button("دریافت پروژه",()=>exportProject(row),undefined,"import");
+      if(row.status==="ready"&&paid)button("باز کردن",()=>selectProject(row),"primary");
+      if(row.status==='ready'&&paid&&row.upgrade_available)button('به‌روزرسانی فضای کار',async()=>{await api('/'+row.id+'/upgrade','POST',{});feedback('به‌روزرسانی شروع شد؛ فایل‌ها حفظ می‌شوند و هزینهٔ تازه‌ای ندارد. پس از آماده‌شدن، فضا را دوباره باز کنید.');lastList='';setTimeout(refresh,0);},undefined,'update');
+      if(row.status==="ready"&&paid)button("دریافت پروژهٔ فعال",()=>exportProject(row),undefined,"import");
       if(row.status==="suspended"&&paid&&row.first_ready_at)button("ادامه",()=>preview("resume",row),"primary");
       if(["ready","suspended"].includes(row.status)&&row.first_ready_at)button("تمدید",()=>preview("renew",row));
       if(["starting","ready","suspended"].includes(row.status))button("لغو",()=>preview("cancel",row),"subtle");
@@ -147,7 +156,7 @@ export async function connectHosted({onAccount=()=>{}}={}){
       if(!restored){restored=true;const pending=saved(intentKey);if(pending?.owner===owner&&pending.quote?.token)review(pending);else remember(intentKey,null);
         const selected=saved(selectedKey);if(selected?.owner!==owner)remember(selectedKey,null);
         const previous=(result.workspaces||[]).find(row=>row.id===selected?.id&&row.status==="ready"&&new Date(row.current_period_end)>new Date());
-        if((mobileApp||!fragment.get("local"))&&!intent&&selected?.owner===owner&&previous)open({kind:"cloud",id:previous.id,name:previous.name,owner});
+        if((mobileApp||!fragment.get("local"))&&!intent&&selected?.owner===owner&&previous)open({...selected,kind:"cloud",id:previous.id,project:selected.project||"default",owner});
       }
       if(!catalog.enabled&&!intent)feedback(mobileApp?"ساخت فضای کار ابری هنوز فعال نشده است. پروژهٔ تازه را پس از فعال‌شدن سرویس می‌توانید بسازید.":"ساخت فضای کار ابری هنوز فعال نشده است. اتصال به کامپیوترتان در دسترس است.");
     }catch(caught){if(caught.status===403){$("hosted-login").hidden=false;$("hosted-account-detail").textContent="برای دیدن فضاهای کار، وارد حساب پاستا شوید.";$("hosted-list").replaceChildren();}else feedback(caught.message,true);}
