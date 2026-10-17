@@ -1,20 +1,20 @@
-# PaastaCode 0.2.0-beta.19 / پاستاکد
+# PaastaCode 0.2.0-beta.20 / پاستاکد
 
-- بخش ابزارها با آیکون، کارت‌های آماده و ادامهٔ روشن ورود به سرویس.
-- فعال‌سازی اختیاری Figma، Context7، Linear، Notion و Figma Desktop؛ مهارت‌های Ponytail، UI/UX Design و Persian Writing با مجوز و منبع مشخص.
-- پراکسی اختیاری HTTP، HTTPS و SOCKS5 برای موتور پروژه؛ نشانی پیشنهادی 127.0.0.1:2080، رمز خصوصی و حفظ اتصال مستقیم به پاستا.
-- اتصال به سرورهای MCP محلی و راه دور، تنظیم آمادهٔ Figma و ورود OAuth از بخش «ابزارها و مهارت‌ها».
-- افزودن مهارت با فایل SKILL.md یا پوشهٔ کامل، همراه با فعال‌سازی و حذف برای حساب و پروژهٔ فعلی.
-- استفاده از مرورگر جدا از مرورگر شخصی برای بررسی صفحه، کار با فرم‌ها و گرفتن تصویر؛ نمایش نتیجه و درخواست تأیید در گفتگو.
-- تنظیمات مشترک در وب محلی، دسکتاپ، CLI و پنل بومی VS Code، با حفظ گفتگوها هنگام اعمال تنظیمات.
-- حفظ امکانات نسخه‌های قبل: پیوست و PDF، خروجی زنده، ادامهٔ کار با اشتراک فعال و اولویت مدل‌های میزبانی‌شده در ایران.
+- چند پروژه در یک فضای کار ابری؛ هر بار یک پروژه فعال است و فایل‌ها و گفتگوهای پروژهٔ اصلی حفظ می‌شوند.
+- اتصال برنامهٔ دسکتاپ به پروژهٔ ابری بدون انتخاب پوشهٔ محلی؛ فایل‌ها و اجرای دستورها در فضای ابری می‌مانند.
+- مدیریت سرورهای MCP و مهارت‌های هر پروژهٔ ابری از وب و دسکتاپ.
+- جلوگیری از جابه‌جایی هنگام اجرا و ارسال دستور از تبِ پروژهٔ قبلی؛ حفظ پیش‌نویس و پیوست‌های ارسال‌نشده هنگام جابه‌جایی.
+- ارتقای اختیاری فضای کار قدیمی پس از پایان اجرا، بدون حذف فایل‌ها یا هزینهٔ تازه.
+- حفظ امکانات بتای ۱۹: ابزارها و مهارت‌های آماده، پراکسی اختیاری، پیوست فایل و خروجی زنده.
 
-افزونهٔ همراه نسخهٔ داخلی `0.2.18` دارد. VSIX مخصوص سیستم‌عامل و معماری خود را نصب کنید. Enter برای ارسال و Shift+Enter برای خط بعد است. بسته‌های مستقل، runtime و موتور لازم را همراه دارند. برای استفاده از مرورگر، مرورگر سازگار باید روی دستگاه نصب باشد یا با فرمان `paastacode tools --install-browser` دریافت شود.
+افزونهٔ همراه نسخهٔ داخلی `0.2.19` دارد. VSIX مخصوص سیستم‌عامل و معماری خود را نصب کنید. Enter برای ارسال و Shift+Enter برای خط بعد است. بسته‌های مستقل، runtime و موتور لازم را همراه دارند.
 
-قابلیت‌های جدید ابزارها، مهارت‌ها و مرورگر روی فضاهای کار ابری هنوز فعال نشده‌اند. این بخش همچنان در حال آماده‌سازی است؛ این انتشار به‌معنی فعال‌شدن آن در نسخهٔ آنلاین نیست.
+در نسخهٔ وب، فضای کار را باز کنید و پروژه را انتخاب یا ایجاد کنید. در دسکتاپ، «فضاهای کار ابری» را بزنید. برای فضای قدیمی، ابتدا «به‌روزرسانی فضای کار» را انتخاب کنید. فعال‌شدن امکانات آنلاین به انتشار بخش سرور پاستا نیز وابسته است.
+
+مرورگر خودکار ابری هنوز در دسترس نیست. مرورگر محلی و Figma Desktop روی دستگاه اجرا می‌شوند؛ پراکسی 127.0.0.1 در فضای ابری به خود همان فضا اشاره می‌کند.
 
 [راهنمای تصویری نصب و استفاده](https://paasta.cloud/docs/paastacode) · [اشتراک در ابزارهای دیگر](https://paasta.cloud/docs/coding-subscription) · [نسخهٔ وب](https://code.paasta.cloud)
 
-These are unsigned beta packages. Choose the correct operating system/architecture and verify SHA256SUMS. Windows publisher signing and Apple signing/notarization are not included. The installed VS Code packages are verified on all five platforms before publication.
+These are unsigned beta packages. Choose the correct operating system/architecture and verify SHA256SUMS. Windows publisher signing and Apple signing/notarization are not included. All five native packages and installed VS Code extensions passed acceptance before publication.
 
 Powered by OpenCode. PaastaCode is an independent open-source fork of OpenCode under MIT; it is not an official OpenCode product.
