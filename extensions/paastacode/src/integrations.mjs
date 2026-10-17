@@ -3,6 +3,8 @@ import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {readPrivate,writePrivate,stateHome} from './account.mjs';
+import {mcpPresets,skillPresets,presetSkill} from './integration-catalog.mjs';
+import {proxySettings} from './outbound-proxy.mjs';
 
 const namePattern=/^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 export function integrationName(value){if(typeof value!=='string'||value.length>64||!namePattern.test(value)||['paasta','browser','constructor','prototype'].includes(value))throw new Error('نام باید انگلیسی کوچک باشد؛ برای جدا کردن واژه‌ها از خط تیره استفاده کنید.');return value;}
@@ -46,12 +48,20 @@ export class WorkspaceIntegrations{
   async read(){return await readPrivate(this.path)||{servers:{},skills:{},browser:false};}
   change(work){const result=this.pending.then(async()=>{const state=await this.read();await work(state);await writePrivate(this.path,state);return state;});this.pending=result.catch(()=>{});return result;}
   async update(input){
+    if(input.kind==='proxy')return this.change(s=>{s.proxy=proxySettings(input,s.proxy);});
+    if(input.action==='preset'){
+      const preset=(input.kind==='mcp'?mcpPresets:input.kind==='skill'?skillPresets:[]).find(item=>item.id===input.name);
+      if(!preset)throw new Error('گزینهٔ آماده پیدا نشد.');
+      if(input.kind==='mcp')input={kind:'mcp',action:'install',name:preset.id,config:{type:'remote',url:preset.url}};
+      else{const bundle=await presetSkill(preset.id);input={...parseSkillMarkdown(bundle.markdown),files:bundle.files,kind:'skill',action:'install'};}
+    }
     if(input.kind==='browser'){if(typeof input.enabled!=='boolean')throw new Error('وضعیت مرورگر معتبر نیست.');return this.change(s=>{s.browser=input.enabled;});}
     if(!['mcp','skill'].includes(input.kind))throw new Error('نوع ابزار معتبر نیست.');const name=integrationName(input.name);
     return this.change(state=>{const entries=input.kind==='mcp'?state.servers:state.skills;
       if(input.action==='remove'){delete entries[name];return;}
       if(input.action==='toggle'){if(!entries[name]||typeof input.enabled!=='boolean')throw new Error('ابزار پیدا نشد.');entries[name].enabled=input.enabled;return;}
-      if(input.action!=='save')throw new Error('عملیات معتبر نیست.');if(!entries[name]&&Object.keys(entries).length>=32)throw new Error('حداکثر ۳۲ مورد برای هر پروژه فعال کنید.');
+      if(input.action==='install'&&entries[name])throw new Error('این مورد قبلاً اضافه شده است؛ از فهرست نصب‌شده‌ها فعالش کنید.');
+      if(!['save','install'].includes(input.action))throw new Error('عملیات معتبر نیست.');if(!entries[name]&&Object.keys(entries).length>=32)throw new Error('حداکثر ۳۲ مورد برای هر پروژه فعال کنید.');
       entries[name]=input.kind==='mcp'?mcpConfig(input.config):skillBundle(input);
     });
   }
@@ -71,7 +81,7 @@ export class WorkspaceIntegrations{
   async publicState(runtime){
     const state=await this.read();let statuses={};try{statuses=await runtime.call('/mcp');}catch{}
     // Engine errors can contain remote response bodies, headers or credentials; never forward them.
-    return {servers:Object.entries(state.servers).map(([name,config])=>({name,type:config.type,enabled:config.enabled,status:statuses[this.engineName(name)]?.status||'disconnected',endpoint:config.type==='remote'?new URL(config.url).origin:config.command[0],hasSecrets:!!Object.keys(config.headers||config.environment||{}).length})),skills:Object.values(state.skills).map(({name,description,enabled})=>({name,description,enabled})),browser:{enabled:state.browser,status:statuses.browser?.status||'disabled'}};
+    return {catalog:{mcp:mcpPresets,skills:skillPresets},proxy:{enabled:!!state.proxy?.enabled,url:state.proxy?.url||'http://127.0.0.1:2080',username:state.proxy?.username||'',hasPassword:!!state.proxy?.password},servers:Object.entries(state.servers).map(([name,config])=>({name,type:config.type,enabled:config.enabled,status:statuses[this.engineName(name)]?.status||'disconnected',endpoint:config.type==='remote'?new URL(config.url).origin:config.command[0],hasSecrets:!!Object.keys(config.headers||config.environment||{}).length})),skills:Object.values(state.skills).map(({name,description,enabled})=>({name,description,enabled})),browser:{enabled:state.browser,status:statuses.browser?.status||'disabled'}};
   }
 }
 export function browserConfig(){

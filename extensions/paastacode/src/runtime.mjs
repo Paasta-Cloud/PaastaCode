@@ -8,6 +8,8 @@ import {randomBytes,createHash} from "node:crypto";
 import {stateHome} from "./account.mjs";
 import {codingModels} from "./models.mjs";
 
+import {startOutboundProxy} from './outbound-proxy.mjs';
+
 const require=createRequire(import.meta.url);
 export function engineCommand(args,options={}){
   const packaged=fileURLToPath(new URL("../engine/opencode"+(process.platform==="win32"?".exe":""),import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');
@@ -29,15 +31,16 @@ export function providerConfig(models,key,origin){
 }
 export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}
-  async start(config){
+  async start(config,{proxy}={}){
     this.workspace=await realpath(this.workspace);
     this.skillPaths=config.skills?.paths||[];
     if(this.skillPaths.length)config={...config,permission:{...config.permission,external_directory:{'*':'deny',...Object.fromEntries(this.skillPaths.flatMap(path=>[[path,'allow'],[path.replaceAll('\\','/')+'/**','allow']]))}}};
     const home=join(stateHome,"engine",this.identity||"local");await mkdir(home,{recursive:true,mode:0o700});
-    this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
-      ...process.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
+    this.proxy=await startOutboundProxy(proxy,config.provider?.paasta?.options?.baseURL);
+    try{this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
+      ...process.env,...this.proxy?.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
       OPENCODE_SERVER_PASSWORD:this.password,OPENCODE_CONFIG_CONTENT:JSON.stringify(config),
-      OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});
+      OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});}catch{await this.stop();throw new Error("موتور کدنویسی شروع نشد.");}
     const engineProcess=this.process;
     await new Promise((resolveReady,reject)=>{
       const timeout=setTimeout(()=>reject(new Error("موتور کدنویسی شروع نشد. دوباره تلاش کنید.")),45000);
@@ -49,9 +52,9 @@ export class CodeRuntime{
         if(match){this.url=match[0];done();}
       });
       this.process.stderr.resume(); // Never copy engine diagnostics, prompts or credentials to the console.
-      engineProcess.once("error",done);engineProcess.once("exit",()=>{if(this.process===engineProcess)this.url=null;done(new Error("موتور کدنویسی متوقف شد."));});
-    }).catch(error=>{this.stop();throw error;});
-    await this.call("/global/health");
+      engineProcess.once("error",()=>done(new Error("موتور کدنویسی شروع نشد.")));engineProcess.once("exit",()=>{if(this.process===engineProcess){this.url=null;void this.stop();}done(new Error("موتور کدنویسی متوقف شد."));});
+    }).catch(async error=>{await this.stop();throw error;});
+    try{await this.call("/global/health");}catch(error){await this.stop();throw error;}
     return this;
   }
   async call(path,{method="GET",body,timeout=20000}={}){
@@ -62,7 +65,8 @@ export class CodeRuntime{
     return response.status===204?null:response.json();
   }
   async stop(){
-    const child=this.process;this.process=null;this.url=null;
+    const child=this.process,proxy=this.proxy;this.process=null;this.url=null;this.proxy=null;
+    await proxy?.close();
     if(child&&child.exitCode===null)await new Promise(resolveStop=>{
       const kill=signal=>{try{if(process.platform!=="win32"&&child.pid)process.kill(-child.pid,signal);else child.kill(signal);}catch(error){if(error.code!=="ESRCH")throw error;}};
       const timer=setTimeout(()=>{kill("SIGKILL");resolveStop();},3000);child.once("exit",()=>{clearTimeout(timer);if(process.platform!=="win32")kill("SIGKILL");resolveStop();});kill("SIGTERM");

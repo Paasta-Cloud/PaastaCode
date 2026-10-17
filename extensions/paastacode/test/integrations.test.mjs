@@ -7,6 +7,24 @@ process.env.PAASTACODE_HOME=resolve('.artifacts/integrations-tests');
 const {WorkspaceIntegrations,mcpConfig,skillBundle,parseSkillMarkdown}=await import('../src/integrations.mjs');
 const {startServer}=await import('../src/server.mjs');
 
+test('curated installs are opt-in, preserve existing settings and materialize licensed references',async()=>{
+  const home=await realpath(await mkdtemp(join(tmpdir(),'paastacode-presets-')));
+  try{
+    const manager=new WorkspaceIntegrations('/project','catalog-owner',{home}),other=new WorkspaceIntegrations('/project','other',{home});
+    const state=await manager.publicState({call:async()=>({})});assert.equal(state.servers.length,0);assert.equal(state.skills.length,0);assert.equal(state.proxy.enabled,false);
+    assert(state.catalog.mcp.find(item=>item.id==='figma'));assert.equal(state.catalog.skills.length,3);
+    for(const preset of state.catalog.skills)await manager.update({kind:'skill',action:'preset',name:preset.id});
+    await manager.update({kind:'mcp',action:'preset',name:'figma'});await manager.update({kind:'mcp',action:'toggle',name:'figma',enabled:false});
+    await assert.rejects(manager.update({kind:'mcp',action:'preset',name:'figma'}));assert.equal((await manager.read()).servers.figma.enabled,false);
+    await assert.rejects(manager.update({kind:'skill',action:'preset',name:'../secret'}));
+    await manager.update({kind:'proxy',enabled:true,url:'socks5://127.0.0.1:2080',username:'fixture',password:'private-proxy-sentinel'});
+    const visible=await manager.publicState({call:async()=>({})});assert.equal(visible.proxy.hasPassword,true);assert(!JSON.stringify(visible).includes('private-proxy-sentinel'));assert.equal((await other.publicState({call:async()=>({})})).proxy.enabled,false);
+    await manager.update({kind:'proxy',enabled:false,url:'socks5://127.0.0.1:2080'});assert.equal((await manager.read()).proxy.password,'private-proxy-sentinel');
+    const config=await manager.config();assert.match(await readFile(join(config.skills.paths[0],'persian-writing/references/writing-style.md'),'utf8'),/Persian|Writing|writing/);
+    for(const preset of state.catalog.skills)assert.match(await readFile(join(config.skills.paths[0],preset.id,'LICENSE'),'utf8'),/MIT/);
+  }finally{assert(home.startsWith(join(await realpath(tmpdir()),'paastacode-presets-')));await rm(home,{recursive:true,force:true});}
+});
+
 test('MCP configuration cannot replace provider policy or smuggle a remote credential in its URL',()=>{
   for(const url of ['file:///etc/passwd','http://remote.example/mcp','https://name:secret@example.test/mcp','https://example.test/mcp?token=secret'])assert.throws(()=>mcpConfig({type:'remote',url}));
   assert.equal(mcpConfig({type:'remote',url:'http://127.0.0.1:3845/mcp'}).url,'http://127.0.0.1:3845/mcp');
