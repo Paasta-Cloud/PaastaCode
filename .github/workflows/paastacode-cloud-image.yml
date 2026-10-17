@@ -67,10 +67,11 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: |
           digest=$(cat ".artifacts/runtime-image/$ARCH.txt")
-          docker run --rm --env IMAGE="$IMAGE@$digest" \
-            --entrypoint /bin/sh \
+          docker run --rm \
             ghcr.io/regclient/regctl:v0.11.6@sha256:db2e5f3a5de80b24d53fea5af9edf7021a53f2689f1e166ef2f0e200dad4fb3a \
-            -c 'regctl image export "$IMAGE" /tmp/runtime.tar && test -s /tmp/runtime.tar'
+            image export "$IMAGE@$digest" > .artifacts/runtime-image/anonymous.tar
+          test -s .artifacts/runtime-image/anonymous.tar
+          rm .artifacts/runtime-image/anonymous.tar
       - uses: actions/upload-artifact@v6
         with:
           name: runtime-digest-${{ matrix.arch }}
