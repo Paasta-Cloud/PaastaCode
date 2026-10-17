@@ -25,3 +25,9 @@ Microsoft Playwright MCP 0.0.83 and its pinned Playwright/Playwright Core runtim
 ## VS Code Codicons
 
 Native toolbar SVG icons are from Microsoft vscode-codicons, revision 8853e0b1b0e2058b099fde515d5f1f478db2f8e1, under Creative Commons Attribution 4.0 International (CC-BY-4.0). Source: https://github.com/microsoft/vscode-codicons/tree/8853e0b1b0e2058b099fde515d5f1f478db2f8e1. SVG geometry is unchanged; accessibility attributes are added at runtime. The full license is bundled at vscode/media/CODICONS_LICENSE.txt in extension packages.
+
+## Curated skills and outbound proxy
+
+Ponytail 5.3.2 by DietrichGebert (https://github.com/DietrichGebert/ponytail) is bundled as its standalone MIT-licensed SKILL.md, without plugin hooks. Persian Writing 1.3.6 by the persian-writing contributors (https://github.com/ali2000hos/persian-writing) is adapted into a task-routed entry and four unmodified prose/RTL references under MIT, without fonts or scripts. Their full licenses are in src/bundled-skills/<name>/LICENSE and travel with installed skills. UI/UX Design is a Paasta-authored MIT skill.
+
+Apify proxy-chain 3.0.1 (https://github.com/apify/proxy-chain), Apache-2.0, and its dependencies are bundled into vendor/network.cjs. Dependency LICENSE/NOTICE files are retained under licenses/proxy-chain. Proxy transport does not disable TLS verification. Service names identify independent MCP services and imply no affiliation or included service subscription.
