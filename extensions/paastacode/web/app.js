@@ -1,5 +1,7 @@
 import {enhanceSelects,promptInput,labelDialog,icon} from "./components.js";
 import {deploymentUI} from "./deployment.js";
+import {saveDraft,takeDraft} from './drafts.js';
+import {connectDesktopCloud} from './desktop-cloud.js';
 import {connectHosted,hostedOrigin,runtimeRequest,invalidateHosted} from "./hosted.js";
 import {cloudActions} from "./cloud-actions.js";
 import {devicesUI} from "./devices.js";
@@ -48,9 +50,9 @@ for(const dialog of document.querySelectorAll("dialog"))labelDialog(dialog);
 updatesUI();
 if(window.paastacodeDesktop){$("open-workspace").hidden=false;$("open-workspace").onclick=()=>run($("open-workspace"),()=>window.paastacodeDesktop.chooseWorkspace());}
 let capability=new URLSearchParams(location.hash.slice(1)).get("cap")||sessionStorage.getItem("paastacode-cap");
-let runtimeConnection=null,hostedAccountOwner=null;
+let runtimeConnection=null,hostedAccountOwner=null,projectStale=false;
 const awaitingWorkspace=()=>location.origin===hostedOrigin&&!runtimeConnection;
-if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname);}
+if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname+location.search);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
 let cloudSelection=null;
 function selectionView(){
@@ -109,6 +111,7 @@ const integrations=globalThis.paastacodeIntegrations({api,button:$("integrations
 function accessView(value){$("access-mode").value=value||"review";$("access-mode").dataset.mode=value||"review";$("access-description").textContent=value==="full"?"Full Access: تغییر فایل و اجرای دستور بدون پرسش":"تغییر فایل و اجرای دستور با تأیید شما";}
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
 async function api(path,method="GET",body){
+  if(projectStale)throw new Error('پروژهٔ موردنظر را دوباره باز کنید؛ پیش‌نویس شما حفظ شده است.');
   const version=generation;
   let request;
   if(awaitingWorkspace()){
@@ -121,6 +124,7 @@ async function api(path,method="GET",body){
   const result=await response.json().catch(()=>null);if(version!==generation){const error=new Error("پاسخ قدیمی نادیده گرفته شد.");error.stale=true;throw error;}
   if(awaitingWorkspace()&&response.status===403){hostedAccountOwner=null;clearAccountView();$("account-name").textContent="حساب پاستا";$("account-detail").textContent="ورود دوباره لازم است";$("hosted-hub").hidden=false;$("conversation").hidden=true;$("hosted-login").hidden=false;document.querySelector(".thread-heading").hidden=true;throw new Error("دسترسی حساب تغییر کرده است؛ دوباره وارد حساب پاستا شوید.");}
   if(!result||typeof result!=="object")throw new Error("پاسخ سرویس کامل دریافت نشد؛ دوباره تلاش کنید.");
+  if(result.projectChanged){const draft=$('prompt').value,files=attachments;projectStale=true;clearAccountView();$('prompt').value=draft;attachments=files;renderAttachments();$('send').disabled=true;$('new').disabled=true;sessionStorage.removeItem('paastacode-cloud-workspace');sessionStorage.removeItem('paastacode-desktop-cloud');notice(result.error,true);$('hosted-open').click();throw new Error(result.error);}
   if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
@@ -357,11 +361,13 @@ $("menu").onclick=()=>drawer(true);$("rail-close").onclick=()=>drawer(false);$("
 for(const button of document.querySelectorAll("[data-prompt]"))button.onclick=()=>{$("prompt").value=button.dataset.prompt;$("prompt").focus();};
 document.addEventListener("keydown",event=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="n"&&!$("new").disabled&&!document.querySelector("dialog[open]")){event.preventDefault();$("new").click();}if(event.key==="Escape")drawer(false);if(event.key==="Tab"&&$("rail").classList.contains("open")){const items=[...$("rail").querySelectorAll("button:not(:disabled),a[href],input:not(:disabled)")].filter(el=>el.offsetParent);const first=items[0],last=items.at(-1);if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus();}else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus();}}});
 matchMedia("(max-width:640px)").addEventListener("change",()=>drawer(false));
+if(window.paastacodeDesktop)runtimeConnection=await connectDesktopCloud({capability,required:new URLSearchParams(location.search).has('cloud')});
 if(location.origin===hostedOrigin){runtimeConnection=await connectHosted({onAccount:account=>{if(!awaitingWorkspace())return;hostedAccountOwner=account.id+":"+account.tenantId;$("account-name").textContent=account.name||"حساب پاستا";$("account-detail").textContent=Number(account.balanceToman).toLocaleString("fa-IR")+" تومان اعتبار";}});capability=runtimeConnection.capability;}
 if(runtimeConnection){
   if(runtimeConnection.kind==="cloud"){$("local-tab").textContent="این فضای کار";$("save-state").textContent="در فضای کار ابری";}
-  const draftKey="paastacode-draft:"+(runtimeConnection.kind==="cloud"?runtimeConnection.owner+":"+runtimeConnection.id:runtimeConnection.origin);
-  try{$("prompt").value=sessionStorage.getItem(draftKey)||"";sessionStorage.removeItem(draftKey);resizePrompt();}catch{/* Browser storage is optional. */}
+  const draftKey="paastacode-draft:"+(runtimeConnection.kind==="cloud"?runtimeConnection.owner+":"+runtimeConnection.id+":"+(runtimeConnection.project||"default"):runtimeConnection.origin);
+  try{const saved=await takeDraft(draftKey).catch(()=>null);if(saved){attachments=saved.attachments||[];renderAttachments();}$("prompt").value=saved?.text??sessionStorage.getItem(draftKey)??"";sessionStorage.removeItem(draftKey);resizePrompt();}catch{/* Browser storage is optional. */}
+  window.paastacodeSaveDraft=()=>saveDraft(draftKey,{text:$('prompt').value,attachments});
   window.addEventListener("paastacode:workspace-switch",()=>{try{sessionStorage.setItem(draftKey,$("prompt").value);}catch{/* Keep switching available. */}});
 }
 window.addEventListener("paastacode:account-changed",clearAccountView);

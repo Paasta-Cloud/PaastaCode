@@ -43,11 +43,13 @@ export function parseSkillMarkdown(text){
   return skillBundle({name,description,instructions:match[2]});
 }
 export class WorkspaceIntegrations{
-  constructor(workspace,identity,{home=stateHome}={}){const key=createHash('sha256').update(identity+'\0'+workspace).digest('hex');this.root=join(home,'integrations',key);this.path=join(this.root,'settings.json');this.pending=Promise.resolve();}
+  constructor(workspace,identity,{home=stateHome,cloud=false}={}){const key=createHash('sha256').update(identity+'\0'+workspace).digest('hex');this.root=join(home,'integrations',key);this.path=join(this.root,'settings.json');this.pending=Promise.resolve();this.cloud=cloud;}
   engineName(name){return name.slice(0,20)+'_'+createHash('sha256').update(this.root+'\0'+name).digest('hex').slice(0,8);}
   async read(){return await readPrivate(this.path)||{servers:{},skills:{},browser:false};}
   change(work){const result=this.pending.then(async()=>{const state=await this.read();await work(state);await writePrivate(this.path,state);return state;});this.pending=result.catch(()=>{});return result;}
   async update(input){
+    if(this.cloud&&input.kind==='browser'&&input.enabled)throw new Error('مرورگر در فضای ابری هنوز در دسترس نیست. MCP و مهارت‌ها قابل استفاده‌اند.');
+    if(this.cloud&&input.kind==='mcp'&&input.action==='preset'&&input.name==='figma-desktop')throw new Error('برای فضای ابری، اتصال آنلاین Figma را انتخاب کنید.');
     if(input.kind==='proxy')return this.change(s=>{s.proxy=proxySettings(input,s.proxy);});
     if(input.action==='preset'){
       const preset=(input.kind==='mcp'?mcpPresets:input.kind==='skill'?skillPresets:[]).find(item=>item.id===input.name);
@@ -74,14 +76,14 @@ export class WorkspaceIntegrations{
     }
     // Keep the previous materialization until the engine has switched; no project files are edited.
     const old=this.materialized;this.materialized=skillsPath;this.previous=old;
-    const mcp=Object.fromEntries(Object.entries(state.servers).map(([name,config])=>[this.engineName(name),config]));if(state.browser)mcp.browser=browserConfig();
+    const mcp=Object.fromEntries(Object.entries(state.servers).map(([name,config])=>[this.engineName(name),config]));if(state.browser&&!this.cloud)mcp.browser=browserConfig();
     return {mcp,skills:{paths:[skillsPath]}};
   }
   async cleanPrevious(){if(this.previous){await rm(this.previous,{recursive:true,force:true});this.previous=null;}}
   async publicState(runtime){
     const state=await this.read();let statuses={};try{statuses=await runtime.call('/mcp');}catch{}
     // Engine errors can contain remote response bodies, headers or credentials; never forward them.
-    return {catalog:{mcp:mcpPresets,skills:skillPresets},proxy:{enabled:!!state.proxy?.enabled,url:state.proxy?.url||'http://127.0.0.1:2080',username:state.proxy?.username||'',hasPassword:!!state.proxy?.password},servers:Object.entries(state.servers).map(([name,config])=>({name,type:config.type,enabled:config.enabled,status:statuses[this.engineName(name)]?.status||'disconnected',endpoint:config.type==='remote'?new URL(config.url).origin:config.command[0],hasSecrets:!!Object.keys(config.headers||config.environment||{}).length})),skills:Object.values(state.skills).map(({name,description,enabled})=>({name,description,enabled})),browser:{enabled:state.browser,status:statuses.browser?.status||'disabled'}};
+    return {cloud:this.cloud,catalog:{mcp:this.cloud?mcpPresets.filter(p=>p.id!=='figma-desktop'):mcpPresets,skills:skillPresets},proxy:{enabled:!!state.proxy?.enabled,url:state.proxy?.url||'http://127.0.0.1:2080',username:state.proxy?.username||'',hasPassword:!!state.proxy?.password},servers:Object.entries(state.servers).map(([name,config])=>({name,type:config.type,enabled:config.enabled,status:statuses[this.engineName(name)]?.status||'disconnected',endpoint:config.type==='remote'?new URL(config.url).origin:config.command[0],hasSecrets:!!Object.keys(config.headers||config.environment||{}).length})),skills:Object.values(state.skills).map(({name,description,enabled})=>({name,description,enabled})),browser:{available:!this.cloud,enabled:!this.cloud&&state.browser,status:this.cloud?'unavailable':statuses.browser?.status||'disabled'}};
   }
 }
 export function browserConfig(){
