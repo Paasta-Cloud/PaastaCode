@@ -231,6 +231,25 @@ async function sessions(){
 function renderMessages(messages){
   bench.render(messages);
 }
+function backgroundView(status,permissions){
+  const panel=$('background-activity'),buttons=[...$('sessions').querySelectorAll('button[data-session]')];
+  const signature=JSON.stringify([generation,listGeneration,mode,session?.id,buttons.map(b=>[b.dataset.session,b.title,status[b.dataset.session]?.type,permissions.some(p=>p.sessionID===b.dataset.session)])]);
+  if(panel.dataset.signature===signature)return;panel.dataset.signature=signature;
+  panel.replaceChildren();panel.hidden=true;
+  if(mode!=='local')return;
+  for(const button of buttons){
+    const id=button.dataset.session,waiting=permissions.some(p=>p.sessionID===id),busy=status[id]&&status[id].type!=='idle';
+    button.querySelector('.session-activity')?.remove();
+    if(!waiting&&!busy)continue;
+    const label=waiting?'منتظر تأیید':'در حال اجرا',badge=document.createElement('small');badge.className='session-activity';badge.textContent=label;button.append(badge);
+    if(id===session?.id)continue;
+    const row=document.createElement('div'),description=document.createElement('span'),open=document.createElement('button');
+    description.textContent=waiting?'گفت‌وگوی دیگری منتظر تأیید شماست.':'گفت‌وگوی دیگری در حال اجراست.';
+    open.type='button';open.append(icon('chat'),document.createTextNode(waiting?'بررسی تأیید':'مشاهدهٔ اجرا'));
+    open.setAttribute('aria-label',label+'؛ '+button.title);open.title=button.title;open.onclick=()=>button.click();
+    row.append(description,open);panel.append(row);panel.hidden=false;
+  }
+}
 async function refresh(){
   if(refreshing)return;refreshing=true;
   try{
@@ -244,7 +263,7 @@ async function refresh(){
     }
   }catch(error){if(!error.stale)notice(error.message,true);refreshing=false;return;}
   if(!state.configured){refreshing=false;return;}
-  const selected=session,version=generation;let runtimeStatus;
+  const selected=session,version=generation;let runtimeStatus,status={};
   try{
     if(selected){
       if(!promptPending)await loadWorkflow();
@@ -252,12 +271,12 @@ async function refresh(){
       const last=messages.at(-1);planReady=last?.info?.role==="assistant"&&last.info.agent==="paasta-plan"&&!!last.info.time?.completed&&!last.info.error&&last.parts.some(p=>p.type==="text"&&p.text?.trim());
       if(serialized!==lastMessages){renderMessages(messages);lastMessages=serialized;$("save-state").textContent=runtimeConnection?.kind==="cloud"?"تغییرات در فضای کار ابری":"تغییرات روی این دستگاه";}
       $("save").disabled=!messages.length;
-      const status=await api("status");if(version!==generation||session!==selected)return;runtimeStatus=status[selected.id];sending=promptPending||currentWorkflow.automatic?.state==="planning"||(!!runtimeStatus&&runtimeStatus.type!=="idle");
+      status=await api("status");if(version!==generation||session!==selected)return;runtimeStatus=status[selected.id];sending=promptPending||currentWorkflow.automatic?.state==="planning"||(!!runtimeStatus&&runtimeStatus.type!=="idle");
       bench.activity(sending,{status:status[selected.id]});
       workflowView();
       await conversationSync.refresh();
-    }else bench.activity(promptPending);
-    const permissions=await api("permissions");if(version!==generation||session!==selected)return;const currentPermissions=permissions.filter(p=>p.sessionID===session?.id),signature=JSON.stringify(currentPermissions);
+    }else {bench.activity(promptPending);status=await api("status");}
+    const permissions=await api("permissions");if(version!==generation||session!==selected)return;backgroundView(status,permissions);const currentPermissions=permissions.filter(p=>p.sessionID===session?.id),signature=JSON.stringify(currentPermissions);
     if($('permissions').dataset.signature!==signature){$('permissions').dataset.signature=signature;$("permissions").replaceChildren();
     for(const permission of currentPermissions){
       const box=document.createElement("section");box.className="permission";
@@ -289,6 +308,7 @@ $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").qu
 function clearAccountView(){
   integrations.clear();
   $("integrations-open").disabled=true;
+  $("background-activity").hidden=true;$("background-activity").replaceChildren();
   delete $("permissions").dataset.signature;
   $("subscription-summary").hidden=true;clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}
 $("logout").onclick=()=>run($("logout"),async()=>{clearInterval(loginTimer);generation++;await api("logout","POST");clearAccountView();await loadState();});
