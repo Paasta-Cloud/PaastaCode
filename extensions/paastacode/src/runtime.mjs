@@ -29,6 +29,13 @@ export function providerConfig(models,key,origin){
     agent:{build:{prompt:"با کاربر فارسی صحبت کن. کد، مسیرها، شناسه‌ها و دستورها را با زبان و قالب اصلی نگه دار. پیش از تغییر، پروژه را بررسی کن. نتیجهٔ واقعی و محدودیت‌ها را شفاف بگو."},
       "paasta-plan":{mode:"primary",description:"برنامه‌ریزی فقط‌خواندنی",permission:{"*":"deny",read:"allow",glob:"allow",grep:"allow",skill:"allow"},prompt:"با کاربر فارسی صحبت کن. پروژه را فقط با خواندن و جستجو بررسی کن و مهارت مرتبط را بخوان. هیچ فایل، دستور، عامل دیگر یا ابزار MCP اجرا نکن. یک برنامهٔ کوتاه شامل مراحل، فایل‌های مرتبط، معیار پذیرش و تست‌ها بنویس. اگر درخواست صرفاً پرسش است، پاسخ آن را مشخص کن و تغییر فایل پیشنهاد نده. مرحلهٔ بعد به مدل کدنویسی سپرده می‌شود."}}};
 }
+// Catalogue ranking and display names can change independently of engine capabilities.
+export function modelCapabilities(model){
+  if(!model)return null;
+  return JSON.stringify({toolcall:model.toolcall,attachment:model.attachment,
+    input:[...new Set(model.modalities.input)].sort(),output:[...new Set(model.modalities.output)].sort(),
+    context:model.limit.context,outputLimit:model.limit.output});
+}
 export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}
   async start(config,{proxy}={}){
