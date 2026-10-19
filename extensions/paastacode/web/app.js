@@ -233,7 +233,7 @@ function renderMessages(messages){
 }
 function backgroundView(status,permissions){
   const panel=$('background-activity'),buttons=[...$('sessions').querySelectorAll('button[data-session]')];
-  const signature=JSON.stringify([generation,mode,session?.id,buttons.map(b=>[b.dataset.session,b.title,status[b.dataset.session]?.type,permissions.some(p=>p.sessionID===b.dataset.session)])]);
+  const signature=JSON.stringify([generation,listGeneration,mode,session?.id,buttons.map(b=>[b.dataset.session,b.title,status[b.dataset.session]?.type,permissions.some(p=>p.sessionID===b.dataset.session)])]);
   if(panel.dataset.signature===signature)return;panel.dataset.signature=signature;
   panel.replaceChildren();panel.hidden=true;
   if(mode!=='local')return;
