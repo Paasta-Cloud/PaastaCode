@@ -20,6 +20,9 @@ const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
 try{
   await page.goto(app.launchUrl);await page.locator('[data-session="ses_new"]').click();
   await page.locator('#background-activity button').waitFor();assert.equal(replies,0);
+  await page.locator('#background-activity button').focus();
+  await page.waitForTimeout(2200);
+  assert(await page.locator('#background-activity button').evaluate(b=>document.activeElement===b),'Polling preserves keyboard focus');
   assert.match(await page.locator('[data-session="ses_waiting"]').innerText(),/منتظر تأیید/);
   assert.match(await page.locator('#thread-state').innerText(),/آماده/);
   await mkdir('.artifacts',{recursive:true});
