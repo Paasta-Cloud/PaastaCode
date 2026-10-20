@@ -1,4 +1,4 @@
-import {modelOptions} from "./model-policy.js";
+import {modelOptions,prioritizeDomesticModels} from "./model-policy.js";
 import {enhanceSelects,promptInput,labelDialog,icon} from "./components.js";
 import {deploymentUI} from "./deployment.js";
 import {saveDraft,takeDraft} from './drafts.js';
@@ -159,10 +159,11 @@ async function refreshQuota(){
 setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
   state=await api("state");
+  state.models=prioritizeDomesticModels(state.models||[]);
   Object.assign(state,modelOptions(state.models||[]));
   $("integrations-open").disabled=!state.configured||!state.features?.integrations;
   $("integrations-open").title=state.configured&&!state.features?.integrations?'پس از پایان کار، اجرای پروژه را به نسخهٔ جدید پاستاکد ارتقا دهید.':'';
-  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');Object.assign(state,modelOptions(state.models||[]));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
+  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');state.models=prioritizeDomesticModels(state.models||[]);Object.assign(state,modelOptions(state.models||[]));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
   void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
@@ -275,6 +276,7 @@ async function refresh(){
   try{
     if((state.features?.independentRuntime||state.features?.workspaceAccess)&&Date.now()>=nextAccountPoll){
       nextAccountPoll=Date.now()+5000;const next=await api("state");
+      next.models=prioritizeDomesticModels(next.models||[]);
       const identity=value=>JSON.stringify([value.connected,value.configured,value.account?.id,value.account?.tenantId]);
       if(identity(next)!==identity(state)){clearAccountView();await loadState();refreshing=false;return;}
       const billing=value=>JSON.stringify([value.billingStatus?.active,value.billingStatus?.mode,value.billingStatus?.canConnectWithoutLimit,value.billingStatus?.plan,value.billingStatus?.startsAt,value.billingStatus?.endsAt,value.billingStatus?.models]);

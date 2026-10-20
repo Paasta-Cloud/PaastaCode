@@ -3,7 +3,17 @@
 const deepseek = "paasta/deepseek-v4-flash";
 const qwen = "paasta/qwen3.8-27b";
 const gemma = "paasta/gemma-4-31b";
-const domestic = new Set([deepseek, qwen, gemma, "paasta/glm-5.3"]);
+export const domesticModelIds = [deepseek, qwen, gemma, "paasta/glm-5.3"];
+const domestic = new Set(domesticModelIds);
+export const domesticModelPriority = model => domestic.has(typeof model === "string" ? model : model.id) ? 0 : 1;
+export const codingModelLabel = model => (model.name || model.id) + (domesticModelPriority(model) === 0 && !String(model.name || "").includes("میزبانی ایران") ? " · 🇮🇷 میزبانی ایران" : "");
+// Hosted pages can be newer than a paid workspace's pinned runtime.
+export function prioritizeDomesticModels(models) {
+  return models.map(model => ({...model, name: codingModelLabel(model),
+    hostingCountry: domesticModelPriority(model) === 0 ? "IR" : undefined,
+    paastacodePreferred: domesticModelPriority(model) === 0 || !!model.paastacodePreferred}))
+    .sort((a, b) => domesticModelPriority(a) - domesticModelPriority(b));
+}
 const price = model => Number(model.input_toman_per_million) + Number(model.output_toman_per_million);
 export const paidCodingModel = model => Array.isArray(model.supported_parameters) && model.supported_parameters.includes("tools")
   && ![true, "true"].includes(model.customer_free) && model.is_free !== true
