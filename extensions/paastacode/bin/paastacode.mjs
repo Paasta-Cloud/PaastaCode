@@ -7,7 +7,7 @@ import {createInterface} from "node:readline/promises";
 import {PaastaAccount,billingUrl} from "../src/account.mjs";
 import {connectWorkspace,stopWorkspace,refreshAccounts} from "../src/workspace-service.mjs";
 import {engineCommand} from "../src/runtime.mjs";
-import {codingModels} from "../src/models.mjs";
+import {codingModels,modelOptions} from "../src/models.mjs";
 import {PaastaDeployment} from "../src/deployment.mjs";
 import {parseSkillMarkdown} from '../src/integrations.mjs';
 import {checkUpdate,downloadUpdate,installPortable,portableTarget,currentPackage} from "../src/updates.mjs";
@@ -67,9 +67,13 @@ async function main(){
     if(paths.length&&!(await api("state")).features?.promptAttachments)throw new Error("برای پیوست فایل، اجرای پاستاکد این پروژه را به‌روز کنید.");
     let attachmentBytes=0;
     for(const path of paths){const info=await stat(path);attachmentBytes+=info.size;if(!info.isFile()||info.size>4*1024*1024||attachmentBytes>6*1024*1024)throw new Error("هر فایل حداکثر ۴ مگابایت و مجموع پیوست‌ها حداکثر ۶ مگابایت است.");attachments.push({name:basename(path),data:(await readFile(path)).toString("base64")});}
-    if(!value("model")||(!value("text")&&!attachments.length&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
+    const presetId=value("preset");
+    if(presetId&&["model","execution-model","phase"].some(valueName=>value(valueName))||presetId&&["--auto","--restart","--execute-plan"].some(flag=>args.includes(flag)))throw new Error("ترکیب پیشنهادی را به‌تنهایی انتخاب کنید؛ با تنظیم دستی مدل یا ادامهٔ اجرا ترکیب نمی‌شود.");
+    const preset=presetId?modelOptions((await api("state")).models).modelPresets.find(p=>p.id===presetId):null;
+    if(presetId&&!preset)throw new Error("این ترکیب اکنون در دسترس نیست؛ paastacode models --presets را بررسی کنید.");
+    if(!preset&&!value("model")||(!value("text")&&!attachments.length&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
     const id=value("session")||(await api("sessions",{})).id;
-    const result=await api("prompt",{id,text:value("text")||(attachments.length?"پیوست‌ها را بررسی کن.":"ادامهٔ درخواست"),attachments,model:value("model"),phase:args.includes("--auto")?"plan":value("phase")||"build",executionModel:value("execution-model"),autoExecute:args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
+    const result=await api("prompt",{id,text:value("text")||(attachments.length?"پیوست‌ها را بررسی کن.":"ادامهٔ درخواست"),attachments,model:preset?(preset.phase==="auto"?preset.planModel:preset.buildModel):value("model"),phase:preset?(preset.phase==="auto"?"plan":"build"):args.includes("--auto")?"plan":value("phase")||"build",executionModel:preset?.phase==="auto"?preset.buildModel:value("execution-model"),autoExecute:preset?preset.phase==="auto":args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
     console.log("درخواست پذیرفته شد: "+id+" · "+result.workflow.phase+"\nبرای مشاهدهٔ خروجی: paastacode cli یا paastacode web");return;
   }
   if(command==="login"){
@@ -90,6 +94,7 @@ async function main(){
   }
   if(command==="models"){
     const context=await account.context();
+    if(args.includes("--presets")){for(const p of modelOptions(context.models).modelPresets)console.log(p.id+" · "+p.title+"\n"+p.planModel+" → "+p.buildModel+"\n"+p.description+"\npaastacode ask --preset="+p.id+' --text="درخواست شما"');return;}
     for(const model of codingModels(context.models))console.log(model.id+" · "+model.name+" · "+Number(model.input_toman_per_million).toLocaleString("fa-IR")+" / "+Number(model.output_toman_per_million).toLocaleString("fa-IR")+" تومان برای هر میلیون توکن ورودی / خروجی");return;
   }
   if(command==="deploy-login"){

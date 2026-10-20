@@ -1,3 +1,4 @@
+import {modelOptions} from "./model-policy.js";
 import {enhanceSelects,promptInput,labelDialog,icon} from "./components.js";
 import {deploymentUI} from "./deployment.js";
 import {saveDraft,takeDraft} from './drafts.js';
@@ -98,9 +99,9 @@ async function loadWorkflow(){
   currentWorkflow=value;workflowSession=id;$("workflow-phase").value=state.features?.automaticWorkflow&&(value.automatic||state.workflowModels&&!value.planModel&&!value.buildModel)?"auto":value.phase;
   const selected=$("workflow-phase").value==="auto"?value.planModel:value.phase==="plan"?value.planModel:value.buildModel;
   if(state.models?.some(m=>m.id===selected))$("model").value=selected;
-  else if(selected){$("model").value="";notice("مدل قبلی دیگر در پاستاکد قابل استفاده نیست. برای ادامه، یک مدل پولی انتخاب کنید؛ قیمت آن کنار ورودی آمده است.");}
+  else if(selected){$("model").value="";$("model").dataset.unavailable=selected;notice("مدل قبلی دیگر در پاستاکد قابل استفاده نیست. برای ادامه، یک مدل پولی انتخاب کنید؛ قیمت آن کنار ورودی آمده است.");}
   if(state.models?.some(m=>m.id===value.buildModel))$("execution-model").value=value.buildModel;
-  else if(value.buildModel&&$("workflow-phase").value==="auto"){$("execution-model").value="";notice("مدل اجرای قبلی دیگر در دسترس نیست. مدل اجرا و قیمت آن را در تنظیمات مدل‌ها بررسی کنید.");}
+  else if(value.buildModel&&$("workflow-phase").value==="auto"){$("execution-model").value="";$("execution-model").dataset.unavailable=value.buildModel;notice("مدل اجرای قبلی دیگر در دسترس نیست. مدل اجرا و قیمت آن را در تنظیمات مدل‌ها بررسی کنید.");}
   price();workflowView();
 }
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
@@ -128,7 +129,22 @@ async function api(path,method="GET",body){
   if(result.accountChanged){clearAccountView();await loadState();}if(!response.ok)throw new Error(result.error||"عملیات ناموفق بود.");return result;
 }
 async function run(button,work){button.disabled=true;try{await work();}catch(error){if(!error.stale)notice(error.message,true);}finally{button.disabled=button.id==="send"?sending:button.id==="devices-open"?(!state.connected||state.features?.deviceManagement!==true):false;}}
+function presetView(){
+  const phase=$("workflow-phase").value,preset=state.modelPresets?.find(p=>p.phase===phase&&(phase==="build"?p.buildModel===$("model").value:p.planModel===$("model").value&&p.buildModel===$("execution-model").value));
+  $("model-preset").value=preset?.id||"";$("model-preset").disabled=sending||promptPending;
+  $("preset-description").textContent=preset?.description||"مدل‌ها را خودتان انتخاب کنید؛ انتخاب ترکیب، درخواست تازه‌ای ارسال نمی‌کند.";
+  const ids=phase==="auto"?[$("model").value,$("execution-model").value]:[$("model").value];
+  $("model-cost-warning").hidden=!ids.some(id=>state.costWarnings?.[id]);
+}
+$("model-preset").onchange=()=>{
+  if(sending||promptPending)return;
+  const preset=state.modelPresets?.find(p=>p.id===$("model-preset").value);if(!preset)return;
+  $("workflow-phase").value=preset.phase;$("model").value=preset.phase==="auto"?preset.planModel:preset.buildModel;$("execution-model").value=preset.buildModel;
+  delete $("model").dataset.unavailable;delete $("execution-model").dataset.unavailable;workflowView();
+};
+for(const id of ["model","execution-model"])$(id).addEventListener("change",()=>{delete $(id).dataset.unavailable;presetView();});
 function price(){
+  presetView();
   const automatic=$("workflow-phase").value==="auto",active=sending?(currentWorkflow.phase==="plan"?currentWorkflow.planModel:currentWorkflow.buildModel):null;
   const m=state.models?.find(model=>model.id===(active||$("model").value)),executor=state.models?.find(model=>model.id===$("execution-model").value);
   $("price").textContent=m?(active?"مدل فعال: "+(m.name||m.id)+" · ":automatic?"برنامه‌ریزی: ":"")+modelCost(m)+(automatic&&!active&&executor?" · اجرا با "+(executor.name||executor.id)+": "+modelCost(executor):""):"";
@@ -143,9 +159,10 @@ async function refreshQuota(){
 setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
   state=await api("state");
+  Object.assign(state,modelOptions(state.models||[]));
   $("integrations-open").disabled=!state.configured||!state.features?.integrations;
   $("integrations-open").title=state.configured&&!state.features?.integrations?'پس از پایان کار، اجرای پروژه را به نسخهٔ جدید پاستاکد ارتقا دهید.':'';
-  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
+  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');Object.assign(state,modelOptions(state.models||[]));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
   void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
@@ -165,13 +182,16 @@ async function loadState(){
   $("onboarding").hidden=state.configured;$("conversation").hidden=!state.configured;$("composer").hidden=!state.configured;
   document.querySelector(".thread-heading").hidden=!state.configured;
   $("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
-  if(state.models?.length){
-    const previous=$("model").value;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
-    $("model").value=previous&&state.models.some(m=>m.id===previous)?previous:state.workflowModels?.planModel||state.models[0].id;price();
-    const execution=$("execution-model").value;
+  if(Array.isArray(state.models)){
+    const previous=$("model").value||$("model").dataset.unavailable;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
+    $("model").value=previous||state.workflowModels?.planModel||state.defaultModel||"";price();
+    if(previous&&!state.models.some(m=>m.id===previous))$("model").dataset.unavailable=previous;
+    const execution=$("execution-model").value||$("execution-model").dataset.unavailable;
     const models=[...state.models].sort((a,b)=>Number(b.hostingCountry==='IR')-Number(a.hostingCountry==='IR')||(Number(a.input_toman_per_million)+Number(a.output_toman_per_million))-(Number(b.input_toman_per_million)+Number(b.output_toman_per_million)));
     $("execution-model").replaceChildren(...models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=model.name||model.id;return option;}));
-    $("execution-model").value=models.some(m=>m.id===execution)?execution:state.workflowModels?.buildModel||models[0].id;workflowView();
+    $("execution-model").value=execution||state.workflowModels?.buildModel||state.defaultModel||"";
+    if(execution&&!models.some(m=>m.id===execution))$("execution-model").dataset.unavailable=execution;
+    $("model-preset").replaceChildren(...[{id:"",title:"انتخاب دستی"},...state.modelPresets].map(p=>{const option=document.createElement("option");option.value=p.id;option.textContent=p.title;return option;}));workflowView();
   }
   if(state.error)notice(state.error,true);
   if(state.configured){await sessions();if(state.features?.git)git.refresh().catch(()=>{});}
@@ -258,7 +278,7 @@ async function refresh(){
       const identity=value=>JSON.stringify([value.connected,value.configured,value.account?.id,value.account?.tenantId]);
       if(identity(next)!==identity(state)){clearAccountView();await loadState();refreshing=false;return;}
       const billing=value=>JSON.stringify([value.billingStatus?.active,value.billingStatus?.mode,value.billingStatus?.canConnectWithoutLimit,value.billingStatus?.plan,value.billingStatus?.startsAt,value.billingStatus?.endsAt,value.billingStatus?.models]);
-      if(billing(next)!==billing(state)){await loadState();refreshing=false;return;}
+      if(billing(next)!==billing(state)||JSON.stringify(next.models)!==JSON.stringify(state.models)){await loadState();refreshing=false;return;}
       state.accountRevision=next.accountRevision;state.accessMode=next.accessMode;accessView(state.accessMode);
     }
   }catch(error){if(!error.stale)notice(error.message,true);refreshing=false;return;}
@@ -306,6 +326,7 @@ $("login").onclick=()=>{const approval=window.open("about:blank","_blank");if(ap
 $('subscription-continue').onclick=()=>run($('subscription-continue'),async()=>{await api('connect','POST',{});await loadState();});
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
 function clearAccountView(){
+  for(const id of ["model","execution-model"])delete $(id).dataset.unavailable;
   integrations.clear();
   $("integrations-open").disabled=true;
   $("background-activity").hidden=true;$("background-activity").replaceChildren();
@@ -338,7 +359,7 @@ $("stop").onclick=()=>run($("stop"),async()=>{await api("abort","POST",{id:sessi
 $("save").onclick=()=>$("save-dialog").showModal();
 $("save-dialog").addEventListener("close",()=>{if($("save-dialog").returnValue==="save")run($("save"),async()=>{await api("save","POST",{id:session.id});$("save-state").textContent="در حساب ذخیره شد";notice("گفتگو در حساب پاستا ذخیره و دوباره خوانده شد.");});});
 $("model").onchange=()=>{price();workflowView();};
-$("workflow-phase").onchange=()=>{const selected=$("workflow-phase").value==="plan"?currentWorkflow.planModel:currentWorkflow.buildModel;if(state.models?.some(m=>m.id===selected))$("model").value=selected;price();workflowView();};
+$("workflow-phase").onchange=()=>{const selected=$("workflow-phase").value!=="build"?currentWorkflow.planModel:currentWorkflow.buildModel;if(state.models?.some(m=>m.id===selected))$("model").value=selected;price();workflowView();};
 $("execution-model").onchange=workflowView;
 $("model-restart").onclick=()=>submitPrompt({restart:true});
 $("workflow-resume").onclick=()=>submitPrompt({restart:true});
