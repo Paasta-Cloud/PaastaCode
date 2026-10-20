@@ -17,9 +17,21 @@ const runtime={url:null,async start(){this.url='http://127.0.0.1:1';},async stop
 const app=await startServer({account,runtime}),browser=await chromium.launch({headless:true,channel:process.platform==='win32'?'msedge':undefined});
 try{
   const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];
-  page.on('pageerror',error=>errors.push(error.message));await page.goto(app.launchUrl);
+  page.on('pageerror',error=>errors.push(error.message));
+  // Existing cloud runtimes return newly added Qwen without hosting metadata.
+  let stateReads=0;
+  await page.route('**/api/state',async route=>{stateReads++;const response=await route.fetch(),body=await response.json();const qwen=body.models.find(m=>m.id==='paasta/qwen3.8-27b');if(qwen){body.models=body.models.filter(m=>m!==qwen);body.models.push({...qwen,name:'Paasta Qwen 3.8 27B',hostingCountry:undefined,paastacodePreferred:false});}await route.fulfill({response,json:body});});
+  await page.goto(app.launchUrl);
   await page.waitForFunction(()=>document.querySelector('#model').value==='paasta/qwen3.8-27b');
   assert.equal(await page.locator('#execution-model').inputValue(),'paasta/deepseek-v4-flash');
+  for(const selector of ['#model','#execution-model']){
+    const options=await page.locator(selector+' option').evaluateAll(nodes=>nodes.map(n=>({id:n.value,label:n.textContent})));
+    assert(options.findIndex(m=>m.id==='paasta/qwen3.8-27b')<options.findIndex(m=>m.id==='anthropic/claude-opus'),'Qwen precedes external models even on older cloud runtimes');
+    assert(options.find(m=>m.id==='paasta/qwen3.8-27b').label.includes('🇮🇷 میزبانی ایران'));
+    assert(!options.find(m=>m.id==='anthropic/claude-opus').label.includes('میزبانی ایران'));
+  }
+  const initialStateReads=stateReads;await page.waitForTimeout(11000);
+  assert(stateReads-initialStateReads<=3,'display normalization must not cause repeated catalogue reloads');
   await page.locator('#model-settings summary').click();
   assert.equal(await page.locator('#model-preset').inputValue(),'iran-balanced');
   await page.locator('#model-preset').selectOption('iran-direct');
