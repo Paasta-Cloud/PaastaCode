@@ -99,9 +99,9 @@ async function loadWorkflow(){
   currentWorkflow=value;workflowSession=id;$("workflow-phase").value=state.features?.automaticWorkflow&&(value.automatic||state.workflowModels&&!value.planModel&&!value.buildModel)?"auto":value.phase;
   const selected=$("workflow-phase").value==="auto"?value.planModel:value.phase==="plan"?value.planModel:value.buildModel;
   if(state.models?.some(m=>m.id===selected))$("model").value=selected;
-  else if(selected){$("model").value="";notice("مدل قبلی دیگر در پاستاکد قابل استفاده نیست. برای ادامه، یک مدل پولی انتخاب کنید؛ قیمت آن کنار ورودی آمده است.");}
+  else if(selected){$("model").value="";$("model").dataset.unavailable=selected;notice("مدل قبلی دیگر در پاستاکد قابل استفاده نیست. برای ادامه، یک مدل پولی انتخاب کنید؛ قیمت آن کنار ورودی آمده است.");}
   if(state.models?.some(m=>m.id===value.buildModel))$("execution-model").value=value.buildModel;
-  else if(value.buildModel&&$("workflow-phase").value==="auto"){$("execution-model").value="";notice("مدل اجرای قبلی دیگر در دسترس نیست. مدل اجرا و قیمت آن را در تنظیمات مدل‌ها بررسی کنید.");}
+  else if(value.buildModel&&$("workflow-phase").value==="auto"){$("execution-model").value="";$("execution-model").dataset.unavailable=value.buildModel;notice("مدل اجرای قبلی دیگر در دسترس نیست. مدل اجرا و قیمت آن را در تنظیمات مدل‌ها بررسی کنید.");}
   price();workflowView();
 }
 const deployment=deploymentUI({api,run,notice,getState:()=>state});
@@ -182,7 +182,7 @@ async function loadState(){
   $("onboarding").hidden=state.configured;$("conversation").hidden=!state.configured;$("composer").hidden=!state.configured;
   document.querySelector(".thread-heading").hidden=!state.configured;
   $("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
-  if(state.models?.length){
+  if(Array.isArray(state.models)){
     const previous=$("model").value||$("model").dataset.unavailable;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
     $("model").value=previous||state.workflowModels?.planModel||state.defaultModel||"";price();
     if(previous&&!state.models.some(m=>m.id===previous))$("model").dataset.unavailable=previous;

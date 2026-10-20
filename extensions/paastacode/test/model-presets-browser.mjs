@@ -48,6 +48,13 @@ try{
   await page.waitForFunction(()=>document.querySelector('#model').value==='');
   await page.waitForTimeout(6000);
   assert.equal(await page.locator('#model').inputValue(),'','missing explicit model stays unselected across subsequent polls');
+  await page.reload();await page.locator('[data-session="ses_economy"]').click();
+  await page.waitForFunction(()=>document.querySelector('#model').value==='');
+  await page.waitForTimeout(6000);
+  assert.equal(await page.locator('#model').inputValue(),'','reopening a saved missing model cannot silently select a replacement');
+  catalogue=[];
+  await page.waitForFunction(()=>document.querySelector('#model').options.length===0);
+  assert.equal(await page.locator('#model').inputValue(),'','empty catalogue removes stale choices');
   assert.equal(prompts.length,1,'refresh cannot dispatch a replacement model');
   assert.deepEqual(errors,[]);
   console.log('Economy presets: shared real broker, domestic defaults, explicit premium hint, direct dispatch, persisted choice and desktop/mobile passed.');
