@@ -6,7 +6,7 @@ import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {PaastaAccount,billingUrl,stateHome,readPrivate,writePrivate} from "./account.mjs";
 import {CodeRuntime,providerConfig,modelCapabilities,workspaceKey,normalizedPath,paastaMcpConfig} from "./runtime.mjs";
-import {codingModels,workflowModels} from "./models.mjs";
+import {codingModels,modelOptions} from "./models.mjs";
 import {PaastaDeployment} from "./deployment.mjs";
 import {ConversationSync} from "./conversation-sync.mjs";
 import {accessModes,sessionPermissions} from "./access.mjs";
@@ -20,7 +20,7 @@ import {WorkspaceIntegrations,integrationName,mcpConfig} from "./integrations.mj
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"],["/fonts/Geist.woff2","fonts/Geist.woff2"]]);
 const mime={".webmanifest":"application/manifest+json; charset=utf-8",".png":"image/png",".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
-assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
+assets.set('/model-policy.js','model-policy.js');assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
 for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
 export function validCapability(value,secret){
@@ -235,7 +235,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials)try{context=await account.context();}catch(caught){context=null;error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),workflowModels:workflowModels(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),...modelOptions(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(!cloud&&url.pathname.startsWith('/api/remote/')){
       const result=await relayCloud({account,url,method:request.method,headers:request.headers,body:request.method==='GET'?undefined:await body(request,url.pathname.endsWith('/prompt')?10*1024*1024:1_100_000)});

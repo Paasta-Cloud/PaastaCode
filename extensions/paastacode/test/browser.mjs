@@ -57,7 +57,7 @@ try{
   await page.locator("#login").click();await page.locator("#budget").waitFor({state:"visible",timeout:10000});
   await page.locator("#budget-form button").click();await page.locator("#composer").waitFor({state:"visible"});
   assert(connected);
-  assert.equal(await page.locator("#model").inputValue(),"test/kimi-k2.7-code");
+  assert.equal(await page.locator("#model").inputValue(),"synthetic","A named premium model is no longer the automatic default");
   await page.locator("#model").selectOption("synthetic");
   failCreate=true;await page.locator("#prompt").fill("درخواست حفظ‌شده");await page.locator("#send").click();
   await page.getByText("خطای آزمایشی ساخت گفتگو",{exact:true}).waitFor();

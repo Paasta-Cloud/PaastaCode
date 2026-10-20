@@ -6,7 +6,7 @@ import {join,resolve,dirname} from "node:path";
 import {mkdir,realpath} from "node:fs/promises";
 import {randomBytes,createHash} from "node:crypto";
 import {stateHome} from "./account.mjs";
-import {codingModels} from "./models.mjs";
+import {codingModels,modelOptions} from "./models.mjs";
 
 import {startOutboundProxy} from './outbound-proxy.mjs';
 
@@ -21,7 +21,8 @@ export function engineCommand(args,options={}){
 export function providerConfig(models,key,origin){
   const eligible=codingModels(models);
   if(!eligible.length)throw new Error("مدل مناسب کدنویسی در کاتالوگ فعال پاستا پیدا نشد.");
-  return {enabled_providers:["paasta"],model:"paasta/"+eligible[0].id,small_model:"paasta/"+eligible[0].id,
+  const defaultModel=modelOptions(eligible).defaultModel;
+  return {enabled_providers:["paasta"],model:"paasta/"+defaultModel,small_model:"paasta/"+defaultModel,
     provider:{paasta:{npm:"@ai-sdk/openai-compatible",name:"پاستا",options:{baseURL:origin+"/api/ai/v1",apiKey:key},
       models:Object.fromEntries(eligible.map(m=>[m.id,{name:m.name||m.id,toolcall:true,attachment:m.input_modalities?.some(v=>v==="image"||v==="file")||false,modalities:{input:["text",...(m.input_modalities||[]).filter(v=>["image","pdf"].includes(v)||v==="file").map(v=>v==="file"?"pdf":v)],output:["text"]},
         limit:{context:Number(m.context_length)||32000,output:Number(m.max_output_tokens)||4096}}]))}},
