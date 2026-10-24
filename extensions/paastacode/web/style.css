@@ -120,3 +120,34 @@ html[data-mobile-app=true] .hosted-foot{display:none}
 .cloud-project-create input{font:inherit;color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:10px 12px;min-height:44px}.cloud-project-create input::placeholder{color:var(--muted)}.cloud-project-create input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}.cloud-project-dialog header button{display:inline-flex;align-items:center;gap:8px}.cloud-project-dialog footer{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-top:24px}.cloud-project-dialog .cloud-project-option:hover{background:var(--hover)}
 
 .background-activity{margin:8px 24px;padding:12px 16px;border:1px solid var(--line);border-radius:12px;background:var(--soft);font-size:12px}.background-activity>div{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}.background-activity button{display:inline-flex;align-items:center;gap:6px;flex-shrink:0}.session-activity{color:var(--ink)!important}@media(max-width:640px){.background-activity{margin:8px 12px}}
+
+/* Task navigation and the observed result of the last execution. */
+.task-filters{display:flex;gap:4px;padding:0 4px 12px;flex-shrink:0}
+.task-filters button{flex:1;white-space:nowrap;display:flex;align-items:center;justify-content:center;gap:5px;padding:6px 4px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:11px}
+.task-filters button[aria-pressed=true]{background:var(--selected);color:var(--ink);font-weight:650}
+.task-filters button:hover{background:var(--hover)}
+.task-filters span{font-size:10px;font-variant-numeric:tabular-nums}
+.sessions>button[data-status=waiting] .ui-icon{color:var(--blue)}
+.sessions>button[data-status=running] .ui-icon{color:var(--blue)}
+.sessions .session-activity{display:flex;align-items:center;gap:6px}
+.sessions .session-activity:before{content:'';width:5px;height:5px;background:currentColor;border-radius:50%}
+#background-activity{max-height:124px;overflow:auto;flex-shrink:0}
+#background-activity>div>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.run-recap{padding:20px 0 8px;margin-top:24px;border-top:1px solid var(--line);font-size:13px;max-width:100%}
+.recap-heading{display:flex;gap:8px;align-items:center}.recap-heading strong{font-weight:650}
+.recap-symbol{width:8px;height:8px;border:1.5px solid var(--muted);border-radius:2px}
+.run-recap[data-outcome=attention] .recap-symbol{border-color:var(--danger);transform:rotate(45deg)}
+.run-recap p{margin:8px 0;line-height:1.9;overflow-wrap:anywhere}
+#recap-counts{color:var(--muted);font-size:12px}
+.recap-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.recap-actions button{display:inline-flex;align-items:center;gap:8px;font-size:12px;padding:8px 12px}
+@media(max-width:640px){.run-recap{padding-top:16px}.recap-actions{gap:6px}.recap-actions button{padding:8px;font-size:11px}}
+
+.project-home{margin-top:6px}.project-tasks{max-width:720px;margin:0 auto 32px}
+.project-tasks h2{font-size:13px;font-weight:500;color:var(--muted);margin:0 0 12px}
+#project-task-list{border-top:1px solid var(--line)}
+#project-task-list button{display:flex;align-items:center;gap:12px;width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent;padding:14px 0;text-align:start}
+#project-task-list button:hover{background:var(--hover)}
+#project-task-list button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;flex:1}
+#project-task-list small{font-size:11px;color:var(--muted);white-space:nowrap}
+@media(max-width:640px){#project-task-list button{gap:8px}#project-task-list button span{font-size:13px}.project-tasks{margin-bottom:16px}}

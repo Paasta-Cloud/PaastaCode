@@ -56,17 +56,42 @@ const awaitingWorkspace=()=>location.origin===hostedOrigin&&!runtimeConnection;
 if(capability&&location.origin!==hostedOrigin){sessionStorage.setItem("paastacode-cap",capability);history.replaceState(null,"",location.pathname+location.search);}
 let state={},session=null,mode="local",lastMessages="",sending=false,refreshing=false,loginTimer,generation=0,listGeneration=0,promptPending=false,nextAccountPoll=0;
 let cloudSelection=null;
+function projectHome(){
+  const panel=$('project-tasks');panel.hidden=mode!=='local'||!!session||!state.configured;
+  if(panel.hidden)return;
+  const buttons=[...$('sessions').querySelectorAll('button[data-session]')];
+  const ordered=buttons.sort((a,b)=>Number(b.dataset.status==='waiting')-Number(a.dataset.status==='waiting')||Number(b.dataset.status==='running')-Number(a.dataset.status==='running')).slice(0,5);
+  panel.hidden=!ordered.length;
+  const signature=JSON.stringify(ordered.map(button=>[button.dataset.session,button.title,button.dataset.status]));
+  if(panel.dataset.signature===signature)return;panel.dataset.signature=signature;$('project-task-list').replaceChildren();
+  for(const source of ordered){
+    const button=document.createElement('button');button.type='button';button.dataset.task=source.dataset.session;
+    const title=document.createElement('span');title.textContent=source.title;title.dir='auto';
+    const status=document.createElement('small');status.textContent={waiting:'منتظر تأیید',running:'در حال اجرا',idle:'ادامهٔ گفتگو'}[source.dataset.status]||'ادامهٔ گفتگو';
+    button.append(icon('chat'),title,status);button.onclick=()=>[...$('sessions').querySelectorAll('button[data-session]')].find(item=>item.dataset.session===source.dataset.session)?.click();$('project-task-list').append(button);
+  }
+}
 function selectionView(){
   const selected=mode==="cloud"?cloudSelection:session;
   for(const button of $("sessions").querySelectorAll("button[data-session]"))button.setAttribute("aria-current",String(button.dataset.session===selected?.id));
-  $("conversation-title").textContent=selected?.title||"گفتگوی جدید";
+  $("conversation-title").textContent=selected?.title||(mode==="local"?"نمای پروژه":"گفتگوهای حساب");
+  projectHome();
   $("thread-location").textContent=mode==="cloud"?"نسخهٔ ذخیره‌شده در حساب":"گفتگوی پروژه";
 }
 function filterSessions(){
-  const value=$("session-search").value.trim().toLocaleLowerCase();let count=0;
-  for(const button of $("sessions").querySelectorAll("button[data-session]")){button.hidden=!button.dataset.title.includes(value);if(!button.hidden)count++;}
-  $("session-count").textContent=count.toLocaleString("fa-IR");$("session-no-results").hidden=!value||count>0;
+  const value=$("session-search").value.trim().toLocaleLowerCase(),filter=mode==='cloud'?'all':taskFilter;let count=0;
+  const buttons=[...$("sessions").querySelectorAll("button[data-session]")];
+  for(const button of buttons){button.hidden=!button.dataset.title.includes(value)||(filter==='active'?!['running','waiting'].includes(button.dataset.status):filter==='waiting'?button.dataset.status!=='waiting':false);if(!button.hidden)count++;}
+  for(const button of $("task-filters").querySelectorAll('button')){
+    button.setAttribute('aria-pressed',String(button.dataset.filter===filter));
+    const total=buttons.filter(item=>button.dataset.filter==='all'||(button.dataset.filter==='active'?['running','waiting'].includes(item.dataset.status):item.dataset.status==='waiting')).length;
+    button.querySelector('span').textContent=total.toLocaleString('fa-IR');
+  }
+  $("task-filters").hidden=mode==='cloud';
+  $("session-count").textContent=count.toLocaleString("fa-IR");$("session-no-results").hidden=(!value&&filter==='all')||count>0;
 }
+let taskFilter='all';
+for(const button of $("task-filters").querySelectorAll('button'))button.onclick=()=>{taskFilter=button.dataset.filter;filterSessions();};
 $("session-search").oninput=filterSessions;
 let currentWorkflow={phase:"build"},workflowSession=null,planReady=false,importToken=null,importRevision=0;
 const modelCost=m=>`ورودی ${Number(m.input_toman_per_million).toLocaleString("fa-IR")} / خروجی ${Number(m.output_toman_per_million).toLocaleString("fa-IR")} تومان، هر میلیون توکن`;
@@ -182,7 +207,7 @@ async function loadState(){
   if(onboarding){for(const id of ['subscription-buy','subscription-wallet'])$(id).href=state.billingUrl;$('subscription-continue').hidden=!state.billingStatus.canConnectWithoutLimit;$('subscription-buy').hidden=!!state.billingStatus.canConnectWithoutLimit;$('subscription-heading').textContent=state.billingStatus.active?'اشتراک شما آماده است':'با اشتراک کدنویسی شروع کنید';$('subscription-description').textContent=state.billingStatus.mode==='paused'?'مصرف حساب متوقف است. برای ادامه، روش مصرف را در حساب پاستا انتخاب کنید.':'اشتراک و سهمیهٔ شما بین پاستاکد و ابزارهای کدنویسی مشترک است.';}
   $("onboarding").hidden=state.configured;$("conversation").hidden=!state.configured;$("composer").hidden=!state.configured;
   document.querySelector(".thread-heading").hidden=!state.configured;
-  $("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
+  $("project-home").disabled=!state.configured;$("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
   if(Array.isArray(state.models)){
     const previous=$("model").value||$("model").dataset.unavailable;$("model").replaceChildren(...state.models.map(model=>{const option=document.createElement("option");option.value=model.id;option.textContent=(model.name||model.id)+(model.paastacodePreferred?" · پیشنهادی":"");return option;}));
     $("model").value=previous||state.workflowModels?.planModel||state.defaultModel||"";price();
@@ -203,14 +228,14 @@ async function sessions(){
   for(const button of $("sessions").querySelectorAll("button"))button.disabled=true;
   let items;
   try{items=listMode==="cloud"?(await api("cloud")).sessions:awaitingWorkspace()?[]:await api("sessions");if(!Array.isArray(items))throw new Error("فهرست گفتگوها کامل دریافت نشد؛ دوباره تلاش کنید.");}
-  catch(error){if(version===listGeneration)$("sessions").setAttribute("aria-busy","false");throw error;}
+  catch(error){if(version===listGeneration){$("sessions").setAttribute("aria-busy","false");for(const button of $("sessions").querySelectorAll("button"))button.disabled=false;}throw error;}
   if(version!==listGeneration||mode!==listMode)return;
   $("sessions").setAttribute("aria-busy","false");
   $("sessions").replaceChildren();
   selectionView();filterSessions();
   if(!items.length){const text=document.createElement("p");text.className="muted";text.textContent=mode==="cloud"?"هنوز گفتگویی در حساب ذخیره نشده.":"اولین گفتگو را شروع کن.";$("sessions").append(text);return;}
   for(const item of items){
-    const button=document.createElement("button");button.dataset.session=item.id;button.dataset.title=String(item.title||"گفتگوی جدید").toLocaleLowerCase();button.title=item.title||"گفتگوی جدید";
+    const button=document.createElement("button");button.dataset.session=item.id;button.dataset.status='idle';button.dataset.title=String(item.title||"گفتگوی جدید").toLocaleLowerCase();button.title=item.title||"گفتگوی جدید";
     const title=document.createElement("span");title.className="session-title";title.textContent=button.title;
     const marker=document.createElement("span");marker.className="session-marker";marker.setAttribute("aria-hidden","true");marker.textContent="✓";
     button.append(icon("chat"),title,marker);
@@ -259,17 +284,19 @@ function backgroundView(status,permissions){
   panel.replaceChildren();panel.hidden=true;
   if(mode!=='local')return;
   for(const button of buttons){
-    const id=button.dataset.session,waiting=permissions.some(p=>p.sessionID===id),busy=status[id]&&status[id].type!=='idle';
+    const id=button.dataset.session,taskStatus=globalThis.PaastaTasks.status(id,status,permissions),waiting=taskStatus==='waiting',busy=taskStatus==='running';
+    button.dataset.status=taskStatus;
     button.querySelector('.session-activity')?.remove();
     if(!waiting&&!busy)continue;
     const label=waiting?'منتظر تأیید':'در حال اجرا',badge=document.createElement('small');badge.className='session-activity';badge.textContent=label;button.append(badge);
     if(id===session?.id)continue;
     const row=document.createElement('div'),description=document.createElement('span'),open=document.createElement('button');
-    description.textContent=waiting?'گفت‌وگوی دیگری منتظر تأیید شماست.':'گفت‌وگوی دیگری در حال اجراست.';
+    description.textContent=button.title;description.dir='auto';
     open.type='button';open.append(icon('chat'),document.createTextNode(waiting?'بررسی تأیید':'مشاهدهٔ اجرا'));
     open.setAttribute('aria-label',label+'؛ '+button.title);open.title=button.title;open.onclick=()=>button.click();
     row.append(description,open);panel.append(row);panel.hidden=false;
   }
+  filterSessions();projectHome();
 }
 async function refresh(){
   if(refreshing)return;refreshing=true;
@@ -311,7 +338,7 @@ async function refresh(){
       box.append(title,info,actions);$("permissions").append(box);
     }
     }
-    bench.activity(sending,{approval:$("permissions").children.length>0,status:runtimeStatus});
+    bench.activity(sending,{approval:$("permissions").children.length>0,status:runtimeStatus,review:!!state.features?.git});
   }catch(error){if(!error.stale)notice(error.message,true);}finally{refreshing=false;}
 }
 $("login").onclick=()=>{const approval=window.open("about:blank","_blank");if(approval)approval.opener=null;return run($("login"),async()=>{
@@ -395,6 +422,8 @@ async function switchTab(next){
   if(awaitingWorkspace()){$("hosted-hub").hidden=false;$("conversation").hidden=true;document.querySelector(".thread-heading").hidden=true;}
   $("local-tab").setAttribute("aria-pressed",String(next==="local"));$("cloud-tab").setAttribute("aria-pressed",String(next==="cloud"));selectionView();await sessions();
 }
+$("project-home").prepend(icon("folder"));
+$("project-home").onclick=()=>run($("project-home"),async()=>{await switchTab("local");await refresh();drawer(false);$("prompt").focus();});
 $("local-tab").onclick=()=>run($("local-tab"),()=>switchTab("local"));
 $("cloud-tab").onclick=()=>run($("cloud-tab"),()=>switchTab("cloud"));
 let drawerCloser;
