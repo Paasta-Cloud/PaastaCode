@@ -5,8 +5,8 @@ export function workbench(){
   const $=id=>document.getElementById(id),viewport=$("conversation"),messages=$("messages");
   let lastReview=false,following=true,started=0,lastBusy=false,latest=[],blocked=false,lastWidth=viewport.clientWidth,lastHeight=viewport.clientHeight;
   const bottom=()=>viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<80;
-  viewport.addEventListener("scroll",()=>{if(lastWidth!==viewport.clientWidth||lastHeight!==viewport.clientHeight){lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();return;}following=bottom();$("follow-output").hidden=following;},{passive:true});
-  const follow=()=>{following=true;$("follow-output").hidden=true;viewport.scrollTop=viewport.scrollHeight;};
+  viewport.addEventListener("scroll",()=>{if(!latest.length){following=true;$("follow-output").hidden=true;return;}if(lastWidth!==viewport.clientWidth||lastHeight!==viewport.clientHeight){lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();return;}following=bottom();$("follow-output").hidden=following;},{passive:true});
+  const follow=()=>{following=true;$("follow-output").hidden=true;viewport.scrollTop=latest.length?viewport.scrollHeight:0;};
   $("follow-output").onclick=follow;
   $('recap-review').prepend(icon('code'));$('recap-output').prepend(icon('search'));
   $('recap-review').onclick=()=>$('git-open').click();
