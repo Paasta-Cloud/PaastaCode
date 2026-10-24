@@ -23,6 +23,7 @@ const mime={".webmanifest":"application/manifest+json; charset=utf-8",".png":"im
 assets.set('/model-policy.js','model-policy.js');assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
 for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
+assets.set('/task-state.js','task-state.js');
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
 }

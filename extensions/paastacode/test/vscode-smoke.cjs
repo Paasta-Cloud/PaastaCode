@@ -30,6 +30,9 @@ exports.run=async()=>{
     }
     await found.frame.locator("#login").waitFor({state:"visible"});
     assert.equal(await found.frame.locator("html").getAttribute("dir"),"rtl");
+    assert(await found.frame.evaluate(()=>typeof globalThis.PaastaTasks?.recap==="function"),"Installed task helper must load under the actual webview CSP");
+    assert.equal(await found.frame.locator("#tasks-toggle").count(),1);
+    assert.equal(await found.frame.locator("#run-recap").count(),1);
     await found.frame.evaluate(()=>document.fonts.ready);
     assert(await found.frame.evaluate(()=>[...document.fonts].some(face=>face.family==="PaastaPersian"&&face.status==="loaded")),"Installed Persian font must load inside the native editor webview");
     const output=process.env.PAASTACODE_VSCODE_OUTPUT||path.resolve(__dirname,"../.artifacts");

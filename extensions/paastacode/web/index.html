@@ -15,14 +15,16 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
     <button id="rail-close" class="mobile-menu" aria-label="بستن گفتگوها">بستن ×</button>
     <a class="brand wordmark" href="#"><img src="/brand.png" width="30" height="30" alt=""><strong lang="en" dir="ltr">PaastaCode</strong><span>پاستاکد</span></a>
     <button id="new" class="new-session" type="button"><span aria-hidden="true">＋</span> گفتگوی جدید <kbd>Ctrl N</kbd></button>
+    <button id="project-home" class="rail-action project-home" type="button" disabled>نمای پروژه</button>
     <button id="hosted-open" class="rail-action" type="button" hidden>فضاهای کار</button>
     <button id="deploy-open" class="rail-action" type="button" disabled>انتشار روی پاستا</button>
     <button id="import-open" class="rail-action" type="button" hidden>ورود از ابزارهای دیگر</button>
     <div class="rail-tabs" role="group" aria-label="محل گفتگو"><button id="local-tab" aria-pressed="true">این دستگاه</button><button id="cloud-tab" aria-pressed="false">حساب پاستا</button></div>
     <label class="session-search"><span class="sr-only">جست‌وجوی گفتگوها</span><input id="session-search" type="search" placeholder="جست‌وجوی گفتگوها…" autocomplete="off"></label>
-    <div class="session-heading"><span>گفتگوها</span><span id="session-count">۰</span></div>
+    <div class="session-heading"><span>کارهای پروژه</span><span id="session-count">۰</span></div>
+    <div id="task-filters" class="task-filters" role="group" aria-label="فیلتر کارها"><button type="button" data-filter="all" aria-pressed="true">همه <span>۰</span></button><button type="button" data-filter="active" aria-pressed="false">در جریان <span>۰</span></button><button type="button" data-filter="waiting" aria-pressed="false">نیاز به تأیید <span>۰</span></button></div>
     <div id="sessions" class="sessions"><p class="muted">بعد از ورود، گفتگوها اینجا دیده میشن.</p></div>
-    <p id="session-no-results" class="muted" hidden>گفتگویی با این نام پیدا نشد.</p>
+    <p id="session-no-results" class="muted" hidden>کاری با این جست‌وجو و فیلتر پیدا نشد.</p>
     <button id="theme-toggle" class="rail-action theme-toggle" type="button" aria-pressed="false">نمای روشن</button>
     <button id="devices-open" class="rail-action" type="button" disabled>اتصال‌های پاستاکد</button>
     <button id="integrations-open" class="rail-action" type="button" disabled>ابزارها و مهارت‌ها</button>
@@ -67,9 +69,11 @@ FORM: Owner-selected Codex-like convention; existing authorization delegates lay
       <div class="intro-foot"><span>اجرا روی دستگاه؛ پردازش با مدل پاستا</span><span>تغییر فایل و اجرای دستور با تأیید تو</span></div>
     </section>
     <section id="conversation" class="conversation" aria-label="گفتگو" hidden>
-      <div id="empty" class="empty"><span class="intro-label">یک پروژه، یک قدم بعدی</span><h1>چه چیزی بسازیم؟</h1><p>از بررسی پروژه شروع کن یا تغییری را که در ذهن داری توضیح بده.</p><div class="suggestions"><button data-prompt="ساختار این پروژه را بررسی کن و توضیح بده از کجا شروع کنم.">پروژه را بشناس</button><button data-prompt="مسیر اصلی برنامه را بررسی کن و خطاهای احتمالی را با دلیل نشان بده. فعلاً فایلی را تغییر نده.">یک بررسی دقیق</button></div></div>
+      <div id="empty" class="empty"><span class="intro-label">یک پروژه، یک قدم بعدی</span><h1>قدم بعدی پروژه چیست؟</h1><p>یک کار را ادامه بده یا درخواست تازه‌ای بنویس.</p><div class="suggestions"><button data-prompt="ساختار این پروژه را بررسی کن و توضیح بده از کجا شروع کنم.">پروژه را بشناس</button><button data-prompt="مسیر اصلی برنامه را بررسی کن و خطاهای احتمالی را با دلیل نشان بده. فعلاً فایلی را تغییر نده.">یک بررسی دقیق</button></div></div>
+      <section id="project-tasks" class="project-tasks" hidden aria-label="کارهای اخیر پروژه"><h2>ادامهٔ کارها</h2><div id="project-task-list"></div></section>
       <div id="messages" class="messages" aria-live="polite" aria-relevant="additions"></div>
       <div id="permissions" class="permissions"></div>
+      <section id="run-recap" class="run-recap" aria-label="خلاصهٔ اجرا" hidden><div class="recap-heading"><span class="recap-symbol" aria-hidden="true"></span><strong id="recap-title"></strong></div><p id="recap-counts"></p><p id="recap-detail" class="muted"></p><div class="recap-actions"><button id="recap-review" type="button">مرور تغییرات پروژه</button><button id="recap-output" type="button">بررسی خروجی اجرا</button></div></section>
     </section>
     <button id="follow-output" class="follow-output" type="button" hidden>رفتن به آخرین خروجی ↓</button>
     <section id="activity" class="activity" role="status" hidden><span class="activity-indicator" aria-hidden="true"></span><div><strong id="activity-label">در حال کار</strong><span id="activity-detail"></span></div><span id="activity-time"></span></section>

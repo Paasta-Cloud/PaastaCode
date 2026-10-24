@@ -1,11 +1,35 @@
+import './task-state.js';
+import {icon} from './components.js';
 // Keep the reading position and expanded tool reports stable during streaming.
 export function workbench(){
   const $=id=>document.getElementById(id),viewport=$("conversation"),messages=$("messages");
-  let following=true,started=0,lastBusy=false,latest=[],blocked=false,lastWidth=viewport.clientWidth,lastHeight=viewport.clientHeight;
+  let lastReview=false,following=true,started=0,lastBusy=false,latest=[],blocked=false,lastWidth=viewport.clientWidth,lastHeight=viewport.clientHeight;
   const bottom=()=>viewport.scrollHeight-viewport.scrollTop-viewport.clientHeight<80;
   viewport.addEventListener("scroll",()=>{if(lastWidth!==viewport.clientWidth||lastHeight!==viewport.clientHeight){lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();return;}following=bottom();$("follow-output").hidden=following;},{passive:true});
   const follow=()=>{following=true;$("follow-output").hidden=true;viewport.scrollTop=viewport.scrollHeight;};
   $("follow-output").onclick=follow;
+  $('recap-review').prepend(icon('code'));$('recap-output').prepend(icon('search'));
+  $('recap-review').onclick=()=>$('git-open').click();
+  $('recap-output').onclick=()=>{
+    const start=latest.findLastIndex(message=>message.info?.role==='user');
+    const ids=new Set(latest.flatMap((message,index)=>index>start&&message.info?.role==='assistant'?[message.info.id||String(index)]:[]));
+    const articles=[...messages.children].filter(article=>ids.has(article.dataset.message));
+    const target=articles.flatMap(article=>[...article.querySelectorAll('.message-error,.tool[data-status=error]')]).at(-1)||articles.flatMap(article=>[...article.querySelectorAll('.tool')]).at(-1)||articles.at(-1);
+    if(!target)return;following=false;
+    if(target.matches('details'))target.open=true;
+    target.scrollIntoView({block:'center'});const focus=target.querySelector('summary')||target;focus.tabIndex=0;focus.focus({preventScroll:true});
+  };
+  function recap(busy,review){
+    const summary=globalThis.PaastaTasks.recap(latest),panel=$('run-recap');
+    panel.hidden=busy||!summary;
+    if(panel.hidden)return;
+    const signature=JSON.stringify([summary,review]);if(panel.dataset.signature===signature)return;panel.dataset.signature=signature;
+    panel.dataset.outcome=summary.errors||summary.unfinished?'attention':'settled';
+    $('recap-title').textContent=summary.title;
+    $('recap-counts').textContent=[summary.completed.toLocaleString('fa-IR')+' ابزار انجام‌شده',summary.commands.toLocaleString('fa-IR')+' دستور',summary.files.length.toLocaleString('fa-IR')+' فایل ویرایش‌شده با ابزارها',...(summary.errors?[summary.errors.toLocaleString('fa-IR')+' خطا']:[])].join(' · ');
+    $('recap-detail').textContent=summary.detail;$('recap-review').hidden=!review;
+    if(following)follow();
+  }
   new ResizeObserver(()=>{lastWidth=viewport.clientWidth;lastHeight=viewport.clientHeight;if(following)follow();}).observe(viewport);
   const labels={read:"خواندن فایل",glob:"جست‌وجوی فایل‌ها",grep:"جست‌وجو در کد",bash:"اجرای دستور",write:"ساخت فایل",edit:"ویرایش فایل",apply_patch:"اعمال تغییرات",task:"بررسی پروژه",webfetch:"خواندن صفحه",todowrite:"به‌روزرسانی برنامه",todoread:"بررسی برنامه"};
   function inline(parent,text){for(const token of text.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*)/g)){if(token.startsWith("`")&&token.endsWith("`")){const code=document.createElement("code");code.textContent=token.slice(1,-1);parent.append(code);}else if(token.startsWith("**")&&token.endsWith("**")){const strong=document.createElement("strong");strong.textContent=token.slice(2,-2);parent.append(strong);}else parent.append(document.createTextNode(token));}}
@@ -53,7 +77,7 @@ export function workbench(){
     for(const [id,element] of existing)if(!keep.has(id))element.remove();
     if(shouldFollow)follow();else $("follow-output").hidden=false;
   }
-  function activity(busy,{approval=false,status}={}){
+  function activity(busy,{approval=false,status,review=lastReview}={}){
     blocked=approval;if(busy&&!lastBusy)started=Date.now();lastBusy=busy;
     $("activity").hidden=!busy&&!approval;$("activity").classList.toggle("waiting",approval);$("activity").setAttribute("aria-busy",String(busy&&!approval));
     const tool=latest.flatMap(m=>m.parts).findLast(p=>p.type==="tool"&&["running","pending"].includes(p.state?.status));
@@ -62,8 +86,9 @@ export function workbench(){
     $("connection-state").textContent=approval?"نیاز به تأیید":busy?"در حال کار":"آماده";
     $("thread-state").textContent=approval?"نیاز به تأیید":busy?"در حال کار":"آماده";$("thread-state").dataset.busy=String(busy||approval);
     $("stop").hidden=!busy;$("send").disabled=busy;
+    lastReview=review;recap(busy||approval,review);
     if(following&&busy)follow();
   }
   setInterval(()=>{$("activity-time").textContent=lastBusy&&!blocked?Math.floor((Date.now()-started)/1000).toLocaleString("fa-IR")+" ثانیه":"";for(const tool of messages.querySelectorAll('.tool[data-started]')){const seconds=Math.max(0,Math.floor((Date.now()-Number(tool.dataset.started))/1000));tool.querySelector('.tool-status').textContent="در حال اجرا · "+seconds.toLocaleString("fa-IR")+" ثانیه";}},1000);
-  return {render,activity,follow,reset(){latest=[];lastBusy=false;started=0;messages.replaceChildren();activity(false);follow();}};
+  return {render,activity,follow,reset(){lastReview=false;latest=[];lastBusy=false;started=0;messages.replaceChildren();activity(false);follow();}};
 }

@@ -8,7 +8,7 @@ const require=createRequire(import.meta.url);
 test('native webview uses a bounded host bridge, retains account revisions and rejects arbitrary fetch destinations',async()=>{
   let listener;const messages=[],calls=[];
   const vscode={workspace:{isTrusted:true,workspaceFolders:[{}]},Uri:{file:fsPath=>({fsPath}),joinPath:(_,...segments)=>segments.join('/')}};
-  const mockModule={exports:{}};vm.runInNewContext(readFileSync(new URL('../vscode/native-workbench.cjs',import.meta.url),'utf8'),{module:mockModule,require:id=>id==='vscode'?vscode:require(id),URLSearchParams,URL,Buffer});
+  const mockModule={exports:{}};vm.runInNewContext(readFileSync(new URL('../vscode/native-workbench.cjs',import.meta.url),'utf8'),{module:mockModule,require:id=>id==='vscode'?vscode:require(id),URLSearchParams,URL,Buffer,process});
   const api=mockModule.exports;
   for(const path of ['http://localhost:9999/admin','../shutdown','state?url=https://example.test','shutdown','messages?id=../foreign'])assert.equal(api.allowedRoute('GET',path),false);
   assert.equal(api.allowedRoute('POST','prompt'),true);

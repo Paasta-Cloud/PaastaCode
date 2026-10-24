@@ -37,3 +37,23 @@ footer{display:flex;gap:4px;align-items:center;font-size:10px;min-height:28px}fo
 label select{display:block;width:100%;margin-block:5px}button[aria-busy=true] .icon{animation:spin 1s linear infinite}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip:rect(0,0,0,0)}[hidden]{display:none!important}
 @media(prefers-reduced-motion:reduce){#activity.busy:before,button[aria-busy=true] .icon{animation:none}}
+
+.task-toolbar{display:flex;align-items:center;gap:8px;min-height:32px}
+#tasks-toggle{display:flex;align-items:center;gap:6px;background:transparent;border:0;color:var(--vscode-foreground);min-width:0;padding:6px;flex:1;text-align:start}
+#task-current{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+#task-active-count{font-size:11px;color:var(--vscode-descriptionForeground);white-space:nowrap}
+#task-picker{padding:8px 0;border-block:1px solid var(--vscode-widget-border);max-height:40vh;overflow:auto;flex-shrink:0}
+#task-search{width:100%;box-sizing:border-box}#task-filters{display:flex;gap:4px;margin:8px 0}
+#task-filters button{flex:1;padding:5px 3px;font-size:11px;background:transparent;color:var(--vscode-descriptionForeground);border:1px solid transparent}
+#task-filters button[aria-pressed=true]{background:var(--vscode-toolbar-activeBackground);color:var(--vscode-foreground);border-color:var(--vscode-focusBorder)}
+#task-list button{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:8px 6px;border:1px solid transparent;background:transparent;color:var(--vscode-foreground);text-align:start}
+#task-list button:hover{background:var(--vscode-toolbar-hoverBackground)}
+#task-list button[aria-current=true]{background:var(--vscode-toolbar-activeBackground);border-color:var(--vscode-focusBorder)}
+#task-list button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#task-list small{font-size:10px;white-space:nowrap;color:var(--vscode-descriptionForeground)}
+#run-recap{border-top:1px solid var(--vscode-widget-border);padding-top:8px;font-size:12px;flex-shrink:0}
+#run-recap p{font-size:11px;margin:4px 0;color:var(--vscode-descriptionForeground)}
+#recap-review{display:flex;align-items:center;gap:6px;background:transparent;color:var(--vscode-foreground);border:0;padding:6px 0;font-size:12px}
+#run-recap[data-outcome=attention] strong{color:var(--vscode-errorForeground,var(--vscode-foreground))}
+
+#task-search{border:1px solid var(--vscode-widget-border);border-radius:4px;padding:7px 8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit}#task-search::placeholder{color:var(--vscode-input-placeholderForeground)}
