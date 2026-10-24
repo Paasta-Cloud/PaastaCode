@@ -199,3 +199,18 @@ paastacode models --presets
 paastacode ask --preset=iran-balanced --text="ساختار پروژه را بررسی کن"
 paastacode ask --preset=iran-direct --text="این تغییر کوچک را انجام بده"
 ```
+
+## Project knowledge and verification
+
+Open «دانش پروژه» to edit private notes for the current account and project. Notes live outside Git, are limited to 16 KiB and are included in the model context on the next request. They do not interrupt current work or silently overwrite another window's revision. Export Markdown for a separate backup; local notes are not automatically uploaded with conversation backups. Notes on a cloud project persist with that project's workspace storage and can be used through desktop/cloud connections to that project. Do not store credentials. Existing repository AGENTS.md instructions still apply.
+
+Review the last request's observed test/lint/build results, exit codes and output. Unknown exit status or no executed tests never earns a success claim. Project Git review separates working-tree, staged and new-file previews; VS Code uses native Source Control.
+
+```sh
+paastacode knowledge --workspace=PATH
+paastacode knowledge --file=PROJECT.md --workspace=PATH
+paastacode knowledge --export=BACKUP.md --workspace=PATH
+paastacode review --path=src/app.js --session=SESSION_ID --workspace=PATH
+```
+
+Export refuses to replace an existing file. Choose another filename when keeping multiple backups.

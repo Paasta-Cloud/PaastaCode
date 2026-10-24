@@ -72,3 +72,9 @@ Future-period cancellation uses `POST {action:"cancelQuote",id}` then `{action:"
 The hosted hub reads saved conversations through authenticated same-origin `GET /api/paastacode/sessions[?id=UUID]` before a runtime is selected. It sends `X-PaastaCode-Owner: USER:TENANT`; the handler rejects a mismatched expected account before reading data. The code host exposes only GET on this path. Preview and JSON export do not require a workspace; continuing, deleting and other runtime operations still use the selected owned runtime. Empty/non-JSON responses return a recoverable Persian message instead of a JSON parser error.
 
 The broker refreshes the engine model catalogue before prompt submission and automatic plan handoff. Capability changes restart only an idle engine, preserving stored sessions and attachments. A busy peer conversation defers automatic handoff and rejects manual submission with a retryable explanation; an unchanged catalogue does not restart the engine.
+
+### Private project knowledge
+
+`GET /api/knowledge` returns `{content, revision, limit}` for the authenticated current account/project. `POST /api/knowledge` accepts `{content, revision}` and refuses a stale revision, invalid content or more than 16 KiB. Use the current `X-PaastaCode-Account` revision on mutations. Existing capability/origin, tenant/project and account guards apply. No path parameter or cross-project read is accepted. Notes are stored outside the repository and conversation backups; the engine reads them as instructions for the next request.
+
+`GET /api/git/diff?path=...` retains `text` compatibility and adds `worktree`, `staged`, and `untracked`. Secret files, external paths and untracked symlinks cannot be previewed; large/binary files receive an explanatory response. Review never stages or discards a file.

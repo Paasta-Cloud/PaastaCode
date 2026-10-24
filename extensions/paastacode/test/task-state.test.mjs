@@ -32,3 +32,18 @@ test('patch file evidence is deduplicated and malformed metadata is ignored',()=
   const result=recap([assistant([tool('apply_patch',{status:'completed',metadata:{files:[{filePath:'a'},{filePath:'a'},{filePath:'b'}]}}),tool('apply_patch',{status:'completed',metadata:{files:'unstructured'}})])]);
   assert.deepEqual(result.files,['a','b']);assert.equal(result.unfinished,false);
 });
+
+test('verification uses recorded exit codes and never infers success from output or a compound command',()=>{
+  const check=(command,status,exit,output='')=>tool('bash',{status,input:{command},metadata:exit===undefined?{}:{exit},output});
+  const result=recap([user,assistant([
+    check('npm test','completed',0,'passed'),check('npm run build','completed',1,'Build failed'),
+    check('pytest','completed',undefined,'100 passed'),check('go test ./...','running',undefined),
+    check('echo npm test','completed',0),check('npm test; echo ignored','completed',0),
+    check('node --test test/a.mjs','error',undefined,'terminated')
+  ])]);
+  assert.deepEqual(result.checks.map(c=>c.status),['passed','failed','unknown','running','failed']);
+  assert.equal(result.errors,2);assert.equal(result.title,'اجرا نیاز به بررسی دارد');
+  assert.equal(recap([user,assistant([check('npm test','completed',1)]),user,assistant([check('npm test','completed',0)])]).checks.length,1);
+});
+
+test('zero exit without executed tests remains unknown',()=>{assert.equal(recap([user,assistant([tool('bash',{status:'completed',input:{command:'node --test'},metadata:{exit:0},output:'# tests 0'})])]).checks[0].status,'unknown');});

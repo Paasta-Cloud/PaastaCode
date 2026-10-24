@@ -1,4 +1,5 @@
 import './task-state.js';
+import './review-ui.js';
 import {icon} from './components.js';
 // Keep the reading position and expanded tool reports stable during streaming.
 export function workbench(){
@@ -19,6 +20,7 @@ export function workbench(){
     if(target.matches('details'))target.open=true;
     target.scrollIntoView({block:'center'});const focus=target.querySelector('summary')||target;focus.tabIndex=0;focus.focus({preventScroll:true});
   };
+  const checks=document.createElement('section');checks.id='run-checks';$('run-recap').append(checks);
   function recap(busy,review){
     const summary=globalThis.PaastaTasks.recap(latest),panel=$('run-recap');
     panel.hidden=busy||!summary;
@@ -27,6 +29,7 @@ export function workbench(){
     panel.dataset.outcome=summary.errors||summary.unfinished?'attention':'settled';
     $('recap-title').textContent=summary.title;
     $('recap-counts').textContent=[summary.completed.toLocaleString('fa-IR')+' ابزار انجام‌شده',summary.commands.toLocaleString('fa-IR')+' دستور',summary.files.length.toLocaleString('fa-IR')+' فایل ویرایش‌شده با ابزارها',...(summary.errors?[summary.errors.toLocaleString('fa-IR')+' خطا']:[])].join(' · ');
+    globalThis.PaastaReview.checks(checks,summary.checks);
     $('recap-detail').textContent=summary.detail;$('recap-review').hidden=!review;
     if(following)follow();
   }
@@ -61,7 +64,7 @@ export function workbench(){
         else {
           const details=document.createElement("details"),summary=document.createElement("summary"),key=part.callID||part.id||String(partIndex);
           details.dataset.tool=key;details.className="tool";details.open=expanded.has(key);
-          const status=part.state?.status||"completed";details.dataset.status=status;
+          const status=globalThis.PaastaTasks.toolStatus(part);details.dataset.status=status;
           const icon=document.createElement("span");icon.className="tool-indicator";icon.setAttribute("aria-hidden","true");icon.textContent=status==="completed"?"✓":status==="error"?"!":"";
           const name=document.createElement("span");name.className="tool-title";name.textContent=part.type==="reasoning"?"روند بررسی":labels[part.tool]||part.tool;
           const target=document.createElement("bdi");target.className="tool-target";target.dir="ltr";const path=part.state?.input?.filePath||part.state?.input?.path;target.textContent=path?String(path).replaceAll("\\","/").split("/").slice(-3).join("/"):part.state?.input?.command||part.state?.title||"";target.title=path||target.textContent;
