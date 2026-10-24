@@ -75,9 +75,12 @@ export class CodeRuntime{
   async stop(){
     const child=this.process,proxy=this.proxy;this.process=null;this.url=null;this.proxy=null;
     await proxy?.close();
-    if(child&&child.exitCode===null)await new Promise(resolveStop=>{
-      const kill=signal=>{try{if(process.platform!=="win32"&&child.pid)process.kill(-child.pid,signal);else child.kill(signal);}catch(error){if(error.code!=="ESRCH")throw error;}};
-      const timer=setTimeout(()=>{kill("SIGKILL");resolveStop();},3000);child.once("exit",()=>{clearTimeout(timer);if(process.platform!=="win32")kill("SIGKILL");resolveStop();});kill("SIGTERM");
+    if(child&&child.exitCode===null)await new Promise((resolveStop,rejectStop)=>{
+      const kill=signal=>{try{if(process.platform!=="win32"&&child.pid)process.kill(-child.pid,signal);else child.kill(signal);}catch(error){if(error.code!=="ESRCH"&&!(error.code==="EPERM"&&(child.exitCode!==null||child.signalCode!==null)))throw error;}};
+      const done=error=>{clearTimeout(timer);child.off("exit",exited);error?rejectStop(error):resolveStop();};
+      const exited=()=>{try{if(process.platform!=="win32")kill("SIGKILL");done();}catch(error){done(error);}};
+      const timer=setTimeout(()=>{try{kill("SIGKILL");done();}catch(error){done(error);}},3000);
+      child.once("exit",exited);try{kill("SIGTERM");}catch(error){done(error);}
     });
   }
 }
