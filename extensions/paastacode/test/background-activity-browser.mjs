@@ -6,7 +6,7 @@ process.env.PAASTACODE_HOME=resolve('.artifacts/background-activity-'+process.pi
 const {startServer}=await import('../src/server.mjs');
 const sessions=[{id:'ses_waiting',title:'گفت‌وگوی منتظر تأیید',directory:process.cwd()},{id:'ses_new',title:'گفت‌وگوی جدید',directory:process.cwd()}];
 let waiting=true,replies=0,messages=[];
-const account={origin:'https://synthetic.test',credentials:{token:'synthetic',aiKey:'synthetic'},async context(){return {account:{id:'user',tenantId:'tenant',name:'حساب آزمایشی'},models:[{id:'synthetic',supported_parameters:['tools'],input_toman_per_million:10,output_toman_per_million:30}]};}};
+const account={origin:'https://synthetic.test',credentials:{token:'synthetic',aiKey:'synthetic'},async request(){return {active:true,plan:'حرفه‌ای',endsAt:'2026-12-01',quotas:{week:{remainingPercent:80,resetAt:'2026-11-01'}}};},async context(){return {features:{codingUsage:true},account:{id:'user',tenantId:'tenant',name:'حساب آزمایشی'},models:[{id:'synthetic',supported_parameters:['tools'],input_toman_per_million:10,output_toman_per_million:30}]};}};
 const runtime={url:null,async start(){this.url='http://127.0.0.1:1';},async stop(){this.url=null;},async call(path,options={}){
   if(path==='/session')return sessions;
   if(path==='/session/status')return waiting?{ses_waiting:{type:'busy'}}:{};
@@ -56,5 +56,21 @@ try{
   for(const width of [1440,390,320]){await page.setViewportSize({width,height:950});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:'.artifacts/task-recap-'+width+'.png'});}
   await page.setViewportSize({width:1440,height:950});await page.locator('[data-session=ses_new]').click();assert.equal(await page.locator('#run-recap').isVisible(),false);
   await page.locator('#project-home').click();await page.locator('[data-task=ses_waiting]').click();await page.locator('#run-recap').waitFor();assert.equal(replies,0);
+  await page.locator('#project-home').click();await page.waitForFunction(()=>!document.querySelector('#project-home').disabled);await page.locator('#project-task-list button').first().waitFor();
+  for(const [width,height] of [[1280,720],[1280,560],[390,720],[320,640]]){
+    await page.setViewportSize({width,height});
+    await page.waitForFunction(()=>document.querySelector('#conversation').scrollTop===0);
+    assert.equal(await page.locator('#follow-output').isVisible(),false,'Project overview is not a streaming transcript');
+    if(width===1280&&height===720){const task=await page.locator('#project-task-list button').first().boundingBox(),viewport=await page.locator('#conversation').boundingBox();assert(task.y>=viewport.y&&task.y+task.height<=viewport.y+viewport.height,'Recent work appears in the first laptop viewport');}
+    if(width<640)await page.locator('#menu').click();
+    await page.locator('#sessions').scrollIntoViewIfNeeded();
+    assert((await page.locator('#sessions').boundingBox()).height>=144,'Short windows retain usable task-list height beside an active subscription');
+    await page.locator('#logout').scrollIntoViewIfNeeded();
+    const logout=await page.locator('#logout').boundingBox();assert(logout.y>=0&&logout.y+logout.height<=height,'Account actions remain reachable within the rail');
+    await page.locator('#sessions').scrollIntoViewIfNeeded();
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:'.artifacts/short-window-'+width+'x'+height+'.png'});
+    if(width<640)await page.locator('#rail-close').click();
+  }
   assert.deepEqual(errors,[]);console.log('Background approval is visible at desktop and narrow widths, navigates without consent, and clears after completion.');
 }finally{await browser.close();await app.close();}

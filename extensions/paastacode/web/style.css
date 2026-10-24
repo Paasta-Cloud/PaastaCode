@@ -151,3 +151,13 @@ html[data-mobile-app=true] .hosted-foot{display:none}
 #project-task-list button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;flex:1}
 #project-task-list small{font-size:11px;color:var(--muted);white-space:nowrap}
 @media(max-width:640px){#project-task-list button{gap:8px}#project-task-list button span{font-size:13px}.project-tasks{margin-bottom:16px}}
+
+/* Keep task navigation and account actions reachable on short laptop windows. */
+.rail{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+.rail>*{flex-shrink:0}
+.rail>.sessions{flex:1 0 144px;min-height:144px}
+.conversation:has(#project-tasks:not([hidden])) .empty{padding:8px 0 16px}
+.conversation:has(#project-tasks:not([hidden])) .empty>.ui-icon,.conversation:has(#project-tasks:not([hidden])) .empty>.intro-label{display:none}
+.conversation:has(#project-tasks:not([hidden])) .empty h1{font-size:24px;margin-bottom:8px}
+.conversation:has(#project-tasks:not([hidden])) .empty p{font-size:13px;margin:8px 0}
+.conversation:has(#project-tasks:not([hidden])) .suggestions{margin-top:12px}
