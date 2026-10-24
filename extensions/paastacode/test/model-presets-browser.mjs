@@ -41,6 +41,26 @@ try{
   await page.locator('#model').selectOption('anthropic/claude-opus');
   assert(await page.locator('#model-cost-warning').isVisible());
   assert.equal(await page.locator('#model-preset').inputValue(),'');
+  await page.locator('#workflow-phase').selectOption('auto');
+  await page.locator('#model-settings summary').click();
+  for(const [width,height] of [[390,720],[320,640],[320,560]]){
+    await page.setViewportSize({width,height});
+    const conversation=await page.locator('#conversation').boundingBox();
+    assert(conversation.height>=120,'Long model prices and cost warnings must leave room to read the conversation');
+    await page.locator('#model-cost-warning').scrollIntoViewIfNeeded();
+    const warning=await page.locator('#model-cost-warning').boundingBox(),composer=await page.locator('#composer').boundingBox();
+    assert(warning.y>=composer.y&&warning.y+warning.height<=composer.y+composer.height,'The full cost warning remains reachable inside the composer');
+    await page.locator('#prompt').fill('پیش‌نویس آزمایشی');
+    await page.locator('#send').scrollIntoViewIfNeeded();
+    const send=await page.locator('#send').boundingBox();
+    assert(send.y>=0&&send.y+send.height<=height,'Send remains reachable in a short viewport');
+    assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.screenshot({path:'.artifacts/compact-composer-'+width+'x'+height+'.png'});
+  }
+  assert.equal(prompts.length,0,'Checking model costs and viewport navigation must not submit the draft');
+  await page.locator('#prompt').fill('');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.locator('#model-settings summary').click();
   await page.locator('#model-preset').selectOption('iran-balanced');
   for(const width of [1440,390,320]){
     await page.setViewportSize({width,height:1000});
