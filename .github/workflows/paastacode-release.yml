@@ -80,6 +80,7 @@ jobs:
       - name: Browser acceptance
         run: |
           node test/native-browser.mjs
+          node test/project-review-browser.mjs
           node test/model-presets-browser.mjs
           node test/integrations-browser.mjs
           node test/browser-mcp.mjs

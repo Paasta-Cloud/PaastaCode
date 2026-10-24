@@ -11,6 +11,7 @@ import {PaastaDeployment} from "./deployment.mjs";
 import {ConversationSync} from "./conversation-sync.mjs";
 import {accessModes,sessionPermissions} from "./access.mjs";
 import {WorkspaceGit} from "./git.mjs";
+import {ProjectKnowledge} from './project-knowledge.mjs';
 import {previewImport} from "./project-import.mjs";
 import {WorkspaceExport} from "./workspace-export.mjs";
 import {untitledSession,promptTitle,firstRequestTitle} from "./session-title.mjs";
@@ -24,6 +25,7 @@ assets.set('/model-policy.js','model-policy.js');assets.set('/drafts.js','drafts
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
 for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
 assets.set('/task-state.js','task-state.js');
+assets.set('/project-knowledge.js','project-knowledge.js');assets.set('/review-ui.js','review-ui.js');assets.set('/review.css','review.css');
 export function validCapability(value,secret){
   return typeof value==="string"&&Buffer.byteLength(value)===Buffer.byteLength(secret)&&timingSafeEqual(Buffer.from(value),Buffer.from(secret));
 }
@@ -98,12 +100,13 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
     if(runtime.url)return;
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
-    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config={...providerConfig(context.models,account.credentials.aiKey,account.origin),...await integrations().config()};if((await deployment.state()).connected)config.mcp.paasta=paastaMcpConfig(workspace);await runtime.start(config,{proxy:(await integrations().read()).proxy});await integrations().cleanPrevious();engineModels=config.provider.paasta.models;appliedAccess.clear();
+    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config={...providerConfig(context.models,account.credentials.aiKey,account.origin),...await integrations().config()};if((await deployment.state()).connected)config.mcp.paasta=paastaMcpConfig(workspace);config.instructions=[await knowledge().instruction()];await runtime.start(config,{proxy:(await integrations().read()).proxy});await integrations().cleanPrevious();engineModels=config.provider.paasta.models;appliedAccess.clear();
       await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
   };
   const accountIdentity=()=>account.origin+":"+context.account.tenantId+":"+context.account.id;
+  const knowledge=()=>new ProjectKnowledge(workspace,accountIdentity());
   const refreshEngineModels=async(models,required)=>{
     const next=providerConfig(models,"",account.origin).provider.paasta.models;
     if(required.every(id=>next[id]&&modelCapabilities(next[id])===modelCapabilities(engineModels?.[id])))return true;
@@ -236,7 +239,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials)try{context=await account.context();}catch(caught){context=null;error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),...modelOptions(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),...modelOptions(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{projectKnowledge:true,integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(!cloud&&url.pathname.startsWith('/api/remote/')){
       const result=await relayCloud({account,url,method:request.method,headers:request.headers,body:request.method==='GET'?undefined:await body(request,url.pathname.endsWith('/prompt')?10*1024*1024:1_100_000)});
@@ -343,6 +346,11 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       throw new Error('عملیات ابزارها پشتیبانی نمی‌شود.');
     }
     if(url.pathname.startsWith("/api/git")||route==="POST /api/access")if(!account.credentials?.token||!account.credentials?.aiKey)throw new Error("برای دسترسی به پروژه، با پاستا وارد شوید.");
+    if(url.pathname==='/api/knowledge'){
+      if(!account.credentials?.token||!account.credentials?.aiKey)throw new Error('برای مدیریت دانش پروژه با پاستا وارد شوید.');
+      if(route==='GET /api/knowledge')return json(response,await knowledge().read());
+      if(route==='POST /api/knowledge'){const input=await body(request,70000);return json(response,await mutateAccount(()=>knowledge().save(input),expectedAccount));}
+    }
     if(route==="GET /api/git")return json(response,await git.status());
     if(route==="GET /api/git/diff")return json(response,await git.diff(url.searchParams.get("path")));
     if(route==="POST /api/git"){const input=await body(request);return json(response,await mutateAccount(()=>{writable();return git.action(input);},expectedAccount));}

@@ -1,5 +1,6 @@
 import {spawn} from "node:child_process";
-import {resolve} from "node:path";
+import {resolve,relative,isAbsolute} from "node:path";
+import {open,realpath,lstat} from 'node:fs/promises';
 
 export class WorkspaceGit {
   constructor(workspace){this.workspace=resolve(workspace);this.queue=Promise.resolve();}
@@ -26,7 +27,21 @@ export class WorkspaceGit {
     const remotes=(await this.call(["remote"])).output.trim().split("\n").filter(Boolean);
     return {repository:true,branch,upstream,ahead:count[0]||0,behind:count[1]||0,remotes,files};
   }
-  async diff(path){const state=await this.status();if(!state.files.some(f=>f.path===path))throw new Error("فایل تغییرکرده را از فهرست انتخاب کنید.");const work=(await this.call(["diff","--no-ext-diff","--no-textconv","--",path])).output;const staged=(await this.call(["diff","--cached","--no-ext-diff","--no-textconv","--",path])).output;return {path,text:work||staged||"فایل تازه است؛ هنوز تفاوتی در گیت ثبت نشده."};}
+  async diff(path){
+    const state=await this.status(),file=state.files.find(f=>f.path===path);
+    if(!file||/(^|\/)(\.env(?:\..*)?|[^/]+\.(pem|key))$/i.test(path))throw new Error('فایل تغییرکردهٔ مجاز را از فهرست انتخاب کنید.');
+    const paths=file.previous?[file.previous,path]:[path];
+    const worktree=(await this.call(['diff','--no-ext-diff','--no-textconv','--',...paths])).output;
+    const staged=(await this.call(['diff','--cached','--no-ext-diff','--no-textconv','--',...paths])).output;
+    let untracked='';
+    if(file.status==='??'){
+      const target=resolve(this.workspace,path),info=await lstat(target),within=relative(await realpath(this.workspace),await realpath(target));
+      if(info.isSymbolicLink()||!info.isFile()||within.startsWith('..')||isAbsolute(within))throw new Error('پیش‌نمایش این مسیر در دسترس نیست.');
+      if(info.size>256000)untracked='فایل برای پیش‌نمایش بزرگ است؛ آن را در ویرایشگر باز کنید.';
+      else{const handle=await open(target,'r');try{const bytes=Buffer.alloc(256001),{bytesRead}=await handle.read(bytes,0,bytes.length,0);if(bytesRead>256000)throw new Error('فایل برای پیش‌نمایش بزرگ است.');const content=bytes.subarray(0,bytesRead);untracked=content.includes(0)?'پیش‌نمایش فایل باینری در دسترس نیست.':'--- /dev/null\n+++ '+path+'\n@@ -0,0 +1,'+content.toString('utf8').split('\n').length+' @@\n'+content.toString('utf8').split('\n').map(line=>'+'+line).join('\n');}finally{await handle.close();}}
+    }
+    return {path,worktree,staged,untracked,text:[worktree,staged,untracked].filter(Boolean).join('\n')||'تفاوت متنی ثبت نشده است.'};
+  }
   action(input){const work=this.queue.then(async()=>{this.busy=true;try{return await this.perform(input);}finally{this.busy=false;}});this.queue=work.catch(()=>{});return work;}
   async perform(input){
     const {action}=input;

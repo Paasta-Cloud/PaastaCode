@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import {spawn} from "node:child_process";
 import {resolve,join,dirname,basename} from "node:path";
-import {realpath,readFile,stat,readdir,lstat} from "node:fs/promises";
+import {realpath,readFile,writeFile,stat,readdir,lstat} from "node:fs/promises";
 import {pathToFileURL,fileURLToPath} from "node:url";
 import {createInterface} from "node:readline/promises";
 import {PaastaAccount,billingUrl} from "../src/account.mjs";
@@ -33,10 +33,26 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode tools [--file=PATH|--skill=DIR|--browser=on|off|--auth=NAME|--install-browser]\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode knowledge [--file=MARKDOWN] [--export=PATH] [--workspace=PATH]\n  paastacode review [--path=FILE] [--session=ID] [--workspace=PATH]\n  paastacode tools [--file=PATH|--skill=DIR|--browser=on|off|--auth=NAME|--install-browser]\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
+  if(['knowledge','review'].includes(command)){
+    const value=name=>args.find(arg=>arg.startsWith('--'+name+'='))?.slice(name.length+3),service=await connectWorkspace({workspace});let revision;
+    const call=async(path,body)=>{const response=await fetch(service.url+'/api/'+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+service.capability,'Content-Type':'application/json',...(revision===undefined?{}:{'X-PaastaCode-Account':String(revision)})},body:body?JSON.stringify(body):undefined});const result=await response.json();if(!response.ok)throw new Error(result.error||'دریافت اطلاعات پروژه ناموفق بود.');return result;};
+    revision=(await call('state')).accountRevision;
+    if(command==='knowledge'){
+      let current=await call('knowledge');
+      if(value('file')){const path=value('file');if((await stat(path)).size>16384)throw new Error('فایل دانش پروژه باید حداکثر ۱۶ کیلوبایت باشد.');current=await call('knowledge',{content:await readFile(path,'utf8'),revision:current.revision});console.log('دانش پروژه ذخیره شد.');}
+      if(value('export')){await writeFile(value('export'),current.content,{flag:'wx',mode:0o600});console.log('خروجی دانش پروژه ذخیره شد.');}
+      else console.log(current.content||'هنوز دانشی برای این حساب و پروژه ذخیره نشده است.');
+    }else{
+      const git=await call('git');console.log(JSON.stringify(git,null,2));
+      if(value('path'))console.log((await call('git/diff?path='+encodeURIComponent(value('path')))).text);
+      if(value('session')){await import('../web/task-state.js');console.log(JSON.stringify(globalThis.PaastaTasks.recap(await call('messages?id='+encodeURIComponent(value('session')))),null,2));}
+    }
+    return;
+  }
   if(command==='tools'){
     if(args.includes('--install-browser')){const launcher=fileURLToPath(new URL('./browser-mcp.cjs',import.meta.url)).replace(/app\.asar([\\/])/,'app.asar.unpacked$1');const child=spawn(process.execPath,[launcher,'--install'],{stdio:'inherit',windowsHide:true,env:{...process.env,ELECTRON_RUN_AS_NODE:'1',NODE_PATH:join(dirname(launcher),'../vendor/browser')}});const code=await new Promise((done,fail)=>{child.once('error',fail);child.once('exit',done);});if(code!==0)throw new Error('دریافت مرورگر انجام نشد؛ اتصال اینترنت و نیازمندی‌های مرورگر را بررسی کنید.');return;}
     const value=name=>args.find(arg=>arg.startsWith('--'+name+'='))?.slice(name.length+3),service=await connectWorkspace({workspace});

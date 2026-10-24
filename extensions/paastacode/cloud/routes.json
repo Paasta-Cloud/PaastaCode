@@ -18,7 +18,8 @@
     "workflow",
     "export",
     "integrations",
-    "projects"
+    "projects",
+    "knowledge"
   ],
   "POST": [
     "ready",
@@ -47,7 +48,8 @@
     "integrations",
     "integrations/auth",
     "projects",
-    "projects/select"
+    "projects/select",
+    "knowledge"
   ],
   "DELETE": [
     "devices",

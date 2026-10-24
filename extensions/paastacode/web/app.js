@@ -10,6 +10,7 @@ import {syncUI} from "./sync.js";
 import {workbench} from "./workbench.js";
 import {gitUI} from "./git-ui.js";
 import './integrations-ui.js';
+import './project-knowledge.js';
 import {updatesUI} from "./updates.js";
 import {setupPwa,submitWithEnter,setupMobileNavigation} from "./pwa.js";
 setupPwa();
@@ -133,6 +134,8 @@ const deployment=deploymentUI({api,run,notice,getState:()=>state});
 const devices=devicesUI({api,run,notice,getGeneration:()=>generation,onCurrentRevoked:async()=>{clearAccountView();await loadState();}});
 const conversationSync=syncUI({api,run,notice,getState:()=>state,getView:()=>({id:session?.id,mode,generation})});
 const git=gitUI({api,run,notice});
+const knowledge=globalThis.PaastaKnowledgeUI({api,button:$("knowledge-open")});
+$("knowledge-open").prepend(icon("book"));
 const integrations=globalThis.paastacodeIntegrations({api,button:$("integrations-open")});
 function accessView(value){$("access-mode").value=value||"review";$("access-mode").dataset.mode=value||"review";$("access-description").textContent=value==="full"?"Full Access: تغییر فایل و اجرای دستور بدون پرسش":"تغییر فایل و اجرای دستور با تأیید شما";}
 function notice(message,error=false){$("notice").textContent=message;$("notice").classList.toggle("error",error);$("notice").hidden=!message;}
@@ -186,6 +189,8 @@ async function loadState(){
   state=await api("state");
   state.models=prioritizeDomesticModels(state.models||[]);
   Object.assign(state,modelOptions(state.models||[]));
+  $("knowledge-open").disabled=!state.configured||!state.features?.projectKnowledge;
+  $("knowledge-open").title=state.configured&&!state.features?.projectKnowledge?"برای دانش پروژه، اجرای فضای کار را به نسخهٔ جدید ارتقا دهید.":"دانش ماندگار همین پروژه";
   $("integrations-open").disabled=!state.configured||!state.features?.integrations;
   $("integrations-open").title=state.configured&&!state.features?.integrations?'پس از پایان کار، اجرای پروژه را به نسخهٔ جدید پاستاکد ارتقا دهید.':'';
   if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');state.models=prioritizeDomesticModels(state.models||[]);Object.assign(state,modelOptions(state.models||[]));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
@@ -356,8 +361,8 @@ $('subscription-continue').onclick=()=>run($('subscription-continue'),async()=>{
 $("budget-form").onsubmit=event=>{event.preventDefault();run($("budget-form").querySelector("button"),async()=>{await api("connect","POST",{dailyLimitToman:Number($("budget").value)});notice("");await loadState();});};
 function clearAccountView(){
   for(const id of ["model","execution-model"])delete $(id).dataset.unavailable;
-  integrations.clear();
-  $("integrations-open").disabled=true;
+  integrations.clear();knowledge.clear();
+  $("integrations-open").disabled=true;$("knowledge-open").disabled=true;
   $("background-activity").hidden=true;$("background-activity").replaceChildren();
   delete $("permissions").dataset.signature;
   $("subscription-summary").hidden=true;clearAttachments();importRevision++;currentWorkflow={phase:"build"};workflowSession=null;planReady=false;importToken=null;$("import-dialog").close();$("import-text").textContent="";$("import-file").value="";$("workflow-phase").value="build";bench.reset();conversationSync.hide();clearInterval(loginTimer);generation++;listGeneration++;session=null;cloudSelection=null;$("session-search").value="";state={};mode="local";selectionView();filterSessions();lastMessages="";sending=false;promptPending=false;$("send").disabled=false;for(const id of ["messages","permissions","sessions","model"])$(id).replaceChildren();$("prompt").value="";$("save").disabled=true;$("device").hidden=true;$("device-link").removeAttribute("href");$("device-code").textContent="";$("save-state").textContent=runtimeConnection?.kind==="cloud"?"در فضای کار ابری":"روی این دستگاه";$("local-tab").setAttribute("aria-pressed","true");$("cloud-tab").setAttribute("aria-pressed","false");notice("");}

@@ -9,6 +9,6 @@ const packageVersion=JSON.parse(readFileSync(new URL("../package.json",import.me
 test("CLI version/help run without login and invalid budgets fail before device authorization",()=>{
   const run=args=>spawnSync(process.execPath,[bin,...args],{encoding:"utf8",timeout:15000,env:{...process.env,PAASTACODE_HOME:resolve(".artifacts/cli-test-state")}});
   const version=run(["--version"]);assert.equal(version.status,0);assert.equal(version.stdout.trim(),"PaastaCode "+packageVersion);
-  const help=run(["help"]);assert.equal(help.status,0);assert.match(help.stdout,/Powered by OpenCode/);
+  const help=run(["help"]);assert.equal(help.status,0);assert.match(help.stdout,/Powered by OpenCode/);assert.match(help.stdout,/paastacode knowledge/);assert.match(help.stdout,/paastacode review/);
   for(const budget of ["0","NaN","1.5","1000001"]){const invalid=run(["login","--daily-limit="+budget]);assert.equal(invalid.status,1);assert.match(invalid.stderr,/سقف روزانه/);assert(!invalid.stdout.includes("کد ورود"));}
 });

@@ -26,10 +26,18 @@ test("workspace Git commits only selected files, retains staged work and rejects
     await git.action({action:"branch",branch:"codex/test",create:true});assert.equal((await git.status()).branch,"codex/test");
     await writeFile(join(root,"selected.txt"),"two\n");assert.match((await git.diff("selected.txt")).text,/\+two/);
     await git.call(["mv","--","selected.txt","فایل.txt"]);
+    assert.match((await git.diff("فایل.txt")).staged,/rename from selected.txt/);
     await git.action({action:"commit",message:"Rename selected file",paths:["فایل.txt"]});
     assert.equal((await git.call(["show","HEAD:فایل.txt"])).output,"two\n");
     assert.notEqual((await git.call(["cat-file","-e","HEAD:selected.txt"],{allowFailure:true})).code,0);
     assert((await git.status()).files.some(f=>f.path==="other.txt"&&f.status.startsWith("A")));
+    await writeFile(join(root,'fresh.txt'),'fresh preview\n');
+    assert.match((await git.diff('fresh.txt')).untracked,/\+fresh preview/);
+    await writeFile(join(root,'selected-stage.txt'),'base\n');await git.action({action:'commit',message:'Fixture base',paths:['selected-stage.txt']});
+    await writeFile(join(root,'selected-stage.txt'),'staged\n');await git.call(['add','--','selected-stage.txt']);await writeFile(join(root,'selected-stage.txt'),'working\n');
+    const both=await git.diff('selected-stage.txt');assert.match(both.staged,/\+staged/);assert.match(both.worktree,/\+working/);
+    assert.match(both.text,/\+staged/);assert.match(both.text,/\+working/);
+    await assert.rejects(git.diff('.env'));
     await assert.rejects(git.diff("../outside"));
     await mkdir(join(root,"nested"));await assert.rejects(new WorkspaceGit(join(root,"nested")).status(),/ریشه/);
   }finally{if(ceiling===undefined)delete process.env.GIT_CEILING_DIRECTORIES;else process.env.GIT_CEILING_DIRECTORIES=ceiling;assert(root.startsWith(join(await realpath(tmpdir()),"paastacode-git-")));await rm(root,{recursive:true,force:true});}
