@@ -1,13 +1,13 @@
 import sys,json,urllib.request,urllib.error,hashlib,zipfile,tempfile,pathlib,shutil,os,urllib.parse
 event=json.load(open(os.environ['GITHUB_EVENT_PATH']));request=json.loads(event['inputs']['unified_artifacts']);token=os.environ['GH_TOKEN'];phase='setup'
 assert os.environ['GITHUB_REPOSITORY']=='Paasta-Cloud/PaastaCode'
-assert event['inputs']['package_run']=='41505867901' and event['inputs']['acceptance_run']=='41505867901' and event['inputs']['package_sha']=='acdae185fc0cf0f50d816a908a21d071802ee4fc'
-accepted={13171860955:"sha256:64dcd51c7b5d62ae62e3710e646c15dea2c42bcaa4d8e7d0b7051a378bb5a5dd",13171176156:"sha256:be8de3e372254bc680ed0d4ec9b4b4b2d54a9261d8b508ce497abb1be29d5aa9",13170414954:"sha256:6344468bb2dc6f56452e98b9c1c4dc1113dc81229fe4571d47d8fe44e3bafc2d",13169814802:"sha256:a2fbc4543e94c4c3baef8d92ead131ccdf17aa9a08387c3ac348dcdd8e95c95e",13169499470:"sha256:57a9da8c78c1e093da55ed6c30287847730450355228d686369262ece4184d1f"}
+assert event['inputs']['package_run']=='41511648239' and event['inputs']['acceptance_run']=='41511648239' and event['inputs']['package_sha']=='2aeb6f0464a0cef13d8d91a3d76430d37446539b'
+accepted={13174216626:"sha256:9a1c0c9ae4cadc92da79e7cb0b26c6b995992f0ac823c017acc6d6591dcd683a",13173936339:"sha256:3d388a5610374369266d1e8c8c518ae93c753bcab4288e1fdafc8aac773595a6",13173726029:"sha256:80b615d45fc5f2598ad9350ec2f6761d08b82f78f8e3ea91e86c477b39be5659",13173059743:"sha256:177594b1df244bdba16e851ce9a8e92915afaf7c52e0d14b5b72a01a590ebe38",13172529057:"sha256:7aa36522729872841541c6023a0f72234a3cab7ba5cbb0970172c8b8fba2bb6e"}
 assert {a['id'] for a in request['artifacts']}==set(accepted) and len(request['artifacts'])==5
 for a in request['artifacts']:
  assert a['digest']==accepted[a['id']]
  u=urllib.parse.urlparse(a['url']);assert u.scheme=='https' and u.hostname.endswith('.blob.core.windows.net')
-repo='Paasta-Cloud/PaastaCode';release=431862508
+repo='Paasta-Cloud/PaastaCode';release=431892899
 def api(path,method='GET',data=None):
  payload=None if data is None else json.dumps(data).encode()
  r=urllib.request.Request('https://api.github.com/'+path,data=payload,method=method,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','User-Agent':'Paasta-release','Content-Type':'application/json'})
@@ -38,7 +38,7 @@ def upload(path,name,assets):
  if result.get('digest'):assert result['digest']=='sha256:'+sha
  assets[name]=result
 try:
- info=api('repos/'+repo+'/releases/'+str(release));assert info['draft'] and info['tag_name']=='vscode-v0.8.2'
+ info=api('repos/'+repo+'/releases/'+str(release));assert info['draft'] and info['tag_name']=='vscode-v0.8.3'
  assets={a['name']:a for a in api('repos/'+repo+'/releases/'+str(release)+'/assets?per_page=100')}
  records=[]
  for artifact in request['artifacts']:
@@ -54,18 +54,18 @@ try:
     m=json.loads(z.read(manifests[0]));assert m['platform']==platform and m['arch']==arch
     names=[n for n in z.namelist() if n.endswith('.vsix')];assert len(names)==1
     old=names[0];expected=next(v for v in m['files'] if v['name']==pathlib.PurePosixPath(old).name)
-    filename='paasta-vscode-0.8.2-'+phase+'.vsix';vsix=stage/filename
+    filename='paasta-vscode-0.8.3-'+phase+'.vsix';vsix=stage/filename
     with z.open(old) as source,open(vsix,'xb') as output:shutil.copyfileobj(source,output)
     assert digest(vsix)==expected['sha256'] and vsix.stat().st_size==expected['bytes']
    with zipfile.ZipFile(vsix) as v:
-    pkg=json.loads(v.read('extension/package.json'));assert(pkg['publisher'],pkg['name'],pkg['version'])==('paasta-cloud','paasta','0.8.2')
+    pkg=json.loads(v.read('extension/package.json'));assert(pkg['publisher'],pkg['name'],pkg['version'])==('paasta-cloud','paasta','0.8.3')
    upload(vsix,filename,assets)
    records.append({'platform':platform,'arch':arch,'name':filename,'bytes':expected['bytes'],'sha256':expected['sha256']})
   print(json.dumps({'phase':phase,'status':'uploaded'}),flush=True)
  phase='metadata'
  with tempfile.TemporaryDirectory(prefix='paasta-vscode-release-meta-') as staging:
   manifest=pathlib.Path(staging)/'release-manifest.json';checksums=pathlib.Path(staging)/'SHA256SUMS'
-  manifest.write_text(json.dumps({'version':'0.8.2','extensionId':'paasta-cloud.paasta','sourceRepository':'Paasta-Cloud/paasta','sourceCommit':'acdae185fc0cf0f50d816a908a21d071802ee4fc','acceptanceRun':41505867901,'files':records},indent=2)+'\n')
+  manifest.write_text(json.dumps({'version':'0.8.3','extensionId':'paasta-cloud.paasta','sourceRepository':'Paasta-Cloud/paasta','sourceCommit':'2aeb6f0464a0cef13d8d91a3d76430d37446539b','acceptanceRun':41511648239,'files':records},indent=2)+'\n')
   checksums.write_text(''.join(r['sha256']+'  '+r['name']+'\n' for r in records))
   upload(manifest,'release-manifest.json',assets);upload(checksums,'SHA256SUMS',assets)
  print(json.dumps({'draftPrepared':True,'releaseId':release,'platforms':len(records),'published':False}),flush=True)
