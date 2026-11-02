@@ -2,6 +2,11 @@ name: PaastaCode verified package publication
 on:
   workflow_dispatch:
     inputs:
+      unified_artifacts:
+        description: Accepted unified 0.8.0 artifact transfer records
+        required: false
+        type: string
+        default: ""
       package_run:
         description: Successful native package run
         required: true
@@ -21,6 +26,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   draft:
+    if: inputs.unified_artifacts == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -86,3 +92,18 @@ jobs:
           version=$(node -p "require('./extensions/paastacode/package.json').version")
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+-(beta|alpha)\.[0-9]+$ ]] || exit 1
           gh release create "v$version" .artifacts/paastacode-publish/* --draft --prerelease --target "$PACKAGE_SHA" --title "PaastaCode $version" --notes-file extensions/paastacode/RELEASE.md
+
+  unified-draft:
+    if: inputs.unified_artifacts != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Transfer accepted unified packages into the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/publish-unified-vsix.py
