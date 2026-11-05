@@ -10,9 +10,10 @@ def scenario(kind):
   if args[0]=='api':
    endpoint=args[1]
    if '/jobs?' in endpoint:
-    jobs=[{'name':'package (runner, '+p.rsplit('-',1)[0]+', '+p.rsplit('-',1)[1]+')','conclusion':'success'} for p in platforms]
+    jobs=[{'id':i+1,'name':'package (runner, '+p.rsplit('-',1)[0]+', '+p.rsplit('-',1)[1]+')','conclusion':'success'} for i,p in enumerate(platforms)]
     return json.dumps({'jobs':jobs[:-1] if kind=='missing-platform' else jobs})
-   if '/actions/runs/' in endpoint:return json.dumps({'head_sha':'b'*40 if kind=='wrong-source' else sha,'path':'.github/workflows/paastacode-release.yml','event':'workflow_dispatch','status':'completed','conclusion':'failure' if kind=='failed-run' else 'success'})
+   if '/actions/jobs/' in endpoint:return marker*(1 if kind=='missing-acceptance' else 2)
+   if '/actions/runs/' in endpoint:return json.dumps({'run_attempt':1,'head_sha':'b'*40 if kind=='wrong-source' else sha,'path':'.github/workflows/paastacode-release.yml','event':'workflow_dispatch','status':'completed','conclusion':'failure' if kind=='failed-run' else 'success'})
    if '/releases/tags/' in endpoint:return json.dumps(state['release'])
    raise AssertionError('Unexpected endpoint '+endpoint)
   if args[:2]==['run','view']:return marker*(9 if kind=='missing-acceptance' else 10)

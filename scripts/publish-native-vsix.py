@@ -7,16 +7,19 @@ def api(path):return json.loads(gh('api','repos/'+repo+'/'+path))
 info=api('actions/runs/'+run)
 assert info['head_sha']==sha and info['path']=='.github/workflows/paastacode-release.yml'
 assert info['event']=='workflow_dispatch' and info['status']=='completed' and info['conclusion']=='success'
-jobs=api('actions/runs/'+run+'/jobs?per_page=100')['jobs'];packages=[j for j in jobs if j['name'].startswith('package (')]
+jobs={}
+for attempt in range(1,info.get('run_attempt',1)+1):
+ for job in api('actions/runs/'+run+'/attempts/'+str(attempt)+'/jobs?per_page=100')['jobs']:jobs[job['name']]=job
+packages=[j for j in jobs.values() if j['name'].startswith('package (')]
 platforms={'win32-x64','linux-x64','linux-arm64','darwin-x64','darwin-arm64'}
 assert len(packages)==5 and all(j['conclusion']=='success' for j in packages)
 actual=set()
 for job in packages:
  match=re.search(r', (win32|linux|darwin), (x64|arm64)\)$',job['name']);assert match
  actual.add('-'.join(match.groups()))
+ log=gh('api','repos/'+repo+'/actions/jobs/'+str(job['id'])+'/logs')
+ assert log.count('Installed native tools: registered manager, packaged Node helper, private credentials and disabled-key rejection passed without provider requests.')>=2
 assert actual==platforms
-logs=gh('run','view',run,'--repo',repo,'--log')
-assert logs.count('Installed native tools: registered manager, packaged Node helper, private credentials and disabled-key rejection passed without provider requests.')>=10
 stage=pathlib.Path('.artifacts/native-promote');stage.mkdir(parents=True,exist_ok=True)
 gh('run','download',run,'--repo',repo,'--pattern','paastacode-*','--dir',str(stage/'accepted'))
 out=stage/'publish';out.mkdir();records=[]
