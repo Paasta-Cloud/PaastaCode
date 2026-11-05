@@ -2,6 +2,20 @@ name: PaastaCode verified package publication
 on:
   workflow_dispatch:
     inputs:
+      native_run:
+        description: Successful unified VSIX matrix including installed native acceptance
+        required: false
+        type: string
+        default: ""
+      native_sha:
+        description: Exact tested unified source commit
+        required: false
+        type: string
+        default: ""
+      native_publish:
+        description: Publish the fully verified unified extension
+        type: boolean
+        default: false
       unified_artifacts:
         description: Accepted unified 0.8.0 artifact transfer records
         required: false
@@ -26,7 +40,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   draft:
-    if: inputs.unified_artifacts == ''
+    if: inputs.unified_artifacts == '' && inputs.native_run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -107,3 +121,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: python3 scripts/publish-unified-vsix.py
+
+  native:
+    if: inputs.native_run != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Test native promotion fences
+        run: python3 scripts/test-native-vsix-promotion.py
+      - name: Verify and promote installed unified packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_PACKAGE_RUN: ${{ inputs.native_run }}
+          NATIVE_PACKAGE_SHA: ${{ inputs.native_sha }}
+          NATIVE_PUBLISH: ${{ inputs.native_publish }}
+        run: python3 scripts/publish-native-vsix.py

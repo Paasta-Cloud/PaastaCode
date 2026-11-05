@@ -92,11 +92,16 @@ if(target==="desktop"){
   run(process.execPath,[binary,"--config","desktop/builder.cjs","--publish","never"],{env});
 }else if(target==="vscode"){
   const extension=join(stage,"vscode");await mkdir(extension,{recursive:true});
+  const unified=resolve(root,'../paasta-vscode/assemble.mjs');
+  if(existsSync(unified)){
+    const {assemble}=await import(new URL('../../paasta-vscode/assemble.mjs',import.meta.url));await assemble(extension);
+  }else{
   for(const file of ["extension.cjs","native-workbench.cjs","README.md","LICENSE"])await copyFile(join(root,"vscode",file),join(extension,file));
   await cp(join(root,"vscode/media"),join(extension,"media"),{recursive:true});
   // VS Code has its own numeric upgrade version; stripping beta suffixes would reuse 0.2.0 forever.
   const manifest=JSON.parse(await readFile(join(root,"vscode/package.json"),"utf8"));
   await writeFile(join(extension,"package.json"),JSON.stringify(manifest,null,2));
+  }
   await cp(client,join(extension,"client"),{recursive:true});await bundleNode(join(extension,"runtime"));
   await copyFile(join(root,"desktop/icon.png"),join(extension,"icon.png"));
   await writeFile(join(extension,".vscodeignore"),"**/.DS_Store\n**/Thumbs.db\n");
