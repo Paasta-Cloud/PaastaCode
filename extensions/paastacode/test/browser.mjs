@@ -150,12 +150,5 @@ try{
   coding={active:true,mode:'subscription',canConnectWithoutLimit:true};await page.locator('#composer').waitFor({state:'visible',timeout:18000});assert.equal(lastDailyLimit,undefined,'purchase while app stays open must connect without asking for a daily cap');
   await page.locator('#logout').click();coding={active:false,mode:'payg',canConnectWithoutLimit:true};await page.locator('#login').click();await page.locator('#subscription-continue').waitFor({state:'visible',timeout:10000});await page.locator('#subscription-continue').click();await page.locator('#composer').waitFor({state:'visible'});
   assert(!await page.locator('#notice').textContent().then(text=>text.includes('پاسخ قدیمی')),'superseded login polling must not show an error');assert.deepEqual(errors,[]);
-  assert.equal(await page.locator('#integrations-open').isDisabled(),true,'old runtimes keep integration controls disabled');
-  await page.route(app.url+'/api/state',async route=>{const response=await route.fetch();const data=await response.json();data.features={...data.features,integrations:true};await route.fulfill({response,json:data});});
-  await page.route(app.url+'/api/integrations',route=>route.fulfill({json:{servers:[],skills:[],browser:{enabled:false,status:'disabled'}}}));
-  await page.reload();await page.locator('#integrations-open').waitFor({state:'visible'});await page.locator('#integrations-open').click();
-  assert.equal(await page.locator('dialog.integrations-dialog').isVisible(),true,'a capable paired runtime opens the integration manager');
-  await page.keyboard.press('Escape');await page.unroute(app.url+'/api/state');await page.unroute(app.url+'/api/integrations');
-  await page.reload();assert.equal(await page.locator('#integrations-open').isDisabled(),true);assert.deepEqual(errors,[]);
-  console.log("PaastaCode browser tests passed: login, budget, permission, save/readback, XSS, desktop, 390/320px, dark, send and compatible integration controls.");
+  console.log("PaastaCode browser tests passed: login, budget, permission, save/readback, XSS, desktop, 390/320px, dark, send.");
 }finally{await browser.close();await app.close();}

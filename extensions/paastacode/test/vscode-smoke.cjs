@@ -36,8 +36,8 @@ exports.run=async()=>{
     assert.equal(extension.packageJSON.version,process.env.PAASTACODE_EXPECT_EXTENSION_VERSION);
     assert.equal(vscode.workspace.getConfiguration("paastacode").get("clientPath"),"","No source launcher override is permitted");
     const fs=require("node:fs");for(const file of ["client/bin/paastacode.mjs","client/engine/"+(process.platform==="win32"?"opencode.exe":"opencode"),"runtime/"+(process.platform==="win32"?"node.exe":"node")])assert(fs.existsSync(path.join(extension.extensionPath,file)),"Bundled executable missing: "+file);
-    if(extension.id==='paasta-cloud.paasta'){await extension.activate();await checkBundledCli(extension);await checkNativeTools(extension);}
   }
+  if(extension.id==='paasta-cloud.paasta'){await extension.activate();await checkBundledCli(extension);await checkNativeTools(extension);}
   try{
     const page=browser.contexts().flatMap(context=>context.pages()).find(page=>page.url().includes('workbench'))||browser.contexts()[0].pages()[0];
     const activity=page.getByRole('tab',{name:/^(?:PaastaCode|پاستا)/}).first();

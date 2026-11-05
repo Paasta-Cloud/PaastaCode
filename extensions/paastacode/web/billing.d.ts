@@ -1,1 +1,1 @@
-export function mountBilling(root?: Document | HTMLElement, options?: { signal?: AbortSignal; standalone?: boolean; onBalanceChange?: (balance: number) => void; onAvailabilityChange?: (available: boolean) => void; onLoadError?: (status?: number) => void }): () => void;
+export function mountBilling(root?: Document | HTMLElement, options?: { signal?: AbortSignal; standalone?: boolean; onBalanceChange?: (balance: number) => void }): () => void;

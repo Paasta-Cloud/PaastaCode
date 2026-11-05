@@ -1,15 +1,14 @@
 import {labelDialog,icon} from './components.js';
 /** @param {Document | HTMLElement} root
- * @param {{ signal?: AbortSignal, standalone?: boolean, onBalanceChange?: (balance: number) => void, onAvailabilityChange?: (available: boolean) => void, onLoadError?: (status?: number) => void }} [options] */
+ * @param {{ signal?: AbortSignal, standalone?: boolean, onBalanceChange?: (balance: number) => void }} [options] */
 export function mountBilling(root = document, options = {}) {
 const signal=options.signal;
-let lastAvailability,selectedPlanId;
 const $=id=>root.querySelector('#'+id),dialog=$('billing-confirm');labelDialog(dialog);
 if(location.pathname.startsWith('/api/paastacode/web/'))root.querySelectorAll('.billing-return,.brand').forEach(link=>{link.href='./index.html';});
 const title=dialog.querySelector('h2'),description=dialog.querySelector('p');
 $('subscription-cancel').prepend(icon('wallet'));
 const uuid='[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}',ownerPattern=new RegExp(`^${uuid}:${uuid}$`,'i');
-let expectedOwner=new URLSearchParams(location.search).get('owner')||new URLSearchParams(location.hash.slice(1)).get('owner')||null,state=null,busy=false,intent=null,limitDirty=false,discountDirty=false,verified=false,invalidRecovery=false;
+let expectedOwner=new URLSearchParams(location.search).get('owner')||new URLSearchParams(location.hash.slice(1)).get('owner')||null,state=null,busy=false,intent=null,limitDirty=false,verified=false,invalidRecovery=false;
 if(expectedOwner&&!ownerPattern.test(expectedOwner))expectedOwner='invalid';
 const money=value=>Number(value).toLocaleString('fa-IR')+' تومان',date=value=>new Date(value).toLocaleDateString('fa-IR');
 const modeName=mode=>({payg:'مصرف با کیف پول',subscription:'اشتراک',paused:'مصرف تازه متوقف است'}[mode]||'نامشخص');
@@ -24,7 +23,7 @@ function restoreIntent(){
     const body=saved.body,quote=saved.quote,amount=value=>typeof value==='number'&&Number.isSafeInteger(value)&&value>0;
     const common=saved.owner===expectedOwner&&saved.phase==='uncertain'&&typeof saved.label==='string'&&typeof saved.description==='string'&&body&&typeof body==='object'&&!Array.isArray(body);
     const funding=saved.kind==='preferences'&&body.action==='preferences'&&['payg','paused','subscription'].includes(body.mode)&&Number.isSafeInteger(body.revision)&&body.revision>=0&&Object.keys(body).every(key=>['action','mode','revision','limitToman','untilReset'].includes(key))&&(body.mode==='payg'?amount(body.limitToman)&&body.limitToman<=1e9&&(body.untilReset===undefined||body.untilReset===true):body.limitToman===undefined&&body.untilReset===undefined);
-    const purchase=['buy','cancel','upgrade'].includes(saved.kind)&&body?.action===saved.kind&&typeof body.token==='string'&&body.token.length>0&&body.token.length<=50000&&Object.keys(body).every(key=>['action','token'].includes(key))&&quote&&quote.token===body.token&&new RegExp('^'+uuid+'$','i').test(quote.id)&&Number.isFinite(Date.parse(quote.expiresAt))&&Number.isFinite(Date.parse(quote.startsAt))&&Date.parse(quote.endsAt)>Date.parse(quote.startsAt)&&(saved.kind==='cancel'?Number.isSafeInteger(quote.refundToman)&&quote.refundToman>=0:Number.isSafeInteger(quote.priceToman)&&quote.priceToman>=0&&amount(quote.weeklyQuotaToman)&&amount(quote.periodQuotaToman));
+    const purchase=['buy','cancel'].includes(saved.kind)&&body?.action===saved.kind&&typeof body.token==='string'&&body.token.length>0&&body.token.length<=50000&&Object.keys(body).every(key=>['action','token'].includes(key))&&quote&&quote.token===body.token&&new RegExp('^'+uuid+'$','i').test(quote.id)&&Number.isFinite(Date.parse(quote.expiresAt))&&Number.isFinite(Date.parse(quote.startsAt))&&Date.parse(quote.endsAt)>Date.parse(quote.startsAt)&&(saved.kind==='cancel'?amount(quote.refundToman):amount(quote.priceToman)&&amount(quote.weeklyQuotaToman)&&amount(quote.periodQuotaToman));
     if(common&&(funding||purchase))return saved;
   }catch{}
   invalidRecovery=true;saveIntent(null);return null;
@@ -50,14 +49,12 @@ function quota(label,value,reset){
 function controls(){
   if(signal?.aborted)return;
   const enabled=verified&&state?.saleEnabled===true&&Number.isSafeInteger(state.preferencesRevision);
-  document.querySelectorAll('#billing-content button,#wallet-limit').forEach(element=>{element.disabled=busy||!enabled||intent?.phase==='uncertain'||element.dataset.renewal==='true';});
+  document.querySelectorAll('#billing-content button,#wallet-limit').forEach(element=>{element.disabled=busy||!enabled||intent?.phase==='uncertain';});
   $('subscription-cancel').disabled=busy||!verified||!state?.upcoming||intent?.phase==='uncertain';
   $('billing-pause').disabled=busy||!verified||!state||state.mode==='paused'||intent?.phase==='uncertain';
   $('billing-resume').hidden=intent?.phase!=='uncertain';$('billing-resume').disabled=busy||!verified;
   dialog.dataset.busy=String(busy);
-  $('billing-refresh').disabled=busy;$('confirm-submit').disabled=busy||discountDirty&&intent?.kind==='buy'||!verified||!intent||intent.phase!=='uncertain'&&intent.quote&&Date.parse(intent.quote.expiresAt)<=Date.now();
-  const retry=$('billing-unavailable').querySelector('button');if(retry)retry.disabled=busy;
-  $('discount-code').disabled=busy||intent?.phase==='uncertain';$('discount-apply').disabled=busy||intent?.phase==='uncertain';
+  $('billing-refresh').disabled=busy;$('confirm-submit').disabled=busy||!verified||!intent||intent.phase!=='uncertain'&&intent.quote&&Date.parse(intent.quote.expiresAt)<=Date.now();
   $('confirm-close').disabled=busy;$('confirm-cancel').disabled=busy;
 }
 function render(){
@@ -65,15 +62,9 @@ function render(){
   options.onBalanceChange?.(Number(state.account.balanceToman));
   $('billing-content').hidden=false;$('billing-login').hidden=true;$('billing-name').textContent=state.account.name;$('billing-balance').textContent='موجودی آزاد: '+money(state.account.balanceToman);
   $('billing-mode').textContent=modeName(state.mode);$('billing-unavailable').hidden=state.saleEnabled===true;
-  if(lastAvailability!==state.saleEnabled){lastAvailability=state.saleEnabled;options.onAvailabilityChange?.(state.saleEnabled===true);}
-  $('billing-unavailable').textContent='خرید اشتراک و تغییر سقف کیف پول فعلاً در دسترس نیست. این پیام به معنی ثبت خرید یا تغییر اشتراک شما نیست. برای بررسی دوباره، وضعیت را تازه‌سازی کنید. توقف مصرف تازه همچنان ممکن است.'+(state.upcoming?' لغو تمدیدِ شروع‌نشده را می‌توانید از بخش اشتراک بررسی کنید.':'');
-  if(!state.saleEnabled){const retry=node('button','بررسی دوبارهٔ امکان خرید');retry.type='button';retry.onclick=refresh;$('billing-unavailable').append(retry);}
+  $('billing-unavailable').textContent='خرید اشتراک و تغییر سقف کیف پول فعلاً در دسترس نیست. توقف مصرف تازه همچنان ممکن است.'+(state.upcoming?' لغو تمدیدِ شروع‌نشده را می‌توانید از بخش اشتراک بررسی کنید.':'');
   $('billing-review').hidden=!(state.mode==='subscription'?state.current?.reviewRequired:state.mode==='payg'?state.paygBudget?.reviewRequired:false);
-  const subscriptionSection=$('subscription-detail').closest('section');
-  if(state.current)$('plans-title').closest('section').before(subscriptionSection);
-  else $('billing-mode').closest('section').after(subscriptionSection);
-  const daysRemaining=state.current?Math.max(0,Math.ceil((Date.parse(state.current.endsAt)-Date.now())/86400000)):0;
-  $('subscription-period').textContent=state.current?daysRemaining.toLocaleString('fa-IR')+' روز باقی‌مانده':'';if(options.standalone===false)subscriptionSection.hidden=!state.current&&!state.upcoming&&!state.lastCancellation&&state.state==='none';
+  $('subscription-period').textContent=state.current?'تا '+date(state.current.endsAt):'';if(options.standalone===false)$('subscription-detail').closest('section').hidden=!state.current&&!state.upcoming&&!state.lastCancellation&&state.state==='none';
   $('subscription-detail').replaceChildren();$('subscription-quotas').replaceChildren();
   if(state.current){
     $('subscription-detail').append(node('strong',state.current.plan.name),node('p','دوره از '+date(state.current.startsAt)+' تا '+date(state.current.endsAt),'billing-help'));
@@ -90,16 +81,15 @@ function render(){
   $('wallet-pending').hidden=!budget.pendingRequests;$('wallet-pending').textContent=budget.pendingRequests.toLocaleString('fa-IR')+' رزرو تا دریافت هزینهٔ قطعی در سقف و کیف پول باقی می‌ماند؛ مانده پس از تسویه برمی‌گردد.';
   if(!limitDirty)$('wallet-limit').value=budget.limitToman?.toLocaleString('fa-IR')||'';
   $('billing-pause').textContent=state.mode==='paused'?'مصرف متوقف است':'توقف مصرف';
-  $('plans-help').textContent=state.current?'پلن بالاتر را همین حالا فعال کنید یا برای دورهٔ بعد تمدید کنید. مبلغ نهایی پیش از تأیید نمایش داده می‌شود.':'اشتراک ماهانه برای کدنویسی با پاستاکد. سهمیهٔ مناسب کار خود را انتخاب کنید.';
+  $('plans-help').textContent=state.current?'برای دورهٔ بعد، بستهٔ موردنظر را انتخاب کنید. اشتراک فعلی تا پایان دوره در دسترس است.':'اشتراک ماهانه برای کدنویسی با پاستاکد. سهمیهٔ مناسب کار خود را انتخاب کنید.';
   $('billing-plans').replaceChildren();
   const plans=[...(state.catalogue||[])].sort((a,b)=>a.priceToman-b.priceToman);
   const baseQuota=plans[0]?.weeklyQuotaToman||1;
   for(const plan of plans){
     const row=node('article',undefined,'billing-plan'),details=node('div'),button=node('button',state.current?'تمدید اشتراک':'انتخاب بسته');
-    const heading=node('div',undefined,'billing-plan-heading'),mark=node('bdi',Number(plan.weeklyQuotaToman/baseQuota).toLocaleString('en-US',{maximumFractionDigits:1})+'X','billing-plan-multiplier');mark.dir='ltr';mark.setAttribute('aria-label',Number(plan.weeklyQuotaToman/baseQuota).toLocaleString('fa-IR')+' برابر سهمیهٔ پایه');heading.append(node('h3',plan.name),mark);details.append(heading,node('p',plan.id==='paastacode-base'?'برای کارهای روزمره':plan.id==='paastacode-pro'?'برای پروژه‌های بزرگ‌تر':'برای استفادهٔ سنگین و پیوسته'));
-    if(plan.id===selectedPlanId)details.append(node('span','بستهٔ انتخاب‌شده','billing-current-plan'));
+    details.append(node('h3',plan.name),node('p',plan.id==='paastacode-base'?'برای کارهای روزمره':plan.id==='paastacode-pro'?'برای پروژه‌های بزرگ‌تر':'برای استفادهٔ سنگین و پیوسته'));
     const features=node('ul');for(const text of [plan.weeklyQuotaToman===baseQuota?'سهمیهٔ پایه':Number(plan.weeklyQuotaToman/baseQuota).toLocaleString('fa-IR')+' برابر سهمیهٔ پایه','بازنشانی هفتگی سهمیه','مدل‌های منتخب کدنویسی','وب، دسکتاپ، ترمینال و افزونه'])features.append(node('li',text));
-    button.type='button';button.onclick=()=>preparePurchase(plan);const actions=node('div',undefined,'billing-plan-actions');if(state.current&&plan.priceToman>state.current.plan.priceToman){const upgrade=node('button','ارتقا به '+plan.name);upgrade.type='button';upgrade.onclick=()=>preparePurchase(plan,true);actions.append(upgrade);button.className='billing-renew';}if(state.current?.plan.id===plan.id)details.append(node('span','پلن فعلی','billing-current-plan'));button.disabled=!!state.upcoming;button.dataset.renewal=String(!!state.upcoming);actions.append(button);row.append(details,node('span',money(plan.priceToman)+' / ماه','billing-plan-price'),features,actions);$('billing-plans').append(row);
+    button.type='button';button.onclick=()=>preparePurchase(plan);row.append(details,node('span',money(plan.priceToman)+' / ماه','billing-plan-price'),features,button);$('billing-plans').append(row);
   }
   if(!state.catalogue?.length)$('billing-plans').append(node('p',state.upcoming?'یک دورهٔ آینده از قبل خریداری شده است.':state.saleEnabled?'بستهٔ قابل خرید فعلاً موجود نیست؛ کمی بعد تازه‌سازی کنید.':'پس از فعال‌شدن فروش، قیمت و مدل‌های هر بسته اینجا نمایش داده می‌شوند.','billing-help'));
   controls();
@@ -113,35 +103,22 @@ async function refresh(){
     const acknowledged=intent?.kind==='buy'?[state.current?.id,state.upcoming?.id].includes(intent.quote?.id):intent?.kind==='cancel'?state.lastCancellation?.id===intent.quote?.id:intent?.kind==='preferences'&&state.preferencesRevision>intent.body.revision&&state.mode===intent.body.mode&&(intent.body.mode!=='payg'||state.paygBudget.limitToman===intent.body.limitToman&&(intent.body.untilReset?!!state.paygResumeAt:!state.paygResumeAt));
     if(intent?.phase==='uncertain'&&!acknowledged){showIntent();feedback('نتیجهٔ درخواست قبلی مشخص نیست. همان درخواست را بررسی کنید تا خرید تکراری ساخته نشود.');}else {clearIntent();feedback(invalidRecovery?'پیش‌نمایش ذخیره‌شده قابل بازیابی نیست. وضعیت حساب را بررسی کنید و پیش‌نمایش تازه بگیرید.':acknowledged?'درخواست قبلی ثبت شده است؛ وضعیت حساب به‌روز شد.':'آخرین وضعیت دریافت شد.',invalidRecovery);}
   }catch(error){
-    if(!signal?.aborted)options.onLoadError?.(error.status);
     if(error.status===401||error.status===403){state=null;$('billing-content').hidden=true;$('billing-login').hidden=false;$('billing-name').textContent='ورود با حساب درست لازم است';$('billing-balance').textContent='';if(dialog.open)dialog.close();}
     feedback(error.message+(state?' اطلاعات نمایش‌داده‌شده قدیمی است؛ پیش از تغییر، دوباره تازه‌سازی کنید.':''),true);
   }finally{busy=false;$('billing-loading').hidden=true;controls();}
 }
 function showIntent(){
-  $('discount-form').hidden=intent.kind!=='buy';
   title.textContent=intent.label;description.textContent=intent.description;$('confirm-facts').replaceChildren();
-  const facts=intent.kind==='cancel'?[['بازگشت به کیف پول',money(intent.quote.refundToman)],['آغاز دورهٔ لغوشونده',date(intent.quote.startsAt)]]:intent.quote?[...(intent.quote.discountToman?[['قیمت پلن',money(intent.quote.originalPriceToman)],['تخفیف خرید',money(intent.quote.discountToman)]]:[]),['مبلغ پرداخت',money(intent.quote.priceToman)],...(intent.kind==='upgrade'?[]:[['آغاز دوره',date(intent.quote.startsAt)]]),['پایان دوره',date(intent.quote.endsAt)]]:intent.body.mode==='payg'?[['سقف کل',money(intent.body.limitToman)],['مصرف و رزرو فعلی',money(state.paygBudget.usedToman)]]:[['روش انتخاب‌شده',modeName(intent.body.mode)]];
+  const facts=intent.kind==='cancel'?[['بازگشت به کیف پول',money(intent.quote.refundToman)],['آغاز دورهٔ لغوشونده',date(intent.quote.startsAt)]]:intent.quote?[['مبلغ پرداخت',money(intent.quote.priceToman)],['آغاز دوره',date(intent.quote.startsAt)],['پایان دوره',date(intent.quote.endsAt)],...(intent.quote.discountToman?[['تخفیف خرید',money(intent.quote.discountToman)]]:[])]:intent.body.mode==='payg'?[['سقف کل',money(intent.body.limitToman)],['مصرف و رزرو فعلی',money(state.paygBudget.usedToman)]]:[['روش انتخاب‌شده',modeName(intent.body.mode)]];
   for(const [key,value] of facts)$('confirm-facts').append(node('dt',key),node('dd',value));
-  $('confirm-terms').textContent=intent.kind==='cancel'?'تمدیدِ شروع‌نشده لغو می‌شود و مبلغ خرید آن به کیف پول حساب پاستا برمی‌گردد. دورهٔ فعال تا پایان در دسترس است.':intent.kind==='upgrade'?'مابه‌التفاوت کامل دو پلن پرداخت می‌شود؛ بر اساس روزهای باقی‌مانده محاسبه نمی‌شود. سهمیهٔ پلن بالاتر همین حالا فعال می‌شود. مصرف قبلی، زمان بازنشانی و پایان دوره حفظ می‌شوند. روش مصرف و تمدید آینده تغییری نمی‌کنند.':intent.quote?'پرداخت پیش از فعال‌سازی انجام می‌شود. ماندهٔ سهمیه به دورهٔ بعد منتقل نمی‌شود. پایان سهمیه برداشت خودکار از کیف پول ایجاد نمی‌کند.':intent.body.mode==='payg'?'این انتخاب روی همهٔ دستگاه‌ها اعمال می‌شود. سقف هزینه خودکار بازنشانی نمی‌شود؛ رزروهای نامشخص تا تعیین هزینه باقی می‌مانند. '+(intent.body.untilReset?'در بازنشانی سهمیه، مصرف تازه به اشتراک برمی‌گردد.':'')+'':'این انتخاب روی همهٔ دستگاه‌ها اعمال می‌شود. رزروهای قبلی و دورهٔ خریداری‌شده حفظ می‌شوند.';
-  $('confirm-submit').textContent=intent.phase==='uncertain'?'بررسی دوبارهٔ همان درخواست':intent.kind==='cancel'?'تأیید لغو و بازگشت اعتبار':intent.kind==='upgrade'?'پرداخت و ارتقای پلن':intent.quote?intent.quote.priceToman===0?'فعال‌سازی رایگان':'پرداخت '+money(intent.quote.priceToman)+' و فعال‌سازی':'تأیید انتخاب';$('confirm-feedback').textContent=intent.phase==='uncertain'?(intent.kind==='cancel'?'تکرار همین درخواست، اعتبار دوباره اضافه نمی‌کند.':'تکرار همین درخواست، پرداخت دوباره ایجاد نمی‌کند.'):'';
+  $('confirm-terms').textContent=intent.kind==='cancel'?'تمدیدِ شروع‌نشده لغو می‌شود و مبلغ خرید آن به کیف پول حساب پاستا برمی‌گردد. دورهٔ فعال تا پایان در دسترس است.':intent.quote?'پرداخت پیش از فعال‌سازی انجام می‌شود. ماندهٔ سهمیه به دورهٔ بعد منتقل نمی‌شود. پایان سهمیه برداشت خودکار از کیف پول ایجاد نمی‌کند.':intent.body.mode==='payg'?'این انتخاب روی همهٔ دستگاه‌ها اعمال می‌شود. سقف هزینه خودکار بازنشانی نمی‌شود؛ رزروهای نامشخص تا تعیین هزینه باقی می‌مانند. '+(intent.body.untilReset?'در بازنشانی سهمیه، مصرف تازه به اشتراک برمی‌گردد.':'')+'':'این انتخاب روی همهٔ دستگاه‌ها اعمال می‌شود. رزروهای قبلی و دورهٔ خریداری‌شده حفظ می‌شوند.';
+  $('confirm-submit').textContent=intent.phase==='uncertain'?'بررسی دوبارهٔ همان درخواست':intent.kind==='cancel'?'تأیید لغو و بازگشت اعتبار':intent.quote?'پرداخت '+money(intent.quote.priceToman)+' و فعال‌سازی':'تأیید انتخاب';$('confirm-feedback').textContent=intent.phase==='uncertain'?(intent.kind==='cancel'?'تکرار همین درخواست، اعتبار دوباره اضافه نمی‌کند.':'تکرار همین درخواست، پرداخت دوباره ایجاد نمی‌کند.'):'';
   if(!dialog.open)dialog.showModal();controls();
 }
-async function preparePurchase(plan,upgrade=false){
+async function preparePurchase(plan){
   if(busy||!verified||intent?.phase==='uncertain')return;busy=true;controls();feedback('در حال بررسی قیمت و دوره…');
-  selectedPlanId=plan.id;
-  discountDirty=false;$('discount-code').value='';$('discount-feedback').textContent='';
-  try{const quote=await api({action:upgrade?'upgradeQuote':'quote',planId:plan.id});const kind=upgrade?'upgrade':'buy';intent={owner:expectedOwner,kind,phase:'prepared',planId:plan.id,body:{action:kind,token:quote.token},quote,label:upgrade?'بررسی ارتقای اشتراک':state.current?'بررسی تمدید اشتراک':'بررسی خرید اشتراک',description:quote.name};showIntent();feedback('قیمت نهایی را پیش از پرداخت بررسی کنید.');}catch(error){feedback(error.message,true);}finally{busy=false;controls();}
+  try{const quote=await api({action:'quote',planId:plan.id,...($('discount-code').value.trim()?{discountCode:$('discount-code').value.trim()}: {})});intent={owner:expectedOwner,kind:'buy',phase:'prepared',body:{action:'buy',token:quote.token},quote,label:state.current?'بررسی تمدید اشتراک':'بررسی خرید اشتراک',description:quote.name};showIntent();feedback('قیمت نهایی را پیش از پرداخت بررسی کنید.');}catch(error){feedback(error.message,true);}finally{busy=false;controls();}
 }
-$('discount-code').oninput=()=>{discountDirty=true;controls();};
-$('discount-form').onsubmit=async event=>{
-  event.preventDefault();if(busy||!verified||intent?.kind!=='buy'||intent.phase!=='prepared')return;
-  const code=$('discount-code').value.trim();busy=true;controls();$('discount-feedback').textContent='در حال بررسی کد…';
-  try{const quote=await api({action:'quote',planId:intent.planId,...(code?{discountCode:code}:{})});discountDirty=false;intent={...intent,quote,body:{action:'buy',token:quote.token}};showIntent();$('discount-feedback').textContent=quote.discountToman?'کد اعمال شد؛ '+money(quote.discountToman)+' تخفیف.':'قیمت بدون کد تخفیف نمایش داده می‌شود.';}
-  catch(error){$('discount-feedback').textContent=error.message;}
-  finally{busy=false;controls();}
-};
-
 function prepareMode(mode,limitToman){
   if(busy||!verified||!state||(mode!=='paused'&&!state.saleEnabled)||intent?.phase==='uncertain')return;
   intent={owner:expectedOwner,kind:'preferences',phase:'prepared',body:{action:'preferences',mode,revision:state.preferencesRevision,...(mode==='payg'?{limitToman,...($('wallet-resume').checked?{untilReset:true}: {})}:{})},label:mode==='paused'?'توقف مصرف تازه':mode==='subscription'?'استفاده از اشتراک':'انتخاب سقف کیف پول',description:'روش مصرف و سقف این حساب برای همهٔ دستگاه‌ها مشترک است.'};showIntent();
@@ -157,7 +134,7 @@ $('subscription-cancel').onclick=async()=>{
 $('confirm-close').onclick=$('confirm-cancel').onclick=()=>{if(!busy)dialog.close();};dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
 dialog.addEventListener('close',()=>{if(intent?.phase==='prepared')clearIntent();});
 $('confirm-submit').onclick=async()=>{
-  if(busy||!verified||!intent||discountDirty&&intent.kind==='buy'||intent.owner!==expectedOwner)return;
+  if(busy||!verified||!intent||intent.owner!==expectedOwner)return;
   if(intent.quote&&intent.phase!=='uncertain'&&Date.parse(intent.quote.expiresAt)<=Date.now()){$('confirm-feedback').textContent='مهلت پیش‌نمایش تمام شد. آن را ببندید و دوباره بررسی کنید.';controls();return;}
   const pending={...intent,phase:'uncertain'};if(!saveIntent(pending)){$('confirm-feedback').textContent='ذخیرهٔ تأیید در مرورگر انجام نشد؛ امکان ذخیره‌سازی مرورگر را فعال و دوباره تلاش کنید.';return;}intent=pending;
   busy=true;controls();$('confirm-feedback').textContent='در حال ثبت درخواست…';

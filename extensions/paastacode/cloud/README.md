@@ -1,5 +1,32 @@
 # Managed cloud runtime (in progress)
 
+## Browser integration acceptance
+
+The beta18 native integration release is public, but its new MCP/skills/browser
+runtime has not been promoted to customer cloud workspaces. Do not infer cloud
+availability from the native release or from a successful container build.
+
+[Diagnostic run 38833929918](https://github.com/Paasta-Cloud/PaastaCode/actions/runs/38833929918)
+at `a8e3b840232e0b325519f0928e3df7e489a108af` failed real sandboxed Chromium
+acceptance on both Linux architectures. The preflight recorded UID 1000,
+zero effective capabilities, no-new-privileges, seccomp filtering and enforced
+`docker-default` AppArmor. The kernel allowed unprivileged user namespaces in
+principle and had a nonzero namespace limit, but the isolated `unshare(CLONE_NEWUSER)`
+probe returned EPERM. AppArmor's unprivileged-userns restriction was enabled.
+These observations do not establish which filter rejected the syscall.
+
+The next infrastructure acceptance must prove sandboxed browser navigation,
+interaction and screenshot in the actual workload security configuration, then
+rerun authenticated session restore and volume replacement. Keep owner/tenant
+authorization, private gateway, network isolation, non-root execution, read-only
+root, dropped capabilities and no-new-privileges. Do not use `--no-sandbox`,
+privileged containers or an unconfined security profile to pass the gate.
+[Playwright's Docker guidance](https://playwright.dev/docs/docker) explains the
+browser's user-namespace requirement; a purpose-built isolated runtime requires
+its own security review and production-cluster acceptance before rollout.
+
+## Runtime contract
+
 This is the execution component for browser-only PaastaCode. It is not yet an
 enabled customer service. The service-side owner-authorized web proxy is implemented
 in the Paasta platform draft. Browser workspace management and paid resource

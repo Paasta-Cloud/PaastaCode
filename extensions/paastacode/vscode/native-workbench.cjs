@@ -4,7 +4,7 @@ const path=require('node:path');
 const {randomBytes}=require('node:crypto');
 const {existsSync,readFileSync}=require('node:fs');
 
-const routes={GET:['state','quota','sessions','messages','status','permissions','workflow','git','git/diff','sync','knowledge'],POST:['login','login/poll','connect','sessions','prompt','abort','permission','access','save','sync','logout','knowledge']};
+const routes={GET:['state','quota','sessions','messages','status','permissions','workflow','git','git/diff','sync','integrations','knowledge'],POST:['login','login/poll','connect','sessions','prompt','abort','permission','access','save','sync','logout','integrations','integrations/auth','knowledge']};
 function allowedRoute(method,value){
   if(typeof value!=='string'||value.length>500||!['GET','POST'].includes(method))return false;
   const [route,query]=value.split('?');if(!routes[method].includes(route))return false;
@@ -17,8 +17,10 @@ const nativeIcons={"add":"<svg width=\"16\" height=\"16\" viewBox=\"0 0 16 16\" 
 nativeIcons.book='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 4h7a2 2 0 0 1 2 2v15a2 2 0 0 0-2-2H3zM12 6a2 2 0 0 1 2-2h7v15h-7a2 2 0 0 0-2 2"/></svg>';
 const icon=name=>nativeIcons[name].replace('<svg ','<svg class="icon" aria-hidden="true" focusable="false" ');
 const action=(id,name,label,extra='')=>`<button id="${id}" class="icon-button" type="button" aria-label="${label}" title="${label}" ${extra}>${icon(name)}</button>`;
-function attachNative(webview,context,connect,{folderCommand='workbench.action.files.openFolder',resolveWorkspace}={}){
+function attachNative(webview,context,connect){
   const nonce=randomBytes(24).toString('hex');
+  const sharedRoot=existsSync(path.join(context.extensionUri.fsPath,'client/web'))?path.join(context.extensionUri.fsPath,'client/web'):path.resolve(context.extensionUri.fsPath,'../web');
+  const integrationScript=readFileSync(path.join(sharedRoot,'integrations-ui.js'),'utf8'),integrationStyle=readFileSync(path.join(sharedRoot,'integrations.css'),'utf8');
   const media=vscode.Uri.joinPath(context.extensionUri,'media');
   let fontStyle='',fontRoot;
   if(context.extensionUri.fsPath){
@@ -35,31 +37,30 @@ function attachNative(webview,context,connect,{folderCommand='workbench.action.f
   const style=webview.asWebviewUri(vscode.Uri.joinPath(media,'native.css'));
   webview.html=`<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'nonce-${nonce}'; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';"><link rel="stylesheet" href="${style}">${fontStyle}</head><body>
 <header><strong>PaastaCode</strong><nav aria-label="ابزارهای گفتگو">${action('new','add','گفتگوی جدید')}${action('restore','history','گفتگوهای حساب')}${action('knowledge-open','book','دانش پروژه')}<details id="account-menu" class="action-menu"><summary class="icon-button" aria-label="گزینه‌های بیشتر" title="گزینه‌های بیشتر">${icon('ellipsis')}</summary><div class="menu-items"><button id="billing" type="button">${icon('credit-card')}اشتراک و مصرف</button><button id="refresh" type="button">${icon('refresh')}تازه‌سازی</button><button id="logout" type="button" hidden>${icon('sign-out')}خروج از حساب</button></div></details></nav></header>
-<p id="project-context" hidden>پروژه: <bdi id="project-name" dir="ltr"></bdi></p><div id="notice" role="status" hidden></div><section id="welcome"><h2>از پروژهٔ شما شروع کنیم.</h2><p id="welcome-text">در حال اتصال به پاستاکد…</p><button id="folder" hidden>باز کردن پوشه</button><button id="login" hidden>ورود با پاستا</button><button id="configure" hidden>انتخاب سقف مصرف و اتصال</button></section>
+<div id="notice" role="status" hidden></div><section id="welcome"><h2>از پروژهٔ شما شروع کنیم.</h2><p id="welcome-text">در حال اتصال به پاستاکد…</p><button id="folder" hidden>باز کردن پوشه</button><button id="login" hidden>ورود با پاستا</button><button id="configure" hidden>انتخاب سقف مصرف و اتصال</button></section>
 <section id="work" hidden><p id="quota" role="status"></p><label class="sr-only" for="sessions">گفتگو</label><div class="task-toolbar"><button id="tasks-toggle" type="button" aria-expanded="false" aria-controls="task-picker">${icon('history')}<span id="task-current">کارهای پروژه</span>${icon('chevron-down')}</button><span id="task-active-count" role="status"></span></div><select id="sessions" hidden aria-label="گفتگو"></select><section id="task-picker" hidden aria-label="کارهای پروژه"><input id="task-search" type="search" placeholder="جست‌وجوی کارها…" aria-label="جست‌وجوی کارها"><div id="task-filters" role="group" aria-label="فیلتر کارها"><button data-filter="all" aria-pressed="true">همه</button><button data-filter="active" aria-pressed="false">در جریان</button><button data-filter="waiting" aria-pressed="false">نیاز به تأیید</button></div><div id="task-list"></div><p id="task-no-results" hidden>کاری با این جست‌وجو و فیلتر پیدا نشد.</p></section><main id="messages" aria-label="پیام‌ها"><div class="empty-state"><h2>روی چه چیزی کار کنیم؟</h2><p>درخواستت را بنویس یا بخشی از کد را پیوست کن.</p></div></main><button id="latest" hidden>رفتن به آخرین خروجی ↓</button><section id="run-recap" hidden aria-label="خلاصهٔ اجرا"><strong id="recap-title"></strong><p id="recap-counts"></p><button id="recap-review" type="button">${icon('git-compare')} مرور تغییرات پروژه</button></section><div id="activity" role="status"></div><section id="permissions" aria-label="تأیید ابزارها"></section>
 <form id="composer"><div id="files"></div><label class="sr-only" for="prompt">درخواست شما</label><textarea id="prompt" placeholder="چه تغییری می‌خواهید؟" rows="3"></textarea><div class="model-row"><label class="sr-only" for="model">مدل اجرا</label><div class="select-shell"><select id="model" title="مدل اجرا"></select>${icon('chevron-down')}</div></div><div class="controls">${action('attach','attach','پیوست فایل')}${action('selection','code','پیوست کد انتخاب‌شده')}<label class="sr-only" for="access">دسترسی</label><div class="select-shell access-select"><select id="access" title="دسترسی"><option value="review">با تأیید شما</option><option value="full">Full Access</option></select>${icon('chevron-down')}</div><span class="control-spacer"></span><button id="send" class="icon-button send-button" type="submit" aria-label="ارسال درخواست" title="ارسال · Enter">${icon('arrow-up')}</button>${action('stop','debug-stop','توقف اجرا','hidden')}</div><details class="model-settings"><summary>${icon('settings-gear')}تنظیمات مدل‌ها</summary><label>ترکیب پیشنهادی<select id="model-preset"></select></label><p id="preset-description"></p><label>مدل برنامه‌ریزی<select id="planner"></select></label><p id="model-prices" dir="auto"></p></details><p id="model-cost-warning" role="status" hidden>این انتخاب هزینهٔ بیشتری دارد. ترکیب‌های پیشنهادی را برای کاهش مصرف بررسی کنید.</p></form>
 <footer>${action('save','cloud-upload','ذخیرهٔ گفتگو در حساب')}${action('changes','git-compare','تغییرات پروژه')}<span>Powered by OpenCode</span></footer></section><script nonce="${nonce}">${taskStateScript}</script><script nonce="${nonce}" src="${script}"></script></body></html>`;
-  webview.html=webview.html.replace('</head>',`<style nonce="${nonce}">${reviewStyle}</style></head>`);
-  let revision,disposed=false,selected=resolveWorkspace?.();
-  const changes=resolveWorkspace&&vscode.window?.onDidChangeActiveTextEditor?.(()=>{
-    const next=resolveWorkspace();if(next===selected)return;selected=next;
-    if(!disposed)void webview.postMessage({type:'workspaceChanged'});
-  });
+  webview.html=webview.html.replace('</head>',`<style nonce="${nonce}">${integrationStyle}\n${reviewStyle}</style></head>`).replace('<button id="refresh"',`<button id="integrations-open" type="button">${icon('settings-gear')}ابزارها و مهارت‌ها</button><button id="refresh"`).replace(`<script nonce="${nonce}" src=`,`<script nonce="${nonce}">${integrationScript}</script><script nonce="${nonce}" src=`);
+  let revision,disposed=false;
   const subscription=webview.onDidReceiveMessage(async message=>{
     const id=message?.id;if(!Number.isSafeInteger(id)||id<1)return;
     try{
       if(!vscode.workspace.isTrusted)throw new Error('ابتدا اعتماد به پوشهٔ پروژه را بررسی کنید.');
-      if(vscode.workspace.workspaceFolders?.length&&!['folder','billing','knowledgeExport','sourceControl'].includes(message.action)&&!(message.action==='api'&&message.path==='state')){
-        const connection=await connect();
-        if(connection.workspace!==message.workspaceId)throw new Error('پروژهٔ فعال تغییر کرده است؛ تازه‌سازی را بزنید و درخواست را در پروژهٔ درست بررسی کنید.');
-      }
       let result;
-      if(message.action==='folder'){await vscode.commands.executeCommand(folderCommand);result={};}
+      if(message.action==='folder'){await vscode.commands.executeCommand('workbench.action.files.openFolder');result={};}
       else if(message.action==='billing'){await vscode.commands.executeCommand('paastacode.billing');result={};}
       else if(message.action==='knowledgeExport'){if(typeof message.content!=='string'||Buffer.byteLength(message.content)>16384)throw new Error('متن معتبر نیست.');await vscode.window.showTextDocument(await vscode.workspace.openTextDocument({content:message.content,language:'markdown'}));result={};}
       else if(message.action==='sourceControl'){await vscode.commands.executeCommand('workbench.view.scm');result={};}
+      else if(message.action==='oauth'){
+        const uri=new URL(message.url);if(uri.protocol!=='https:'||uri.username||uri.password)throw new Error('نشانی ورود معتبر نیست.');
+        await vscode.env.openExternal(vscode.Uri.parse(uri.href));result={};
+      }
       else if(!vscode.workspace.workspaceFolders?.length){result={noWorkspace:true};}
-      else if(message.action==='attach'){
+      else if(message.action==='skillFile'){
+        const uris=await vscode.window.showOpenDialog({canSelectMany:false,canSelectFolders:false,filters:{'Skill Markdown':['md']},openLabel:'انتخاب SKILL.md'});result=[];
+        for(const uri of uris||[]){if(uri.scheme!=='file')throw new Error('فایل محلی انتخاب کنید.');const info=await fs.stat(uri.fsPath);if(!info.isFile()||info.size>128000)throw new Error('فایل مهارت باید حداکثر ۱۲۸ کیلوبایت باشد.');result.push({name:'SKILL.md',data:(await fs.readFile(uri.fsPath)).toString('base64')});}
+      }else if(message.action==='attach'){
         const uris=await vscode.window.showOpenDialog({canSelectMany:true,canSelectFolders:false,openLabel:'پیوست به درخواست'});result=[];
         for(const uri of uris||[]){if(uri.scheme!=='file')throw new Error('فایل محلی انتخاب کنید.');const stat=await fs.stat(uri.fsPath);if(!stat.isFile()||stat.size>4*1024*1024)throw new Error('هر فایل باید حداکثر ۴ مگابایت باشد.');result.push({name:path.basename(uri.fsPath),data:(await fs.readFile(uri.fsPath)).toString('base64')});}
       }else if(message.action==='selection'){
@@ -67,7 +68,7 @@ function attachNative(webview,context,connect,{folderCommand='workbench.action.f
         const text=editor.document.getText(editor.selection);if(Buffer.byteLength(text)>4*1024*1024)throw new Error('انتخاب کد بیش از حد بزرگ است.');result=[{name:path.basename(editor.document.uri.fsPath),data:Buffer.from(text).toString('base64')}];
       }else if(message.action==='file'||message.action==='diff'){
         if(typeof message.path!=='string')throw new Error('مسیر فایل معتبر نیست.');
-        const connection=await connect(),root=await fs.realpath(connection.workspace||vscode.workspace.workspaceFolders[0].uri.fsPath),file=await fs.realpath(path.resolve(root,message.path));
+        const root=await fs.realpath(vscode.workspace.workspaceFolders[0].uri.fsPath),file=await fs.realpath(path.resolve(root,message.path));
         if(file!==root&&!file.startsWith(root+path.sep))throw new Error('فایل باید داخل همین پروژه باشد.');
         if(message.action==='diff')await vscode.commands.executeCommand('git.openChange',vscode.Uri.file(file));
         else await vscode.window.showTextDocument(vscode.Uri.file(file),{preview:true});result={};
@@ -85,12 +86,12 @@ function attachNative(webview,context,connect,{folderCommand='workbench.action.f
         const method=message.method||'GET';if(!allowedRoute(method,message.path))throw new Error('درخواست این پنل مجاز نیست.');
         if(method==='POST'&&(message.accountRevision===undefined||String(message.accountRevision)!==String(revision)))throw new Error('حساب این پنجره تغییر کرده است؛ وضعیت را تازه‌سازی کنید.');
         const connection=await connect();result=await connection.request(message.path,method,message.body,message.accountRevision??revision);
-        if(message.path==='state'){revision=result.accountRevision;result={...result,workspaceId:connection.workspace};}
+        if(message.path==='state')revision=result.accountRevision;
         if(message.path==='login'&&result.url){const uri=new URL(result.url);if(uri.protocol!=='https:'||!['console.paasta.cloud','paasta.cloud'].includes(uri.hostname)||uri.pathname!=='/cli/authorize')throw new Error('نشانی ورود معتبر نیست.');await vscode.env.openExternal(vscode.Uri.parse(uri.href));}
       }else throw new Error('عملیات پشتیبانی نمی‌شود.');
       if(!disposed)await webview.postMessage({id,result});
     }catch(error){if(!disposed)await webview.postMessage({id,error:error.message||'عملیات انجام نشد؛ دوباره بررسی کنید.'});}
   });
-  return {dispose(){disposed=true;subscription.dispose();changes?.dispose();}};
+  return {dispose(){disposed=true;subscription.dispose();}};
 }
 module.exports={attachNative,allowedRoute};

@@ -4,11 +4,10 @@ const fs=require("node:fs");
 const path=require("node:path");
 const {pathToFileURL}=require("node:url");
 let child;
-function activate(context,{container='paastacode',embedded=false,clientPath,validateWorkspace,resolveWorkspace,folderCommand='workbench.action.files.openFolder',viewId='paastacode.home'}={}){
+function activate(context){
 
   let updating=false;
   async function update(manual=false){
-    if(embedded){if(manual)await vscode.commands.executeCommand('workbench.extensions.action.checkForUpdates');return;}
     if(updating)return;if(!manual&&!vscode.workspace.getConfiguration("paastacode").get("autoUpdate",true))return;updating=true;
     try{
       const root=path.join(__dirname,"client");
@@ -26,7 +25,7 @@ function activate(context,{container='paastacode',embedded=false,clientPath,vali
   context.subscriptions.push(vscode.commands.registerCommand("paastacode.update",()=>update(true)));
   context.subscriptions.push(vscode.commands.registerCommand('paastacode.billing',async()=>{
     try{
-      const custom=clientPath||vscode.workspace.getConfiguration('paastacode').get('clientPath');
+      const custom=vscode.workspace.getConfiguration('paastacode').get('clientPath');
       if(custom&&!vscode.workspace.isTrusted)return vscode.window.showErrorMessage('برای استفاده از مسیر نصب سفارشی، اعتماد به پروژه را بررسی کنید.');
       const root=custom?path.dirname(path.dirname(custom)):fs.existsSync(path.join(__dirname,'client/src/account.mjs'))?path.join(__dirname,'client'):path.resolve(__dirname,'..');
       const {PaastaAccount,billingUrl}=await import(pathToFileURL(path.join(root,'src/account.mjs')).href),account=await new PaastaAccount().load(),current=await account.context(),url=billingUrl(account.origin,current.account);
@@ -40,14 +39,12 @@ function activate(context,{container='paastacode',embedded=false,clientPath,vali
   let connecting,connectedWorkspace;
   async function connect(){
     if(!vscode.workspace.isTrusted)throw new Error('اعتماد به پروژه لازم است.');
-    const selected=resolveWorkspace?resolveWorkspace():vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    if(!selected)throw new Error('یک فایل از پروژه باز کنید یا از پنل پاستا پروژه را انتخاب کنید.');
-    if(connectedWorkspace===selected&&connecting)return connecting;
-    connectedWorkspace=selected;
+    const folder=vscode.workspace.workspaceFolders?.[0];if(!folder)throw new Error('ابتدا پوشهٔ پروژه را باز کنید.');
+    if(connectedWorkspace===folder.uri.fsPath&&connecting)return connecting;
+    connectedWorkspace=folder.uri.fsPath;
     connecting=(async()=>{
-    const workspace=fs.realpathSync(selected);
-    if(validateWorkspace)validateWorkspace(workspace);
-    const custom=clientPath||vscode.workspace.getConfiguration("paastacode").get("clientPath");
+    const workspace=fs.realpathSync(folder.uri.fsPath);
+    const custom=vscode.workspace.getConfiguration("paastacode").get("clientPath");
     const bundled=path.join(__dirname,"client/bin/paastacode.mjs");
     const client=custom||(fs.existsSync(bundled)?bundled:path.resolve(__dirname,"../bin/paastacode.mjs"));
     if(!path.isAbsolute(client)||!fs.existsSync(client))throw new Error("مسیر نصب پاستاکد را در تنظیمات VS Code بررسی کنید.");
@@ -74,7 +71,7 @@ function activate(context,{container='paastacode',embedded=false,clientPath,vali
     const url=new URL(connection.url);
     if(url.hostname!=="127.0.0.1"||url.protocol!=="http:"||!/^[A-Za-z0-9_-]{43}$/.test(connection.capability))return;
 
-      return {workspace,async request(route,method='GET',body,revision){
+      return {async request(route,method='GET',body,revision){
         try{
           const response=await fetch(url.origin+'/api/'+route,{method,headers:{Authorization:'Bearer '+connection.capability,...(revision===undefined?{}:{'X-PaastaCode-Account':String(revision)}),...(body===undefined?{}:{'Content-Type':'application/json'})},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(90000)});
           const text=await response.text();let result;try{result=JSON.parse(text);}catch{throw new Error('پاسخ موتور کامل دریافت نشد؛ تازه‌سازی را بزنید.');}
@@ -83,9 +80,9 @@ function activate(context,{container='paastacode',embedded=false,clientPath,vali
       }};
     })().catch(error=>{connecting=null;throw error;});return connecting;
   }
-  context.subscriptions.push(vscode.window.registerWebviewViewProvider(viewId,{resolveWebviewView(view){const bridge=attachNative(view.webview,context,connect,{folderCommand,resolveWorkspace});view.onDidDispose(()=>bridge.dispose());}},{webviewOptions:{retainContextWhenHidden:true}}));
-  context.subscriptions.push(vscode.commands.registerCommand('paastacode.open',async()=>{if(!vscode.workspace.isTrusted)return vscode.window.showErrorMessage('ابتدا اعتماد به پوشهٔ پروژه را بررسی کنید.');if(!vscode.workspace.workspaceFolders?.length)return vscode.commands.executeCommand('workbench.action.files.openFolder');await vscode.commands.executeCommand('workbench.view.extension.'+container);if(embedded)return vscode.commands.executeCommand(viewId+'.focus');}));
-  context.subscriptions.push(vscode.commands.registerCommand('paastacode.openEditor',()=>{const panel=vscode.window.createWebviewPanel('paastacode','پاستاکد',vscode.ViewColumn.Beside,{enableScripts:true,retainContextWhenHidden:true});const bridge=attachNative(panel.webview,context,connect,{folderCommand,resolveWorkspace});panel.onDidDispose(()=>bridge.dispose());}));
+  context.subscriptions.push(vscode.window.registerWebviewViewProvider('paastacode.home',{resolveWebviewView(view){const bridge=attachNative(view.webview,context,connect);view.onDidDispose(()=>bridge.dispose());}},{webviewOptions:{retainContextWhenHidden:true}}));
+  context.subscriptions.push(vscode.commands.registerCommand('paastacode.open',async()=>{if(!vscode.workspace.isTrusted)return vscode.window.showErrorMessage('ابتدا اعتماد به پوشهٔ پروژه را بررسی کنید.');if(!vscode.workspace.workspaceFolders?.length)return vscode.commands.executeCommand('workbench.action.files.openFolder');return vscode.commands.executeCommand('workbench.view.extension.paastacode');}));
+  context.subscriptions.push(vscode.commands.registerCommand('paastacode.openEditor',()=>{const panel=vscode.window.createWebviewPanel('paastacode','پاستاکد',vscode.ViewColumn.One,{enableScripts:true,retainContextWhenHidden:true});const bridge=attachNative(panel.webview,context,connect);panel.onDidDispose(()=>bridge.dispose());}));
 }
 function deactivate(){}
 module.exports={activate,deactivate};

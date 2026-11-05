@@ -46,6 +46,7 @@ try{
         return route.fulfill({contentType:"application/zip",headers:{"Content-Disposition":'attachment; filename="PaastaCode-project.zip"'},body:zip});
       }
       if(path.endsWith('/runtime/quota'))return quotaFailure?json({error:'مسیر درخواست مجاز نیست.',workspaceError:true},404):json({active:true,plan:'پایه',startsAt:new Date().toISOString(),endsAt:new Date(Date.now()+25*86400000).toISOString(),quotas:{week:{remainingPercent:75,resetAt:new Date(Date.now()+86400000).toISOString()}}});
+      if(path.endsWith('/runtime/projects')||path.endsWith('/runtime/projects/select'))return json({projects:[{id:'default',name:'پروژهٔ اصلی'}],activeProject:'default'});
       if(path.endsWith("/runtime/state"))return json({connected:true,configured:true,workspace:"/data/private-path",account:{...account,balanceToman:1000000},models:[{id:"synthetic",name:"مدل پاستا",input_toman_per_million:100,output_toman_per_million:200}],features:{independentRuntime:true,workspaceAccess:true,subscriptionUsage:true},accountRevision:1,accessMode:"review"});
       if(path.includes("/runtime/"))return json(path.endsWith("/status")?{}:[]);
       if(path.endsWith("/catalog"))return json({enabled,plans:[{id:"basic",name:"پایه",cpu_millicores:1000,memory_mib:2048,monthly_price_toman:"100000"}],storage:[{id:existingId,name:"دیسک پروژه",region:"تهران",min_size_gb:1,max_size_gb:50,price_per_gb_month_toman:"2000"}]});
@@ -73,17 +74,17 @@ try{
   for(const [name,width,height,scheme] of [["desktop",1440,1000,"light"],["mobile",390,844,"dark"],["narrow",320,800,"light"]]){
     await page.setViewportSize({width,height});await page.emulateMedia({colorScheme:scheme});
     assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-    const downloadButton=await page.getByRole("button",{name:"دریافت پروژه",exact:true}).boundingBox();assert(downloadButton.y+downloadButton.height<=height,"Workspace download must be visible before scrolling");
+    const downloadButton=await page.getByRole("button",{name:"دریافت پروژهٔ فعال",exact:true}).boundingBox();assert(downloadButton.y+downloadButton.height<=height,"Workspace download must be visible before scrolling");
     await page.screenshot({path:resolve(".artifacts/cloud-hub-"+name+".png"),animations:"disabled"});
   }
   await page.setViewportSize({width:1440,height:1000});await page.emulateMedia({colorScheme:"light"});
-  const downloadStarted=page.waitForEvent("download");await page.getByRole("button",{name:"دریافت پروژه",exact:true}).click();
+  const downloadStarted=page.waitForEvent("download");await page.getByRole("button",{name:"دریافت پروژهٔ فعال",exact:true}).click();
   // Native Chromium downloads bypass route mocks; real ZIP receipt is covered
   // by download-browser.mjs against an actual HTTP fixture server.
   const download=await downloadStarted;assert.equal(download.suggestedFilename(),"PaastaCode-project.zip");
   assert((await page.locator("#hosted-feedback").innerText()).includes("شروع شد"));assert(await page.locator("#hosted-export-note").isVisible());
   exportFailure=true;const cancelledBefore=calls.filter(call=>call.method==="DELETE").length;
-  await page.getByRole("button",{name:"دریافت پروژه",exact:true}).click();await page.waitForFunction(()=>document.querySelector("#hosted-feedback").textContent.includes("خروجی پروژه کامل نشد"));
+  await page.getByRole("button",{name:"دریافت پروژهٔ فعال",exact:true}).click();await page.waitForFunction(()=>document.querySelector("#hosted-feedback").textContent.includes("خروجی پروژه کامل نشد"));
   assert.equal(calls.filter(call=>call.method==="DELETE").length,cancelledBefore+1,"Failed preparation must release the export lock");exportFailure=false;
   await page.locator("#hosted-create summary").click();await page.locator("#hosted-name").fill("اپلیکیشن تازه");await page.locator("#hosted-quote").click();await page.locator("#hosted-review").waitFor({state:"visible"});
   assert((await page.locator("#hosted-terms").textContent()).includes("۷ روز"));assert((await page.locator("#hosted-costs").textContent()).includes("۱۱۰٬۰۰۰"));assert.equal(creates,0);
@@ -97,16 +98,16 @@ try{
   assert.equal(await page.locator("#hosted-dismiss").isDisabled(),true);await page.reload();await page.locator("#hosted-review").waitFor({state:"visible"});
   await page.locator("#hosted-confirm").click();await page.locator("#hosted-review").waitFor({state:"hidden"});assert.equal(quotes,1);assert.equal(creates,2);assert.equal(workspaces.filter(row=>row.id===createdId).length,1);
   workspaces.find(row=>row.id===createdId).status="ready";workspaces.find(row=>row.id===createdId).first_ready_at=new Date().toISOString();
-  await page.locator("#hosted-refresh").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();
-  await page.locator("#composer").waitFor({state:"visible"});assert.equal(await page.locator("#workspace-name").textContent(),"اپلیکیشن تازه");assert.equal(await page.locator("#local-tab").textContent(),"این فضای کار");
-  await page.waitForFunction(()=>document.querySelector('#subscription-plan').textContent.includes('وضعیت اشتراک دریافت نشد'));assert.equal(await page.locator('#hosted-hub').isVisible(),false);assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('paastacode-cloud-workspace')).id),createdId,'Quota failure must preserve the chosen workspace');quotaFailure=false;await page.reload();await page.locator('#composer').waitFor({state:'visible'});await page.waitForFunction(()=>document.querySelector('#subscription-week-label').textContent.includes('۷۵'));assert.equal(await page.locator('#workspace-name').textContent(),'اپلیکیشن تازه');
+  await page.locator("#hosted-refresh").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();await page.locator('.cloud-project-option').click();
+  await page.locator("#composer").waitFor({state:"visible"});assert.equal(await page.locator("#workspace-name").textContent(),"اپلیکیشن تازه / پروژهٔ اصلی");assert.equal(await page.locator("#local-tab").textContent(),"این فضای کار");
+  await page.waitForFunction(()=>document.querySelector('#subscription-plan').textContent.includes('وضعیت اشتراک دریافت نشد'));assert.equal(await page.locator('#hosted-hub').isVisible(),false);assert.equal(await page.evaluate(()=>JSON.parse(sessionStorage.getItem('paastacode-cloud-workspace')).id),createdId,'Quota failure must preserve the chosen workspace');quotaFailure=false;await page.reload();await page.locator('#composer').waitFor({state:'visible'});await page.waitForFunction(()=>document.querySelector('#subscription-week-label').textContent.includes('۷۵'));assert.equal(await page.locator('#workspace-name').textContent(),'اپلیکیشن تازه / پروژهٔ اصلی');
   assert(await page.locator(".thread-heading").isVisible());assert(await page.locator(".header-actions").isVisible());
   assert(!requests.some(url=>url.startsWith("http://127.0.0.1")),"cloud mode must never need a loopback runtime");
   await page.locator("#prompt").fill("پیش‌نویس پروژهٔ تازه");
-  await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"وب‌سایت فروشگاه"}).getByRole("button",{name:"باز کردن"}).click();
-  await page.waitForFunction(()=>document.querySelector("#workspace-name").textContent==="وب‌سایت فروشگاه");assert.equal(await page.locator("#prompt").inputValue(),"");
-  await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();
-  await page.waitForFunction(()=>document.querySelector("#workspace-name").textContent==="اپلیکیشن تازه");assert.equal(await page.locator("#prompt").inputValue(),"پیش‌نویس پروژهٔ تازه");
+  await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"وب‌سایت فروشگاه"}).getByRole("button",{name:"باز کردن"}).click();await page.locator('.cloud-project-option').click();
+  await page.waitForFunction(()=>document.querySelector("#workspace-name").textContent==="وب‌سایت فروشگاه / پروژهٔ اصلی");assert.equal(await page.locator("#prompt").inputValue(),"");
+  await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"اپلیکیشن تازه"}).getByRole("button",{name:"باز کردن"}).click();await page.locator('.cloud-project-option').click();
+  await page.waitForFunction(()=>document.querySelector("#workspace-name").textContent==="اپلیکیشن تازه / پروژهٔ اصلی");assert.equal(await page.locator("#prompt").inputValue(),"پیش‌نویس پروژهٔ تازه");
   await page.locator("#hosted-open").click();await page.locator(".hosted-project").filter({hasText:"وب‌سایت فروشگاه"}).getByRole("button",{name:"لغو",exact:true}).click();
   await page.locator("#hosted-review").waitFor({state:"visible"});assert((await page.locator("#hosted-terms").textContent()).includes("برای همیشه حذف"));
   for(const scheme of ["light","dark"]){

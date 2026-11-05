@@ -57,5 +57,3 @@ label select{display:block;width:100%;margin-block:5px}button[aria-busy=true] .i
 #run-recap[data-outcome=attention] strong{color:var(--vscode-errorForeground,var(--vscode-foreground))}
 
 #task-search{border:1px solid var(--vscode-widget-border);border-radius:4px;padding:7px 8px;background:var(--vscode-input-background);color:var(--vscode-input-foreground);font:inherit}#task-search::placeholder{color:var(--vscode-input-placeholderForeground)}
-
-#project-context{margin:4px 0 10px;overflow-wrap:anywhere;color:var(--vscode-descriptionForeground);font-size:12px}

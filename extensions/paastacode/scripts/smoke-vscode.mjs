@@ -28,14 +28,13 @@ try{
   const executable=await downloadAndUnzipVSCode(download);
   await runVSCodeCommand([...profileArgs,"--install-extension",vsix,"--force"],{...download,reuseMachineInstall:true,spawn:{timeout:90000,env:{...process.env,PAASTACODE_HOME:join(home,"account")}}});
   const installed=await runVSCodeCommand([...profileArgs,"--list-extensions","--show-versions"],{...download,reuseMachineInstall:true,spawn:{timeout:30000}});
-  const extensionId=manifest.publisher+'.'+manifest.name;
-  assert(installed.stdout.split(/\r?\n/).includes(extensionId+"@"+manifest.version),"The expected customer VSIX must be installed");
+  assert(installed.stdout.split(/\r?\n/).includes("paasta.paastacode@"+manifest.version),"The expected customer VSIX must be installed");
   const log=await import("node:fs");const stream=log.createWriteStream(join(output,"vscode.log"));
   let runnerError;
   try{
     await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:driver,extensionTestsPath:resolve("test/vscode-smoke.cjs"),
       launchArgs:[...(empty?[]:[workspace]),...profileArgs,"--remote-debugging-port="+port,"--disable-gpu"],stdout:stream,stderr:stream,
-      extensionTestsEnv:{PAASTACODE_HOME:join(home,"account"),PAASTACODE_TEST_CDP:String(port),PAASTACODE_INSTALLED_ROOT:extensions,PAASTACODE_EXPECT_EXTENSION_ID:extensionId,PAASTACODE_EXPECT_EXTENSION_VERSION:manifest.version,PAASTACODE_VSCODE_OUTPUT:output,PAASTACODE_VSCODE_EMPTY:empty?'1':'0'}});
+      extensionTestsEnv:{PAASTACODE_HOME:join(home,"account"),PAASTACODE_TEST_CDP:String(port),PAASTACODE_INSTALLED_ROOT:extensions,PAASTACODE_EXPECT_EXTENSION_ID:manifest.publisher+"."+manifest.name,PAASTACODE_EXPECT_EXTENSION_VERSION:manifest.version,PAASTACODE_VSCODE_OUTPUT:output,PAASTACODE_VSCODE_EMPTY:empty?'1':'0'}});
   }catch(error){runnerError=error;}finally{await new Promise(r=>stream.end(r));}
   if(runnerError){
     const diagnostic=(await readFile(join(output,"vscode.log"),"utf8")).split(/\r?\n/).filter(line=>/error|failed|assert|ERR_|fatal/i.test(line)).slice(-20).join("\n")

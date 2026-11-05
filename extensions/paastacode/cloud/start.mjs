@@ -14,17 +14,18 @@ delete process.env.PAASTACODE_CLOUD_SECRET_FILE;
 const {startServer}=await import("../src/server.mjs");
 const {PaastaAccount}=await import("../src/account.mjs");
 const {cloudGateway}=await import("./gateway.mjs");
+const {CloudProjects}=await import('./projects.mjs');
 const account=new PaastaAccount(undefined,undefined,{owner:{id:process.env.PAASTACODE_CLOUD_USER_ID,tenantId:process.env.PAASTACODE_CLOUD_TENANT_ID}});
 try{await account.load();}
 catch{console.warn("Saved cloud login could not be verified; sign-in remains available and stored data is retained.");}
-const broker=await startServer({workspace,account});
+const projects=await new CloudProjects({root,createBroker:workspace=>startServer({workspace,account,cloud:true})}).start();
 let gateway;
-try{gateway=await cloudGateway({broker,secret,port:8080});}
-catch(error){await broker.close();throw error;}
+try{gateway=await cloudGateway({projects,secret,port:8080});}
+catch(error){await projects.close();throw error;}
 let closing=false;
 for(const signal of ["SIGINT","SIGTERM"])process.once(signal,async()=>{
   if(closing)return;closing=true;
   const timeout=setTimeout(()=>process.exit(1),30_000);timeout.unref();
-  await gateway.close();await broker.close();clearTimeout(timeout);process.exit(0);
+  await gateway.close();await projects.close();clearTimeout(timeout);process.exit(0);
 });
 console.log("PaastaCode private cloud runtime ready");

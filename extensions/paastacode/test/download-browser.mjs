@@ -15,8 +15,10 @@ const server=createServer(async(request,response)=>{
   try{
     if(path.startsWith("/api/paastacode/workspaces")){
       requests.push(path);
+      if(path.endsWith('/runtime/projects'))return json({projects:[{id:'default',name:'پروژهٔ اصلی'}],activeProject:'default'});
       if(path.endsWith("/runtime/export")){
         assert.equal(request.headers["x-paastacode-owner"],owner);
+        assert.equal(request.headers['x-paastacode-project'],'default');
         if(request.method==="POST"){starts++;request.resume();return json({id:transfer});}
         assert.equal(url.searchParams.get("id"),transfer);
         if(request.method==="DELETE"){cancels++;request.resume();return json({ok:true});}
@@ -24,7 +26,7 @@ const server=createServer(async(request,response)=>{
         assert.equal(url.searchParams.get("offset"),"0");return json({offset:0,nextOffset:zip.length,data:zip.toString("base64"),sha256:createHash("sha256").update(zip).digest("hex"),done:true});
       }
       if(path.endsWith("/export")){
-        assert.equal(url.searchParams.get("id"),transfer);assert.equal(url.searchParams.get("owner"),owner);
+        assert.equal(url.searchParams.get("id"),transfer);assert.equal(url.searchParams.get("owner"),owner);assert.equal(url.searchParams.get('project'),'default');
         response.writeHead(200,{"Content-Type":"application/zip","Content-Disposition":'attachment; filename="PaastaCode-project.zip"',"Content-Length":zip.length});response.end(zip);return;
       }
       if(path.endsWith("/catalog"))return json({enabled:false,plans:[],storage:[]});
@@ -43,7 +45,7 @@ await new Promise(done=>server.listen(0,"127.0.0.1",done));origin="http://127.0.
 const browser=await chromium.launch({headless:true,channel:process.env.PAASTACODE_BROWSER_CHANNEL||(process.platform==="win32"?"msedge":undefined)});
 try{
   const page=await browser.newPage({acceptDownloads:true}),errors=[];page.on("pageerror",error=>errors.push(error.message));
-  await page.goto(origin);const button=page.getByRole("button",{name:"دریافت پروژه",exact:true});await button.waitFor();
+  await page.goto(origin);const button=page.getByRole("button",{name:"دریافت پروژهٔ فعال",exact:true});await button.waitFor();
   const receive=async()=>{const pending=page.waitForEvent("download");await button.click();const download=await pending;assert.equal(await download.failure(),null);assert.equal(download.suggestedFilename(),"PaastaCode-project.zip");assert.deepEqual(await readFile(await download.path()),zip);};
   await receive();assert((await page.locator("#hosted-feedback").innerText()).includes("شروع شد"));
   fail=true;await button.click();await page.waitForFunction(()=>document.querySelector("#hosted-feedback").textContent.includes("خروجی پروژه کامل نشد"));assert.equal(cancels,1);

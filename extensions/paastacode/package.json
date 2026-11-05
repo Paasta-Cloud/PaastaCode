@@ -17,7 +17,7 @@
   },
   "scripts": {
     "start": "node bin/paastacode.mjs web",
-    "test": "node --test --test-concurrency=2 test/*.test.mjs",
+    "test": "node --test --test-reporter=tap test/*.test.mjs",
     "check": "node scripts/check.mjs",
     "desktop": "electron desktop/main.cjs",
     "package": "node scripts/package.mjs",
@@ -30,6 +30,7 @@
     "src",
     "web",
     "licenses",
+    "docs",
     "paasta-cli",
     "LICENSE",
     "OPENCODE_LICENSE",
@@ -39,8 +40,10 @@
     "CHANGELOG.md"
   ],
   "dependencies": {
+    "@playwright/mcp": "0.0.83",
     "electron-updater": "6.8.9",
-    "opencode-ai": "1.19.0"
+    "opencode-ai": "1.19.0",
+    "proxy-chain": "3.0.1"
   },
   "engines": {
     "node": ">=22"
