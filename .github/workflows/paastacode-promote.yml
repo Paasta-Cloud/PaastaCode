@@ -133,6 +133,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      - name: Test native promotion fences
+        run: python3 scripts/test-native-vsix-promotion.py
       - name: Verify and promote installed unified packages
         env:
           GH_TOKEN: ${{ github.token }}
