@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import {mkdtemp,mkdir,readFile,writeFile,rm,stat,symlink,chmod} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,writeFile,rm,stat,symlink,chmod,realpath} from 'node:fs/promises';
 import os from 'node:os';import path from 'node:path';import {createRequire,Module} from 'node:module';
 const require=createRequire(import.meta.url),vault=require('../coding-credentials.cjs'),profiles=require('../coding-provider-config.cjs');
 const file=require.resolve('../coding-tools.cjs'),native=new Module(file);native.filename=file;native.paths=Module._nodeModulePaths(path.dirname(file));native.require=id=>id==='vscode'?{}:createRequire(file)(id);native._compile(await readFile(file,'utf8'),file);
 const {parseLink,environment,configure}=native.exports;
-const scratch=await mkdtemp(path.join(os.tmpdir(),'paasta-tools-')),base=path.join(scratch,'private'),workspace=path.join(scratch,'workspace'),account='a'.repeat(64),foreign='b'.repeat(64),key='paasta_ai_'+'x'.repeat(43),before={...process.env};
+const scratch=await realpath(await mkdtemp(path.join(os.tmpdir(),'paasta-tools-'))),base=path.join(scratch,'private'),workspace=path.join(scratch,'workspace'),account='a'.repeat(64),foreign='b'.repeat(64),key='paasta_ai_'+'x'.repeat(43),before={...process.env};
 const link=(query={})=>({scheme:'vscode',authority:'paasta-cloud.paasta',path:'/tools',fragment:'',query:new URLSearchParams({account,tool:'codex',provider:'paasta',project:'demo',...query}).toString()});
 try{
  await mkdir(workspace);await vault.directory(base,account);
@@ -55,4 +55,4 @@ try{
  if(process.platform==='win32'){groups='S-1-16-12288';await assert.rejects(launcher.exports.standardUser(),/administrator/);}
  else if(process.getuid?.()===0)await assert.rejects(launcher.exports.standardUser(),/root/);
  console.log('Native tools: constrained URI, environment separation, protected credentials, safe generated config, personal restore, manual-edit rejection, symlink and concurrency guards passed.');
-}finally{for(const key of Object.keys(process.env))if(!(key in before))delete process.env[key];Object.assign(process.env,before);assert(path.resolve(scratch).startsWith(path.resolve(os.tmpdir())+path.sep));await rm(scratch,{recursive:true,force:true});}
+}finally{for(const key of Object.keys(process.env))if(!(key in before))delete process.env[key];Object.assign(process.env,before);assert(path.resolve(scratch).startsWith(await realpath(os.tmpdir())+path.sep));await rm(scratch,{recursive:true,force:true});}

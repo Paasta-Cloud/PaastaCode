@@ -28,7 +28,7 @@ try{
   const executable=await downloadAndUnzipVSCode(download);
   await runVSCodeCommand([...profileArgs,"--install-extension",vsix,"--force"],{...download,reuseMachineInstall:true,spawn:{timeout:90000,env:{...process.env,PAASTACODE_HOME:join(home,"account")}}});
   const installed=await runVSCodeCommand([...profileArgs,"--list-extensions","--show-versions"],{...download,reuseMachineInstall:true,spawn:{timeout:30000}});
-  assert(installed.stdout.split(/\r?\n/).includes("paasta.paastacode@"+manifest.version),"The expected customer VSIX must be installed");
+  assert(installed.stdout.split(/\r?\n/).includes(manifest.publisher+"."+manifest.name+"@"+manifest.version),"The expected customer VSIX must be installed");
   const log=await import("node:fs");const stream=log.createWriteStream(join(output,"vscode.log"));
   let runnerError;
   try{
