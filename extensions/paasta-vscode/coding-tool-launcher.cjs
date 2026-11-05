@@ -21,7 +21,9 @@ async function resolveCli(tool,folder,env=process.env){
  throw Error('نسخهٔ اجرایی رسمی '+name+' پیدا نشد. آن را از راهنمای رسمی ابزار نصب کنید؛ فایل‌های پروژه و wrapperهای cmd اجرا نمی‌شوند.');
 }
 async function launchCli(vscode,tool,folder,env){
- await standardUser();const executable=await resolveCli(tool,folder,env);
+ await standardUser();
+ for(const name of ['CODEX_HOME','CLAUDE_CONFIG_DIR'])if(env[name]){if(!path.isAbsolute(env[name]))throw Error('مسیر تنظیمات ابزار باید مطلق باشد.');let root;try{root=await fs.realpath(env[name]);}catch(error){if(error.code!=='ENOENT')throw error;root=path.resolve(env[name]);}if(inWorkspace(folder,root))throw Error('تنظیمات حساب ابزار نباید داخل پروژه باشد.');}
+ const executable=await resolveCli(tool,folder,env);
  if(await vscode.window.showWarningMessage('CLI رسمی با مجوز کاربر معمولی در پوشهٔ انتخاب‌شده باز شود؟ فرمان دلخواه از وب دریافت نمی‌شود؛ تأییدهای خود ابزار برقرار می‌مانند.',{modal:true},'بازکردن CLI')!=='بازکردن CLI')return;
  const args=tool==='codex'?['--sandbox','read-only','--ask-for-approval','on-request']:['--permission-mode','default'];
  // Explicit executable + argv; no shell command string, no prompt/credential on argv.

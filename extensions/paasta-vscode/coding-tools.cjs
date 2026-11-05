@@ -10,9 +10,9 @@ function parseLink(uri){
  if(input.project&&!/^[a-z0-9][a-z0-9-]{0,62}$/.test(input.project)||!['personal','paasta'].includes(input.provider))throw Error('پیوند اتصال معتبر نیست.');return input;
 }
 function environment(base,provider,folder,home=os.homedir()){
- const env={...base};for(const key of Object.keys(env))if(/^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|AZURE_OPENAI_|CODEX_HOME$|CLAUDE_CONFIG_DIR$|PAASTA_CODING_KEY$|PAASTA_API_KEY$|PAASTA_RUNTIME_TOKEN$|PAASTA_RUNTIME_SERVER$|NODE_OPTIONS$|NODE_PATH$|ELECTRON_RUN_AS_NODE$)/.test(key))delete env[key];
- env.CODEX_HOME=provider==='paasta'?path.join(folder,'codex'):path.join(home,'.codex');
- env.CLAUDE_CONFIG_DIR=provider==='paasta'?path.join(folder,'claude-code'):path.join(home,'.claude');return env;
+ const env={...base};for(const key of Object.keys(env))if(/^(ANTHROPIC_|CLAUDE_CODE_|OPENAI_|AZURE_OPENAI_|CODEX_HOME$|CLAUDE_CONFIG_DIR$|PAASTA_CODING_KEY$|PAASTA_API_KEY$|PAASTA_RUNTIME_TOKEN$|PAASTA_RUNTIME_SERVER$|NODE_OPTIONS$|NODE_PATH$|ELECTRON_RUN_AS_NODE$)/.test(key.toUpperCase()))delete env[key];
+ env.CODEX_HOME=provider==='paasta'?path.join(folder,'codex'):(base.CODEX_HOME||path.join(home,'.codex'));
+ env.CLAUDE_CONFIG_DIR=provider==='paasta'?path.join(folder,'claude-code'):(base.CLAUDE_CONFIG_DIR||path.join(home,'.claude'));return env;
 }
 async function configureOwned(base,account,tool,model,key,node){
  const folder=await vault.directory(base,account),previous=await vault.readRecord(base,account,tool);

@@ -14,6 +14,8 @@ try{
  for(const name of ['ANTHROPIC_AUTH_TOKEN','OPENAI_API_KEY','PAASTA_API_KEY','PAASTA_RUNTIME_TOKEN','NODE_OPTIONS'])assert(!(name in env));
  assert.equal(env.CODEX_HOME,path.join(base,account,'codex'));
  assert.equal(environment({},'personal',base,scratch).CODEX_HOME,path.join(scratch,'.codex'));
+ const separated=environment({OpenAI_API_Key:'personal',anthropic_auth_token:'personal',Node_Options:'unsafe',CODEX_HOME:path.join(scratch,'custom-codex')},'personal',base,scratch);
+ assert(!('OpenAI_API_Key'in separated));assert(!('anthropic_auth_token'in separated));assert(!('Node_Options'in separated));assert.equal(separated.CODEX_HOME,path.join(scratch,'custom-codex'));
  assert.throws(()=>vault.quoteCommand(['bad\npath']));assert.throws(()=>vault.quoteCommand(['C:/%secret%/node.exe'],'win32'));
  const command=vault.configuration(account,'codex','provider/model','C:/Runtime/node.exe','C:/Helper/credential.cjs');assert(!command.text.includes(key));assert.match(command.text,/\[model_providers\.paasta\.auth\]/);assert(command.text.split(String.fromCharCode(10)).length>10);
  await configure(base,account,'codex','provider/model',key,'C:/Runtime/node.exe');
@@ -51,6 +53,7 @@ try{
  if(process.platform==='win32'||process.getuid?.()!==0){
   await launcher.exports.launchCli(ui,'codex',workspace,{PATH:bin,CODEX_HOME:base});assert.equal(terminals.length,1);
   assert.deepEqual(terminals[0].shellArgs,['--sandbox','read-only','--ask-for-approval','on-request']);assert.equal(terminals[0].shellPath,path.join(bin,name));assert(!JSON.stringify(terminals).includes(key));
+  await assert.rejects(launcher.exports.launchCli(ui,'codex',workspace,{PATH:bin,CODEX_HOME:workspace}),/داخل پروژه/);assert.equal(terminals.length,1);
  }
  if(process.platform==='win32'){groups='S-1-16-12288';await assert.rejects(launcher.exports.standardUser(),/administrator/);}
  else if(process.getuid?.()===0)await assert.rejects(launcher.exports.standardUser(),/root/);
