@@ -1,0 +1,11 @@
+{
+  "source": "https://openvsx.eclipsecontent.org/dracula-theme/theme-dracula/2.25.1/dracula-theme.theme-dracula-2.25.1.vsix",
+  "sha256": "f4d8c28fc64874b1b959cc90dbd39c84d5d35c9cf203e32b7a758dc9abf5b1cb",
+  "version": "2.25.1",
+  "files": {
+    "package.json": "70d3a32a3aa2acad9c417f863f745f3e564e7f3fadc7b323d3ed5e522830acad",
+    "theme/dracula.json": "ae473d11bdef6ad5d3fc3c6cf3a104e98c9fd8a195f13c5cc1699df33a2537eb",
+    "theme/dracula-soft.json": "4003c1709b14dc17c7e49e188a7738052bcfb47313df45f571729aebcd9ead96",
+    "LICENSE.txt": "f08d0bba7f8906ed4e7a76d7e555a883968d83eb550ae298ce893a65aee15dff"
+  }
+}

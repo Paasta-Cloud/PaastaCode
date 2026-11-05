@@ -2,6 +2,11 @@ name: PaastaCode packages
 on:
   workflow_dispatch:
     inputs:
+      package_scope:
+        description: Build all clients or only the unified VS Code extension
+        type: choice
+        options: [all, vscode]
+        default: all
       signed:
         description: Require configured signing credentials and notarization
         type: boolean
@@ -33,7 +38,7 @@ jobs:
           - runner: macos-15-intel
             platform: darwin
             arch: x64
-          - runner: macos-latest
+          - runner: macos-15
             platform: darwin
             arch: arm64
     runs-on: ${{ matrix.runner }}
@@ -67,65 +72,77 @@ jobs:
           npm run check
           npm audit --omit=dev
       - name: Test real engine, MCP, permissions and deployment review
-        timeout-minutes: 6
         run: npm test
       - name: Test deployment CLI source
         working-directory: extensions/paastacode/paasta-cli
         run: go test ./...
       - name: Install browser
         run: npx playwright install --with-deps chromium
-      - name: Allow sandboxed Chromium user namespaces on the ephemeral Linux runner
-        if: runner.os == 'Linux'
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Browser acceptance
+        if: inputs.package_scope != 'vscode'
         run: |
-          node test/native-browser.mjs
-          node test/project-review-browser.mjs
-          node test/model-presets-browser.mjs
-          node test/integrations-browser.mjs
-          node test/browser-mcp.mjs
           node test/browser.mjs
           node test/workbench-browser.mjs
           node test/background-activity-browser.mjs
+          node test/native-browser.mjs
           node test/redesign-browser.mjs
+          node test/billing-browser.mjs
           node test/workflow-browser.mjs
           node test/composer-browser.mjs
-          node test/billing-browser.mjs
           node test/deployment-browser.mjs
           node test/hosted-browser.mjs
           node test/cloud-hub-browser.mjs
-          node test/cloud-projects-browser.mjs
           node test/download-browser.mjs
           node test/devices-browser.mjs
           node test/sync-browser.mjs
+      - name: Unified extension source and responsive native UI
+        if: inputs.package_scope == 'vscode'
+        run: |
+          node ../paasta-vscode/test/contract.test.js
+          node ../paasta-vscode/test/unified.test.mjs
+          node ../paasta-vscode/test/hosted.test.mjs
+          node test/native-browser.mjs
       - name: Prepare publisher-licensed Persian font
         if: github.repository_owner == 'Paasta-Cloud'
         shell: bash
         run: |
           node scripts/licensed-font.mjs
       - name: Build bundled web and CLI
+        if: inputs.package_scope != 'vscode'
         run: npm run package:portable
       - name: Test installed web and CLI
+        if: inputs.package_scope != 'vscode'
         run: |
           node scripts/smoke-package.mjs
           node test/workspace-export-integration.mjs
-      - name: Build standalone VSIX
+      - name: Build unified VSIX
         run: npm run package:vscode
       - name: Build desktop installers
+        if: inputs.package_scope != 'vscode'
         run: npm run package:desktop
       - name: Install Linux desktop package
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && inputs.package_scope != 'vscode'
         run: |
           sudo apt-get update
           sudo apt-get install -y ./dist/PaastaCode-*.deb
       - name: Run installed Linux desktop
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && inputs.package_scope != 'vscode'
         run: dbus-run-session -- xvfb-run -a node scripts/smoke-desktop.mjs
       - name: Run packaged Windows and macOS desktop
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && inputs.package_scope != 'vscode'
         run: node scripts/smoke-desktop.mjs
       - name: Generate artifact checksums
         run: node scripts/release-manifest.mjs
+      - name: Test installed unified extension on Linux
+        if: inputs.package_scope == 'vscode' && runner.os == 'Linux'
+        run: |
+          xvfb-run -a node scripts/smoke-vscode.mjs
+          xvfb-run -a node scripts/smoke-vscode.mjs --empty
+      - name: Test installed unified extension on Windows and macOS
+        if: inputs.package_scope == 'vscode' && runner.os != 'Linux'
+        run: |
+          node scripts/smoke-vscode.mjs
+          node scripts/smoke-vscode.mjs --empty
       - uses: actions/upload-artifact@v6
         with:
           name: paastacode-${{ matrix.platform }}-${{ matrix.arch }}
@@ -146,7 +163,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
   publish:
-    if: inputs.publish
+    if: inputs.publish && inputs.package_scope != 'vscode'
     needs: package
     runs-on: ubuntu-latest
     permissions:

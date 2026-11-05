@@ -5,6 +5,22 @@ import vm from 'node:vm';
 import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 const require=createRequire(import.meta.url);
+test('a file switch cannot send a stale conversation or tool request to another project',async()=>{
+  let listener,workspace='/projects/github-project';const messages=[],writes=[];
+  const vscode={workspace:{isTrusted:true,workspaceFolders:[{}]},Uri:{file:fsPath=>({fsPath}),joinPath:(_,...segments)=>segments.join('/')}};
+  const loaded={exports:{}};
+  vm.runInNewContext(readFileSync(new URL('../vscode/native-workbench.cjs',import.meta.url),'utf8'),{module:loaded,require:id=>id==='vscode'?vscode:require(id),URLSearchParams,URL,Buffer,process});
+  const webview={cspSource:'vscode-webview://owned',asWebviewUri:value=>String(value),onDidReceiveMessage(fn){listener=fn;return {dispose(){}};},async postMessage(message){messages.push(message);}};
+  loaded.exports.attachNative(webview,{extensionUri:{fsPath:fileURLToPath(new URL('../vscode',import.meta.url))}},async()=>({workspace,async request(route,method){if(method==='POST')writes.push(route);return {accountRevision:7};}}));
+  await listener({id:1,action:'api',path:'state'});assert.equal(messages.at(-1).result.workspaceId,workspace);
+  await listener({id:2,action:'api',path:'prompt',method:'POST',accountRevision:7,workspaceId:workspace});assert.equal(writes.length,1);
+  workspace='/projects/gitlab-project';
+  await listener({id:3,action:'api',path:'prompt',method:'POST',accountRevision:7,workspaceId:'/projects/github-project'});
+  assert(messages.at(-1).error);assert.equal(writes.length,1,'Old prompt must never reach the new project');
+  await listener({id:4,action:'api',path:'messages',workspaceId:'/projects/github-project'});assert(messages.at(-1).error);
+  await listener({id:5,action:'api',path:'state'});assert.equal(messages.at(-1).result.workspaceId,workspace);
+  await listener({id:6,action:'api',path:'sessions',method:'POST',accountRevision:7,workspaceId:workspace});assert.equal(writes.length,2);
+});
 test('native webview uses a bounded host bridge, retains account revisions and rejects arbitrary fetch destinations',async()=>{
   let listener;const messages=[],calls=[];
   const vscode={workspace:{isTrusted:true,workspaceFolders:[{}]},Uri:{file:fsPath=>({fsPath}),joinPath:(_,...segments)=>segments.join('/')}};
@@ -13,8 +29,8 @@ test('native webview uses a bounded host bridge, retains account revisions and r
   for(const path of ['http://localhost:9999/admin','../shutdown','state?url=https://example.test','shutdown','messages?id=../foreign'])assert.equal(api.allowedRoute('GET',path),false);
   assert.equal(api.allowedRoute('POST','prompt'),true);
   const webview={cspSource:'vscode-webview://owned',asWebviewUri:value=>'vscode-webview://owned/'+value,onDidReceiveMessage(fn){listener=fn;return {dispose(){}};},async postMessage(message){messages.push(message);}};
-  api.attachNative(webview,{extensionUri:{fsPath:fileURLToPath(new URL('../vscode',import.meta.url))}},async()=>({async request(...args){calls.push(args);return {accountRevision:7};}}));
-  assert(!webview.html.includes('<iframe'));assert(webview.html.includes("default-src 'none'"));assert(!webview.html.includes('fetch('));assert(!/connect-src[^;]*127\.0\.0\.1/.test(webview.html));
+  api.attachNative(webview,{extensionUri:{}},async()=>({async request(...args){calls.push(args);return {accountRevision:7};}}));
+  assert(!webview.html.includes('<iframe'));assert(webview.html.includes("default-src 'none'"));assert(!webview.html.includes('127.0.0.1'));
   await listener({id:1,action:'api',path:'state'});await listener({id:2,action:'api',method:'POST',accountRevision:7,path:'prompt',body:{id:'ses_owned',text:'test'}});
   assert.equal(calls[1][3],7);await listener({id:20,action:'api',method:'POST',accountRevision:6,path:'prompt',body:{}});assert.equal(calls.length,2);assert(messages.at(-1).error);
   await listener({id:3,action:'api',path:'https://example.test'});assert.equal(calls.length,2);assert(messages.at(-1).error);

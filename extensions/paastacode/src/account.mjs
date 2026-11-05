@@ -3,6 +3,7 @@ import {homedir} from "node:os";
 import {join,dirname} from "node:path";
 import {spawn} from "node:child_process";
 import {randomUUID} from "node:crypto";
+import {editorSession,editorSessionFile} from './editor-session.mjs';
 
 export const stateHome=process.env.PAASTACODE_HOME||join(homedir(),".paastacode");
 export function consoleUrl(value=process.env.PAASTACODE_CONSOLE||"https://console.paasta.cloud") {
@@ -44,6 +45,7 @@ export class PaastaAccount {
     if(owner!==undefined&&(!owner||!uuid.test(owner.id)||!uuid.test(owner.tenantId)))throw new Error("صاحب فضای کار ابری معتبر نیست.");
     this.owner=owner===undefined?undefined:Object.freeze({id:owner.id.toLowerCase(),tenantId:owner.tenantId.toLowerCase()});
     this.origin=consoleUrl(origin);this.clientId=deployment?"paastacode-deploy":"paastacode";this.path=join(home,deployment?"deployment-account.json":"account.json");this.credentials=null;this.device=null;
+    if(editorSessionFile){this.managed=true;this.credentialSource=editorSessionFile;this.path=join(home,'editor-account.json');}
   }
   async verifyOwner(token){
     if(!this.owner)return;
@@ -51,11 +53,22 @@ export class PaastaAccount {
     if(identity.id!==this.owner.id||identity.tenantId!==this.owner.tenantId)throw new Error("با حساب صاحب این فضای کار وارد شوید. حساب دیگری به این فضا متصل نمی‌شود.");
   }
   async load(){
+    if(this.managed){
+      const session=await editorSession(),saved=await readPrivate(this.path);
+      this.credentials=session?{...((saved?.token===session.token&&saved.origin===session.origin)?saved:{}),...session}:null;
+      if(session)this.origin=session.origin;
+      return this;
+    }
     const saved=await readPrivate(this.path),credentials=saved?.origin===this.origin?saved:null;
     if(credentials)await this.verifyOwner(credentials.token);
     this.credentials=credentials;return this;
   }
-  async request(path,{method="GET",body,token=this.credentials?.token}={}){
+  async request(path,{method="GET",body,token}={}){
+    if(this.managed){
+      await this.load();if(!this.credentials)throw new Error('دسترسی محیط پایان یافته است؛ محیط را از کنسول پاستا باز کنید.');
+      if(token!==undefined&&token!==null&&token!==this.credentials.token&&token!==this.credentials.aiKey)throw new Error('نشست محیط تغییر کرده است؛ درخواست را دوباره بررسی کنید.');
+    }
+    if(token===undefined)token=this.credentials?.token;
     let response;
     try{response=await fetch(this.origin+path,{method,headers:{...(token?{Authorization:"Bearer "+token}:{}),...(body?{"Content-Type":"application/json"}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(20000),redirect:"error"});}
     catch{throw new Error("اتصال به پاستا برقرار نشد. اینترنت و آدرس سرور را بررسی کنید و دوباره تلاش کنید.");}
@@ -70,6 +83,7 @@ export class PaastaAccount {
     return data;
   }
   async begin(){
+    if(this.managed)throw new Error('ورود این محیط از کنسول پاستا انجام می‌شود؛ محیط را از همان‌جا باز کنید.');
     if(this.device && this.device.expires>Date.now())return this.device.public;
     const result=await this.request("/api/cli/device",{method:"POST",token:null,body:{clientId:this.clientId,clientName:this.clientId==="paastacode-deploy"?"PaastaCode deployment":"PaastaCode"}});
     if(result.clientId!==this.clientId)throw new Error("این سرور هنوز از ورود اختصاصی پاستاکد پشتیبانی نمی‌کند. بخش سرور پاستا باید به‌روز شود.");
@@ -94,7 +108,10 @@ export class PaastaAccount {
     return {pending:false};
   }
   async connect(dailyLimitToman){
+    if(this.managed)await this.load();
+    const token=this.credentials?.token;
     const result=await this.request("/api/paastacode/connection",{method:"POST",body:{dailyLimitToman}});
+    if(this.managed){await this.load();if(!this.credentials||this.credentials.token!==token)throw new Error('نشست محیط تغییر کرده است؛ دوباره مصرف را تأیید کنید.');}
     this.credentials={...this.credentials,aiKey:result.key,dailyLimitToman:result.dailyLimitToman};
     await writePrivate(this.path,this.credentials);
     return {dailyLimitToman:result.dailyLimitToman};
@@ -102,6 +119,7 @@ export class PaastaAccount {
   async context(){return this.request("/api/paastacode/connection");}
   async identity(){return this.request("/api/paastacode/identity");}
   async logout(){
+    if(this.managed)throw new Error('برای پایان دسترسی محیط، از حساب کنسول خارج شوید یا محیط را خاموش کنید.');
     this.device=null;
     try{await this.request("/api/paastacode/connection",{method:"DELETE"});}
     catch(error){if(![401,403].includes(error.status))throw error;}

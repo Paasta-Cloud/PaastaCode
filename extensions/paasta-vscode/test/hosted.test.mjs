@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import {mkdtemp,mkdir,writeFile,readFile,rm,lstat} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import path from 'node:path';
+import {createRequire} from 'node:module';
+const require=createRequire(import.meta.url),before={...process.env};
+const scratch=await mkdtemp(path.join(tmpdir(),'paasta-hosted-startup-'));
+try{
+  const root=path.join(scratch,'projects'),sessionFile=path.join(scratch,'session.json');await mkdir(root);
+  Object.assign(process.env,{PAASTA_EDITOR_SESSION_FILE:sessionFile,PAASTA_EDITOR_PROJECTS_ROOT:root,PAASTA_EDITOR_WORKSPACE_ID:'personal'});
+  const token='paasta_'+'a'.repeat(43),session={workspaceId:'personal',server:'https://console.paasta.cloud',token,expiresAt:new Date(Date.now()+60000).toISOString()};
+  await writeFile(sessionFile,JSON.stringify(session));
+  const mutations=[],opened=[],prepared=[],messages=[];
+  const context={subscriptions:[],environmentVariableCollection:{prepend:(...args)=>mutations.push(args)}};
+  const vscode={workspace:{workspaceFolders:[{uri:{fsPath:root}}]},commands:{executeCommand:async(...args)=>opened.push(args)},ProgressLocation:{Notification:15},window:{withProgress:async(_,run)=>run({report(){}}),showInformationMessage:m=>messages.push(m),showWarningMessage:async m=>messages.push(m),createOutputChannel:()=>({appendLine:m=>messages.push(m),show(){}})}};
+  const loaded={exports:{}},source=await readFile(new URL('../hosted-startup.js',import.meta.url),'utf8');
+  new Function('require','module','exports','__dirname',source)(id=>id==='vscode'?vscode:id==='./open-project'?{openProject:async(_ctx,api,_fetch,name,options)=>{assert.deepEqual(options,{open:false,automatic:true});assert.equal((await api(context,'/api/cli/context')).projects.length,4);prepared.push(name);if(name==='unavailable')throw Error('Retained source unavailable');}}:id==='./managed-session'?require('../managed-session.js'):require(id),loaded,loaded.exports,path.dirname(require.resolve('../hosted-startup.js')));
+  const projects=[{name:'source',source_type:'upload'},{name:'repository',source_type:'git'},{name:'unavailable',source_type:'template'},{name:'image-only',source_type:'image'}];
+  await loaded.exports.startHostedWorkspace(context,async()=>({projects}),undefined);
+  assert.deepEqual(prepared,['source','repository','unavailable']);assert.equal(mutations[0][0],'PATH');assert(mutations[0][1].startsWith(path.join(scratch,'bin')));
+  const wrapper=path.join(scratch,'bin','paasta'),content=await readFile(wrapper,'utf8');assert(content.includes('managed-cli.js'));assert(!content.includes(token));
+  if(process.platform!=='win32')assert.equal((await lstat(wrapper)).mode&0o777,0o700);
+  assert(opened.some(args=>args[0]==='workbench.view.extension.paasta'));assert(messages.some(m=>m.includes('unavailable')));
+  prepared.length=0;vscode.workspace.workspaceFolders=[{uri:{fsPath:path.join(root,'previous-project')}}];
+  await loaded.exports.startHostedWorkspace(context,async()=>({projects}),undefined);
+  assert.deepEqual(prepared,['source','repository','unavailable'],'Restoring a previous folder must not skip source preparation');
+  const choices = new Map();
+  context.globalState={get:key=>choices.get(key),update:async(key,value)=>choices.set(key,value)};
+  vscode.commands.getCommands=async()=>['vscode.moveViews','workbench.view.extension.paasta-online'];
+  const beforeLayout=opened.length;assert.equal(await loaded.exports.prepareLayout(context),true);
+  const layout=opened.slice(beforeLayout);assert.deepEqual(layout[0],['vscode.moveViews',{viewIds:['paasta.actions','paasta.account','paasta.projects','paasta.code'],destinationId:'workbench.view.extension.paasta-online'}]);
+  assert.equal(layout.filter(call=>call[0]==='workbench.action.increaseViewSize').length,5);
+  const beforeReconnect=opened.length;await loaded.exports.prepareLayout(context);
+  assert.deepEqual(opened.slice(beforeReconnect),[['paasta.code.focus']],'Reconnect preserves the user resize and view positions');
+  vscode.commands.getCommands=async()=>[];assert.equal(await loaded.exports.prepareLayout(context),false,'Older clients retain their supported sidebar');
+  const cli=require('../managed-cli.js');let call=cli.invocation(['api','GET','/api/cli/context']);assert.equal(call.env.PAASTA_RUNTIME_TOKEN,token);assert.equal(call.env.PAASTA_RUNTIME_SERVER,session.server);assert.deepEqual(call.args,['api','GET','/api/cli/context']);assert(call.file.endsWith('paasta'+(process.platform==='win32'?'.exe':'')));
+  const renewed={...session,token:'paasta_'+'b'.repeat(43)};await writeFile(sessionFile,JSON.stringify(renewed));assert.equal(cli.invocation([]).env.PAASTA_RUNTIME_TOKEN,renewed.token,'New CLI invocations read the renewed grant');
+  for(const invalid of [{...session,workspaceId:'foreign'},{...session,server:'https://foreign.invalid'},{...session,expiresAt:new Date(0).toISOString()}]){await writeFile(sessionFile,JSON.stringify(invalid));assert.throws(()=>cli.invocation([]));await assert.rejects(loaded.exports.prepareTerminal(context));}
+  await writeFile(sessionFile,JSON.stringify(session));await writeFile(wrapper,'preserve user file');await assert.rejects(loaded.exports.prepareTerminal(context));assert.equal(await readFile(wrapper,'utf8'),'preserve user file');
+  const gateway=await readFile(new URL('../../../deploy/code-workspace/editor-gateway.cjs',import.meta.url),'utf8');assert(gateway.includes("'--disable-workspace-trust'"));
+  const {migrateLegacyFolder}=require('../../../deploy/code-workspace/editor-gateway.cjs');
+  const preferences=path.join(scratch,'.local/share/code-server/coder.json');await mkdir(path.dirname(preferences),{recursive:true});
+  const legacy=path.join(scratch,'project');await mkdir(legacy);await writeFile(path.join(legacy,'user.txt'),'preserve legacy files');
+  await writeFile(preferences,JSON.stringify({query:{folder:legacy,keep:'unchanged'},other:'preserved'}));
+  assert.equal(await migrateLegacyFolder(scratch),true);assert.deepEqual(JSON.parse(await readFile(preferences,'utf8')),{query:{folder:path.join(scratch,'projects'),keep:'unchanged'},other:'preserved'});assert.equal(await readFile(path.join(legacy,'user.txt'),'utf8'),'preserve legacy files');
+  const custom=JSON.stringify({query:{folder:path.join(scratch,'selected-project')}});await writeFile(preferences,custom);assert.equal(await migrateLegacyFolder(scratch),false);assert.equal(await readFile(preferences,'utf8'),custom);
+  await writeFile(preferences,'preserve malformed settings');assert.equal(await migrateLegacyFolder(scratch),false);assert.equal(await readFile(preferences,'utf8'),'preserve malformed settings');
+  console.log('Hosted startup: automatic source selection, image exclusion, partial failures, default panel, private CLI wrapper, renewed scoped auth, expired/foreign rejection and preserved files passed.');
+}finally{
+  for(const key of ['PAASTA_EDITOR_SESSION_FILE','PAASTA_EDITOR_PROJECTS_ROOT','PAASTA_EDITOR_WORKSPACE_ID'])if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];
+  assert(path.resolve(scratch).startsWith(path.join(path.resolve(tmpdir()),'paasta-hosted-startup-')));
+  await rm(scratch,{recursive:true,force:true});
+}

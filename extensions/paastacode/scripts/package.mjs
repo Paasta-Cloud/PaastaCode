@@ -12,44 +12,13 @@ const target=process.argv[2]||"portable",arch=process.arch,platform=process.plat
 const stage=join(root,".artifacts/package"),client=join(stage,"client"),dist=join(root,"dist");
 await mkdir(client,{recursive:true});await mkdir(dist,{recursive:true});
 // Rebuild only our known staging files; never copy credentials, workspaces or node_modules.
-const included=["bin","src","web","licenses","docs","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
+const included=["bin","src","web","licenses","desktop","paasta-cli","LICENSE","OPENCODE_LICENSE","THIRD_PARTY_NOTICES.md","README.md","API.md","CHANGELOG.md"];
 for(const file of included)await cp(join(root,file),join(client,file),{recursive:true});
 // Commercial font stays outside the MIT source tree; licensed distributors supply it.
 const yekan=process.env.PAASTACODE_YEKAN_FONT||resolve(root,"../../public/fonts/yekan-bakh/yekan-bakh-variable.ttf");
 if(process.env.PAASTACODE_YEKAN_FONT&&!existsSync(yekan))throw new Error("Publisher Yekan font path is invalid; refusing a release with a missing font");
 if(existsSync(yekan))await copyFile(yekan,join(client,"web/fonts/YekanBakh.ttf"));
 await writeFile(join(client,"package.json"),JSON.stringify({...pkg,name:"paastacode",dependencies:{},devDependencies:{},scripts:{}},null,2));
-// Preserve driver assets outside node_modules (VSIX excludes dependency folders).
-const browserPackages=new Map();
-async function bundleBrowser(name,resolver,destination){
-  let metadataPath;
-  try{metadataPath=resolver.resolve(name+'/package.json');}catch(error){
-    if(error.code!=='ERR_PACKAGE_PATH_NOT_EXPORTED')throw error;
-    let directory=dirname(resolver.resolve(name));
-    while(directory!==dirname(directory)&&!existsSync(join(directory,'package.json')))directory=dirname(directory);
-    metadataPath=join(directory,'package.json');
-  }
-  const source=dirname(metadataPath),metadata=JSON.parse(await readFile(metadataPath,'utf8')),target=join(destination,...name.split('/'));
-  if(browserPackages.has(name)){if(browserPackages.get(name)!==metadata.version)throw new Error('Conflicting browser dependency '+name);return;}browserPackages.set(name,metadata.version);
-  await cp(source,target,{recursive:true,filter:file=>!file.slice(source.length).split(/[\\/]/).includes('node_modules')});
-  const from=createRequire(metadataPath);
-  for(const dependency of Object.keys(metadata.dependencies||{}))await bundleBrowser(dependency,from,destination);
-}
-await bundleBrowser('@playwright/mcp',require,join(client,'vendor/browser'));
-await bundleVendor('proxy-chain','vendor/network.cjs');
-async function bundleVendor(name,output,external=[]){
-  const {build}=await import('esbuild');
-  const bundle=await build({stdin:{contents:'module.exports = require('+JSON.stringify(name)+')',resolveDir:root,sourcefile:'vendor-entry.cjs'},bundle:true,platform:'node',format:'cjs',external,outfile:join(client,output),metafile:true,legalComments:'linked',nodePaths:process.env.NODE_PATH?.split(process.platform==='win32'?';':':')||[]});
-  const licenses=new Set();
-  for(const input of Object.keys(bundle.metafile.inputs).filter(name=>name.includes('node_modules'))){
-    let directory=dirname(resolve(root,input));
-    while(directory!==dirname(directory)&&!existsSync(join(directory,'package.json')))directory=dirname(directory);
-    if(licenses.has(directory)||!existsSync(join(directory,'package.json')))continue;licenses.add(directory);
-    const metadata=JSON.parse(await readFile(join(directory,'package.json'),'utf8'));
-    const destination=join(client,'licenses',name,metadata.name.replaceAll('/','_'));await mkdir(destination,{recursive:true});
-    for(const filename of ['LICENSE','LICENSE.txt','LICENSE.md','license','license.md','NOTICE','NOTICE.txt'])if(existsSync(join(directory,filename)))await copyFile(join(directory,filename),join(destination,filename));
-  }
-}
 const engineMeta=require("opencode-ai/package.json"),engineRoot=dirname(require.resolve("opencode-ai/package.json"));
 let engine=join(engineRoot,engineMeta.bin.opencode);
 const bytes=await readFile(engine);
@@ -85,18 +54,34 @@ async function bundleNode(destination){
   }
 }
 if(target==="desktop"){
-  await bundleVendor('electron-updater','desktop/updater-vendor.cjs',['electron']);
+  const {build}=await import("esbuild");
+  const bundle=await build({stdin:{contents:'module.exports = require("electron-updater")',resolveDir:root,sourcefile:"updater-entry.cjs"},bundle:true,platform:"node",format:"cjs",external:["electron"],outfile:join(client,"desktop/updater-vendor.cjs"),metafile:true,legalComments:"linked"});
+  const licenses=new Set();
+  for(const input of Object.keys(bundle.metafile.inputs).filter(name=>name.includes("node_modules"))){
+    let directory=dirname(resolve(root,input));
+    while(directory!==dirname(directory)&&!existsSync(join(directory,"package.json")))directory=dirname(directory);
+    if(licenses.has(directory)||!existsSync(join(directory,"package.json")))continue;licenses.add(directory);
+    const metadata=JSON.parse(await readFile(join(directory,"package.json"),"utf8"));
+    const destination=join(client,"licenses/desktop-update",metadata.name.replaceAll("/","_"));await mkdir(destination,{recursive:true});
+    for(const name of ["LICENSE","LICENSE.txt","LICENSE.md","license","license.md"])if(existsSync(join(directory,name)))await copyFile(join(directory,name),join(destination,name));
+  }
   const binary=require.resolve("electron-builder/cli.js");
   const env={...process.env};
   for(const key of ["CSC_LINK","CSC_KEY_PASSWORD","APPLE_ID","APPLE_APP_SPECIFIC_PASSWORD","APPLE_TEAM_ID"])if(!env[key])delete env[key];
   run(process.execPath,[binary,"--config","desktop/builder.cjs","--publish","never"],{env});
 }else if(target==="vscode"){
   const extension=join(stage,"vscode");await mkdir(extension,{recursive:true});
+  const unified=resolve(root,'../paasta-vscode/assemble.mjs');
+  if(existsSync(unified)){
+    const {assemble}=await import(new URL('../../paasta-vscode/assemble.mjs',import.meta.url));
+    await assemble(extension);
+  }else{
   for(const file of ["extension.cjs","native-workbench.cjs","README.md","LICENSE"])await copyFile(join(root,"vscode",file),join(extension,file));
   await cp(join(root,"vscode/media"),join(extension,"media"),{recursive:true});
   // VS Code has its own numeric upgrade version; stripping beta suffixes would reuse 0.2.0 forever.
   const manifest=JSON.parse(await readFile(join(root,"vscode/package.json"),"utf8"));
   await writeFile(join(extension,"package.json"),JSON.stringify(manifest,null,2));
+  }
   await cp(client,join(extension,"client"),{recursive:true});await bundleNode(join(extension,"runtime"));
   await copyFile(join(root,"desktop/icon.png"),join(extension,"icon.png"));
   await writeFile(join(extension,".vscodeignore"),"**/.DS_Store\n**/Thumbs.db\n");

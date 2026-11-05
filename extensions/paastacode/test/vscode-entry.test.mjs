@@ -16,10 +16,20 @@ test('VS Code exposes a native entry before activation and handles an empty work
   const commands=new Map(),providers=new Map(),called=[],errors=[],subscriptions=[];
   let spawned=0;
   const vscode={workspace:{isTrusted:true,workspaceFolders:[]},commands:{registerCommand(id,fn){commands.set(id,fn);return {dispose(){}};},async executeCommand(id){called.push(id);}},window:{registerWebviewViewProvider(id,provider){providers.set(id,provider);return {dispose(){}};},showErrorMessage(message){errors.push(message);},createOutputChannel(){return {dispose(){},appendLine(){}};}}};
-  const module={exports:{}};
-  vm.runInNewContext(readFileSync(new URL('../vscode/extension.cjs',import.meta.url),'utf8'),{module,__dirname:new URL('../vscode',import.meta.url).pathname,process:{env:{PAASTACODE_VSCODE_SMOKE:'1'}},require:id=>id==='vscode'?vscode:id==='./native-workbench.cjs'?{attachNative(){}}:id==='node:child_process'?{spawn(){spawned++;}}:require(id),setInterval:()=>({unref(){}}),clearInterval(){}});
-  module.exports.activate({subscriptions});
+  const mockModule={exports:{}};
+  vm.runInNewContext(readFileSync(new URL('../vscode/extension.cjs',import.meta.url),'utf8'),{module:mockModule,__dirname:new URL('../vscode',import.meta.url).pathname,process:{env:{PAASTACODE_VSCODE_SMOKE:'1'}},require:id=>id==='vscode'?vscode:id==='./native-workbench.cjs'?{attachNative(){}}:id==='node:child_process'?{spawn(){spawned++;}}:require(id),setInterval:()=>({unref(){}}),clearInterval(){}});
+  mockModule.exports.activate({subscriptions});
   assert(providers.has('paastacode.home'));assert.equal(typeof providers.get('paastacode.home').resolveWebviewView,'function');
   await commands.get('paastacode.open')();assert.deepEqual(called,['workbench.action.files.openFolder']);assert.equal(spawned,0);
   vscode.workspace.isTrusted=false;await commands.get('paastacode.open')();assert.equal(called.length,1);assert.equal(errors.length,1);assert.equal(spawned,0);
+});
+
+test('embedded PaastaCode opens the single Paasta container and cannot install the retired extension',async()=>{
+  const commands=new Map(),called=[];
+  const vscode={workspace:{isTrusted:true,workspaceFolders:[{}]},commands:{registerCommand(id,fn){commands.set(id,fn);return {dispose(){}};},async executeCommand(id){called.push(id);}},window:{registerWebviewViewProvider(){return {dispose(){}};},createOutputChannel(){return {dispose(){}};}}};
+  const loaded={exports:{}};
+  vm.runInNewContext(readFileSync(new URL('../vscode/extension.cjs',import.meta.url),'utf8'),{module:loaded,__dirname:'.',process:{env:{PAASTACODE_VSCODE_SMOKE:'1'}},require:id=>id==='vscode'?vscode:id==='./native-workbench.cjs'?{attachNative(){}}:require(id),setInterval:()=>({unref(){}}),clearInterval(){}});
+  loaded.exports.activate({subscriptions:[]},{container:'paasta',viewId:'paasta.code',embedded:true});
+  await commands.get('paastacode.open')();await commands.get('paastacode.update')();
+  assert.deepEqual(called,['workbench.view.extension.paasta','paasta.code.focus','workbench.extensions.action.checkForUpdates']);
 });
