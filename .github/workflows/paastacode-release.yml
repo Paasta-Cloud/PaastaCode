@@ -98,7 +98,7 @@ jobs:
       - name: Unified extension source and responsive native UI
         if: inputs.package_scope == 'vscode'
         run: |
-          node ../paasta-vscode/test/contract.test.js
+          npm --prefix ../paasta-vscode test
           node ../paasta-vscode/test/unified.test.mjs
           node ../paasta-vscode/test/hosted.test.mjs
           node test/native-browser.mjs

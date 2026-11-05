@@ -15,7 +15,7 @@ async function resolveCli(tool,folder,env=process.env){
  for(const directory of (env.PATH||env.Path||'').split(path.delimiter)){
   if(!path.isAbsolute(directory)||inWorkspace(folder,path.resolve(directory)))continue;
   candidates.push(path.join(directory,name+(process.platform==='win32'?'.exe':'')));
-  if(process.platform==='win32'&&tool==='codex')for(const vendor of ['vendor','node_modules/@openai/codex-win32-'+process.arch+'/vendor'])candidates.push(path.join(directory,'node_modules/@openai/codex',vendor,process.arch==='arm64'?'aarch64-pc-windows-msvc':'x86_64-pc-windows-msvc','codex/codex.exe'));
+  if(process.platform==='win32'&&tool==='codex')for(const vendor of ['@openai/codex/vendor','@openai/codex/node_modules/@openai/codex-win32-'+process.arch+'/vendor','@openai/codex-win32-'+process.arch+'/vendor'])candidates.push(path.join(directory,'node_modules',vendor,process.arch==='arm64'?'aarch64-pc-windows-msvc':'x86_64-pc-windows-msvc','codex/codex.exe'));
  }
  for(const file of candidates)try{const real=await fs.realpath(file),stat=await fs.stat(real);if(stat.isFile()&&!inWorkspace(folder,real)&&(process.platform==='win32'||stat.mode&0o111))return real;}catch{}
  throw Error('نسخهٔ اجرایی رسمی '+name+' پیدا نشد. آن را از راهنمای رسمی ابزار نصب کنید؛ فایل‌های پروژه و wrapperهای cmd اجرا نمی‌شوند.');
