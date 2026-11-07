@@ -64,7 +64,7 @@ export class CodeRuntime{
       this.process.stderr.resume(); // Never copy engine diagnostics, prompts or credentials to the console.
       engineProcess.once("error",()=>done(new Error("موتور کدنویسی شروع نشد.")));engineProcess.once("exit",()=>{if(this.process===engineProcess){this.url=null;void this.stop();}done(new Error("موتور کدنویسی متوقف شد."));});
     }).catch(async error=>{await this.stop();throw error;});
-    try{await this.call("/global/health");}catch(error){await this.stop();throw error;}
+    try{await this.call("/global/health");await this.call("/path",{timeout:60000});}catch(error){await this.stop();throw error;}
     return this;
   }
   async call(path,{method="GET",body,timeout=20000}={}){
