@@ -1,3 +1,4 @@
+import {startTaskBudgetRelay} from './task-budget-relay.mjs';
 import {spawn} from "node:child_process";
 import {createRequire} from "node:module";
 import {existsSync} from "node:fs";
@@ -41,14 +42,13 @@ export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}
   async start(config,{proxy}={}){
     this.workspace=await realpath(this.workspace);
-    if(this.budgetBridge)config={...config,plugin:[...(config.plugin||[]),new URL('./task-budget-plugin.mjs',import.meta.url).href]};
+    if(this.budgetBridge){this.budgetRelay=await startTaskBudgetRelay({upstream:config.provider.paasta.options.baseURL,apiKey:config.provider.paasta.options.apiKey,bridge:this.budgetBridge});config={...config,provider:{...config.provider,paasta:{...config.provider.paasta,options:{...config.provider.paasta.options,baseURL:this.budgetRelay.baseURL,apiKey:this.budgetRelay.apiKey}}}};}
     this.skillPaths=config.skills?.paths||[];
     if(this.skillPaths.length)config={...config,permission:{...config.permission,external_directory:{'*':'deny',...Object.fromEntries(this.skillPaths.flatMap(path=>[[path,'allow'],[path.replaceAll('\\','/')+'/**','allow']]))}}};
     const home=join(stateHome,"engine",this.identity||"local");await mkdir(home,{recursive:true,mode:0o700});
     this.proxy=await startOutboundProxy(proxy,config.provider?.paasta?.options?.baseURL);
     try{this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
       ...process.env,...this.proxy?.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
-      PAASTA_TASK_BUDGET_BRIDGE:this.budgetBridge?.url||"",PAASTA_TASK_BUDGET_CAPABILITY:this.budgetBridge?.capability||"",
       OPENCODE_SERVER_PASSWORD:this.password,OPENCODE_CONFIG_CONTENT:JSON.stringify(config),
       OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});}catch{await this.stop();throw new Error("موتور کدنویسی شروع نشد.");}
     const engineProcess=this.process;
@@ -75,6 +75,7 @@ export class CodeRuntime{
     return response.status===204?null:response.json();
   }
   async stop(){
+    const relay=this.budgetRelay;this.budgetRelay=null;await relay?.close();
     const child=this.process,proxy=this.proxy;this.process=null;this.url=null;this.proxy=null;
     await proxy?.close();
     if(child&&child.exitCode===null)await new Promise((resolveStop,rejectStop)=>{

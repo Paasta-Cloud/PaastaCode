@@ -50,8 +50,10 @@ export function modelOptions(models = [], profile) {
   if (executor) presets.push({id: "iran-direct", title: "اقتصادی · فقط DeepSeek", phase: "build", planModel: deepseek, buildModel: deepseek,
     description: "برای تغییرهای کوچک؛ اجرای مستقیم بدون هزینهٔ یک مرحلهٔ جداگانهٔ برنامه‌ریزی."});
   const observed=Number(profile?.samples)>=3, priced=!!profile;
-  const costProfile=observed?profile:undefined;
-  const ranked=eligible.filter(model=>economicIds.has(model.id)).sort((a,b)=>estimatedModelCost(a,costProfile)-estimatedModelCost(b,costProfile)||domesticModelPriority(a)-domesticModelPriority(b)||a.id.localeCompare(b.id));
+  const costProfile=model=>{if(!observed)return;const cache=profile.modelCache?.[model.id];
+    const ratio=cache?.samples>=3&&Number.isFinite(Number(cache.cacheRatio))?Math.min(1,Math.max(0,Number(cache.cacheRatio))):0;
+    return {...profile,cachedTokens:Math.max(1,Number(profile.inputTokens)||32000)*ratio};};
+  const ranked=eligible.filter(model=>economicIds.has(model.id)).sort((a,b)=>estimatedModelCost(a,costProfile(a))-estimatedModelCost(b,costProfile(b))||domesticModelPriority(a)-domesticModelPriority(b)||a.id.localeCompare(b.id));
   const economical=ranked[0];
   if(priced&&economical)presets.unshift({id:'economic-context',title:observed?'اقتصادی · بر اساس مصرف اخیر':'اقتصادی · شروع کم‌هزینه',phase:'auto',planModel:economical.id,buildModel:economical.id,description:'انتخاب بر اساس تعرفهٔ واقعی ورودی، کش و خروجی و الگوی مصرف حساب؛ در شروع، ورودی بدون کش برآورد می‌شود. کشِ مدل تازه و کیفیت یکسان تضمین نمی‌شوند.'});
   const recommended = presets.find(preset=>preset.id==='economic-context')||presets.find(preset => preset.phase === "auto" && domestic.has(preset.planModel));
@@ -59,8 +61,8 @@ export function modelOptions(models = [], profile) {
     || price(a) - price(b) || a.id.localeCompare(b.id))[0];
   const reference = priced&&economical?economical:byId.get(qwen) || byId.get(gemma) || fallback;
   const costWarnings = Object.fromEntries(eligible.map(model => [model.id, !!reference &&
-    (priced?estimatedModelCost(model,costProfile)>estimatedModelCost(reference,costProfile)*4:["input_toman_per_million", "output_toman_per_million"].some(key => Number(model[key]) > Number(reference[key]) * 2))]));
+    (priced?estimatedModelCost(model,costProfile(model))>estimatedModelCost(reference,costProfile(reference))*4:["input_toman_per_million", "output_toman_per_million"].some(key => Number(model[key]) > Number(reference[key]) * 2))]));
   return {modelPresets: presets, defaultModel: (priced?economical:undefined)?.id || fallback?.id || null,
-    ...(priced?{economicEstimate:{basis:observed?"recent_usage":"cold_start",samples:profile.samples,costs:Object.fromEntries(eligible.map(model=>[model.id,Math.ceil(estimatedModelCost(model,costProfile))]))}}:{}),
+    ...(priced?{economicEstimate:{basis:observed?"recent_usage":"cold_start",samples:profile.samples,costs:Object.fromEntries(eligible.map(model=>[model.id,Math.ceil(estimatedModelCost(model,costProfile(model)))]))}}:{}),
     workflowModels: recommended ? {planModel: recommended.planModel, buildModel: recommended.buildModel} : null, costWarnings};
 }
