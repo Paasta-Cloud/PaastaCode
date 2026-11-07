@@ -98,8 +98,8 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   let syncWrites=Promise.resolve(),engineModels=null,engineBudgetEnabled=false;
   const persistSync=()=>{const result=syncWrites.then(()=>writePrivate(syncPath,sync));syncWrites=result.catch(()=>{});return result;};
   const ready=async()=>{
-    if(runtime.url)return;
     if(starting)return starting;
+    if(runtime.url)return;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
     starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config={...providerConfig(context.models,account.credentials.aiKey,account.origin,context.economicProfile),...await integrations().config()};runtime.budgetBridge=context.features?.taskBudgets?{url:origin+'/api/engine-budget',capability}:null;if((await deployment.state()).connected)config.mcp.paasta=paastaMcpConfig(workspace);config.instructions=[await knowledge().instruction()];await runtime.start(config,{proxy:(await integrations().read()).proxy});await integrations().cleanPrevious();engineModels=config.provider.paasta.models;engineBudgetEnabled=context.features?.taskBudgets===true;appliedAccess.clear();
       await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version,engineUrl:runtime.url,enginePassword:runtime.password});
