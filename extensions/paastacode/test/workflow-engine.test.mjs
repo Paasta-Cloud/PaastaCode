@@ -34,6 +34,7 @@ test("real engine denies plan writes under Full Access and executes the same pla
     await api("prompt",{id:session.id,text:"Execute",phase:"build",model:"economy",executePlan:true});
     await wait(async()=>{try{return(await readFile(join(workspace,"hello.txt"),"utf8"))==="verified execution";}catch{return false;}});
     assert(requests.every(r=>r.taskId&&r.taskBudget==="50000"),"Every real engine call must carry the same task guard, including planning handoff");
+    assert.equal(new Set(requests.map(r=>r.taskId)).size,1,"Planning and execution must spend the same task budget");
     assert(requests.some(r=>r.model==="economy"&&JSON.stringify(r.messages).includes("PLAN: create hello.txt")),"Executor must receive the professional plan in the same session");
     await wait(async()=>!(await api("status"))[session.id]);
     await rm(join(workspace,"hello.txt"));const automatic=await api("sessions",{});
