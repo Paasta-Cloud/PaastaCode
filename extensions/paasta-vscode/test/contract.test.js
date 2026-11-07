@@ -9,7 +9,7 @@ const readme = fs.readFileSync(path.join(root, "README.md"), "utf8");
 const usage = fs.readFileSync(path.join(root, "USAGE.md"), "utf8");
 const security = fs.readFileSync(path.join(root, "SECURITY.md"), "utf8");
 const commands = new Set(manifest.contributes.commands.map((item) => item.command));
-assert.equal(manifest.version, "0.8.5");
+assert.equal(manifest.version, "0.8.6");
 assert.equal(manifest.contributes.viewsContainers.activitybar.length,1);
 assert(manifest.contributes.views.paasta.some(view=>view.id==='paasta.code'));
 for(const command of ['paastacode.open','paastacode.openEditor','paastacode.billing','paastacode.update'])assert(commands.has(command));
