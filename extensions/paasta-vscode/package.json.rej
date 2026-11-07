@@ -1,0 +1,10 @@
+diff a/extensions/paasta-vscode/package.json b/extensions/paasta-vscode/package.json	(rejected hunks)
+@@ -2,7 +2,7 @@
+   "name": "paasta",
+   "displayName": "Paasta",
+   "description": "Paasta projects, deployment and the complete PaastaCode coding agent in one extension.",
+-  "version": "0.8.5",
++  "version": "0.8.6",
+   "publisher": "paasta-cloud",
+   "license": "UNLICENSED",
+   "repository": {

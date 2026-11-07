@@ -6,7 +6,7 @@ const {startServer}=await import('../src/server.mjs');
 const model=(id,input,output)=>({id,name:id,supported_parameters:['tools'],input_toman_per_million:input,output_toman_per_million:output});
 let catalogue=[model('paasta/qwen3.8-27b',43200,160000),model('paasta/deepseek-v4-flash',26800,53280),model('paasta/gemma-4-31b',43520,119680),model('anthropic/claude-opus',1000000,5000000)];
 const prompts=[],session={id:'ses_economy',title:'بررسی ترکیب مدل‌ها',directory:process.cwd()};
-const account={origin:'https://synthetic.test',credentials:{token:'synthetic',aiKey:'synthetic'},async context(){return {account:{id:'user',tenantId:'tenant'},models:catalogue};}};
+const account={origin:'https://synthetic.test',credentials:{token:'synthetic',aiKey:'synthetic'},async context(){return {account:{id:'user',tenantId:'tenant'},features:{taskBudgets:true},models:catalogue};}};
 const runtime={url:null,async start(){this.url='http://127.0.0.1:1';},async stop(){this.url=null;},async call(path,options={}){
   if(path==='/session')return options.method==='POST'?session:[session];
   if(path==='/session/status')return {};
@@ -38,6 +38,8 @@ try{
   assert.equal(await page.locator('#workflow-phase').inputValue(),'build');
   assert.equal(await page.locator('#model').inputValue(),'paasta/deepseek-v4-flash');
   assert.equal(prompts.length,0);
+  assert(await page.locator('#task-budget-controls').isVisible());
+  await page.locator('#task-budget-limit').fill('75000');
   await page.locator('#model').selectOption('anthropic/claude-opus');
   assert(await page.locator('#model-cost-warning').isVisible());
   assert.equal(await page.locator('#model-preset').inputValue(),'');
@@ -72,6 +74,7 @@ try{
   await page.locator('#prompt').fill('بررسی ساده');await page.locator('#prompt').press('Enter');
   await page.waitForFunction(()=>document.querySelector('#prompt').value==='');
   assert.equal(prompts.length,1);assert.equal(prompts[0].agent,'build');
+  assert.equal(await page.locator('#task-budget-limit').inputValue(),'75000');
   assert.equal(prompts[0].model.modelID,'paasta/deepseek-v4-flash');
   await page.setViewportSize({width:1440,height:1000});await page.reload();await page.locator('[data-session="ses_economy"]').click();
   await page.waitForFunction(()=>document.querySelector('#model').value==='paasta/deepseek-v4-flash');

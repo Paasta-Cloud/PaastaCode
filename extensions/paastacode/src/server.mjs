@@ -1,6 +1,7 @@
 import {relayCloud} from './cloud-relay.mjs';
+import {defaultTaskBudget,taskBudgetLimit} from '../web/task-budget.js';
 import {createServer} from "node:http";
-import {randomBytes,timingSafeEqual,createHash} from "node:crypto";
+import {randomBytes,timingSafeEqual,createHash,randomUUID} from "node:crypto";
 import {readFile,mkdir,rm,realpath,open,stat} from "node:fs/promises";
 import {basename,join,resolve} from "node:path";
 import {fileURLToPath} from "node:url";
@@ -21,7 +22,7 @@ import {WorkspaceIntegrations,integrationName,mcpConfig} from "./integrations.mj
 const here=fileURLToPath(new URL("../",import.meta.url));
 const assets=new Map([["/","index.html"],["/app.js","app.js"],["/workbench.js","workbench.js"],["/updates.js","updates.js"],["/git-ui.js","git-ui.js"],["/components.js","components.js"],["/deployment.js","deployment.js"],["/hosted.js","hosted.js"],["/cloud-actions.js","cloud-actions.js"],["/devices.js","devices.js"],["/sync.js","sync.js"],["/style.css","style.css"],["/fonts/Vazirmatn.woff2","fonts/Vazirmatn.woff2"],["/fonts/Geist.woff2","fonts/Geist.woff2"]]);
 const mime={".webmanifest":"application/manifest+json; charset=utf-8",".png":"image/png",".html":"text/html; charset=utf-8",".js":"text/javascript; charset=utf-8",".css":"text/css; charset=utf-8",".woff2":"font/woff2"};
-assets.set('/model-policy.js','model-policy.js');assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
+assets.set('/task-budget.js','task-budget.js');assets.set('/model-policy.js','model-policy.js');assets.set('/drafts.js','drafts.js');assets.set('/cloud-projects.js','cloud-projects.js');assets.set('/desktop-cloud.js','desktop-cloud.js');
 assets.set('/integrations-ui.js','integrations-ui.js');assets.set('/integrations.css','integrations.css');
 for(const file of ["pwa.js","sw.js","offline.html","offline.css","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/maskable-512.png"])assets.set("/"+file,file);
 assets.set('/task-state.js','task-state.js');
@@ -94,13 +95,13 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   const git=new WorkspaceGit(workspace);
   let accessChanges=Promise.resolve(),permissionPolling=false;
   const appliedAccess=new Map();
-  let syncWrites=Promise.resolve(),engineModels=null;
+  let syncWrites=Promise.resolve(),engineModels=null,engineBudgetEnabled=false;
   const persistSync=()=>{const result=syncWrites.then(()=>writePrivate(syncPath,sync));syncWrites=result.catch(()=>{});return result;};
   const ready=async()=>{
     if(runtime.url)return;
     if(starting)return starting;
     if(!account.credentials?.aiKey)throw new Error("ابتدا با پاستا وارد شوید و سقف مصرف را تأیید کنید.");
-    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config={...providerConfig(context.models,account.credentials.aiKey,account.origin),...await integrations().config()};if((await deployment.state()).connected)config.mcp.paasta=paastaMcpConfig(workspace);config.instructions=[await knowledge().instruction()];await runtime.start(config,{proxy:(await integrations().read()).proxy});await integrations().cleanPrevious();engineModels=config.provider.paasta.models;appliedAccess.clear();
+    starting=(async()=>{context=await account.context();runtime.identity=createHash("sha256").update(accountIdentity()).digest("hex");const config={...providerConfig(context.models,account.credentials.aiKey,account.origin,context.economicProfile),...await integrations().config()};runtime.budgetBridge=context.features?.taskBudgets?{url:origin+'/api/engine-budget',capability}:null;if((await deployment.state()).connected)config.mcp.paasta=paastaMcpConfig(workspace);config.instructions=[await knowledge().instruction()];await runtime.start(config,{proxy:(await integrations().read()).proxy});await integrations().cleanPrevious();engineModels=config.provider.paasta.models;engineBudgetEnabled=context.features?.taskBudgets===true;appliedAccess.clear();
       await writePrivate(statePath,{url:origin,capability,pid:process.pid,workspace,hosted,daemon,runtimeRoot:here,version,engineUrl:runtime.url,enginePassword:runtime.password});
     })();
     try{await starting;}finally{starting=null;}
@@ -109,7 +110,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
   const knowledge=()=>new ProjectKnowledge(workspace,accountIdentity());
   const refreshEngineModels=async(models,required)=>{
     const next=providerConfig(models,"",account.origin).provider.paasta.models;
-    if(required.every(id=>next[id]&&modelCapabilities(next[id])===modelCapabilities(engineModels?.[id])))return true;
+    if(engineBudgetEnabled===(context.features?.taskBudgets===true)&&required.every(id=>next[id]&&modelCapabilities(next[id])===modelCapabilities(engineModels?.[id])))return true;
     if(Object.values(await runtime.call('/session/status')).some(value=>value.type!=='idle'))return false;
     await runtime.stop();await ready();return true;
   };
@@ -239,7 +240,7 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       let error=null;
       if(account.credentials)try{context=await account.context();}catch(caught){context=null;error=caught.message;}
       return json(response,{version,workspace:basename(workspace),connected:!!account.credentials,configured:!!account.credentials?.aiKey,
-        account:context?.account,billingStatus:context?.coding,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),...modelOptions(context?.models||[]),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{projectKnowledge:true,integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
+        account:context?.account,billingStatus:context?.coding,economicProfile:context?.economicProfile,billingUrl:context?billingUrl(account.origin,context.account):null,models:codingModels(context?.models||[]),...modelOptions(context?.models||[],context?.economicProfile),taskBudgetDefault:defaultTaskBudget(context?.coding,context?.economicProfile),dailyLimitToman:account.credentials?.dailyLimitToman,error,accountRevision,accessMode:accessMode(),features:{taskBudgets:context?.features?.taskBudgets===true,projectKnowledge:true,integrations:true,subscriptionUsage:context?.features?.codingUsage===true,promptAttachments:true,conditionalDelete:true,deviceManagement:true,backgroundSync:true,independentRuntime:daemon,workspaceAccess:true,git:true,modelWorkflow:true,automaticWorkflow:true,projectImport:true}});
     }
     if(!cloud&&url.pathname.startsWith('/api/remote/')){
       const result=await relayCloud({account,url,method:request.method,headers:request.headers,body:request.method==='GET'?undefined:await body(request,url.pathname.endsWith('/prompt')?10*1024*1024:1_100_000)});
@@ -386,7 +387,20 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
       const pending=(await runtime.call("/permission")).find(p=>p.id===input.id);if(!pending)throw new Error("درخواست دسترسی دیگر فعال نیست.");
       await owned(pending.sessionID);writable();if(workflow(pending.sessionID).phase==="plan"&&input.reply!=="reject")throw new Error("مرحلهٔ برنامه‌ریزی فقط‌خواندنی است.");return json(response,await runtime.call("/permission/"+encodeURIComponent(input.id)+"/reply",{method:"POST",body:{reply:input.reply}}));
     }
-    if(route==="GET /api/workflow"){const id=url.searchParams.get("id");await owned(id);return json(response,workflow(id));}
+    if(route==='GET /api/engine-budget'){
+      let id=url.searchParams.get('id');
+      for(let depth=0;id&&depth<8;depth++){
+        const session=await owned(id),record=workflow(id);
+        if(record.taskBudget)return json(response,record.taskBudget);
+        id=session.parentID;
+      }
+      return json(response,{});
+    }
+    if(route==="GET /api/workflow"){
+      const id=url.searchParams.get("id");await owned(id);const record=workflow(id);
+      if(record.taskBudget&&account.taskBudget)try{return json(response,{...record,budgetUsage:await account.taskBudget(record.taskBudget.id)});}catch{return json(response,{...record,budgetUnavailable:true});}
+      return json(response,record);
+    }
     if(route==="POST /api/import/preview"){
       const input=await body(request),identity=accountIdentity();
       const preview=await previewImport(workspace,input);
@@ -436,6 +450,12 @@ export async function startServer({workspace=process.cwd(),account,runtime,deplo
         if(phase!=="build"||workflow(input.id).phase!=="plan"||last?.info?.role!=="assistant"||last.info.agent!=="paasta-plan"||!last.info.time?.completed||last.info.error||!last.parts.some(p=>p.type==="text"&&p.text?.trim()))throw new Error("ابتدا برنامه‌ریزی باید با یک پاسخ کامل به پایان برسد.");
       }
       const record=workflow(input.id),next={...record,phase,[phase==="plan"?"planModel":"buildModel"]:input.model,...(phase==="plan"&&input.executionModel?{buildModel:input.executionModel}:{})};
+      if(context.features?.taskBudgets){
+        const previous=(input.restart||input.executePlan)&&record.taskBudget;
+        const limit=taskBudgetLimit(input.budgetToman??previous?.limitToman??defaultTaskBudget(context.coding,context.economicProfile));
+        if(previous&&limit<previous.limitToman)throw new Error('برای ادامهٔ همین تسک، بودجهٔ قبلی را نگه دارید یا افزایش دهید.');
+        next.taskBudget={id:previous?.id||randomUUID(),limitToman:limit};
+      }
       stopRequests.delete(accountIdentity()+":"+input.id);
       delete next.automatic;
       if(input.autoExecute){const previous=await runtime.call("/session/"+input.id+"/message");next.automatic={state:"planning",requestedAt:Date.now(),previousMessage:previous.at(-1)?.info?.id||null};}

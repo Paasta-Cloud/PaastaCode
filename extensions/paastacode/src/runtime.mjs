@@ -18,10 +18,10 @@ export function engineCommand(args,options={}){
   const bin=resolve(dirname(require.resolve("opencode-ai/package.json")),metadata.bin.opencode);
   return spawn(bin,args,{windowsHide:true,...options});
 }
-export function providerConfig(models,key,origin){
+export function providerConfig(models,key,origin,profile){
   const eligible=codingModels(models);
   if(!eligible.length)throw new Error("مدل مناسب کدنویسی در کاتالوگ فعال پاستا پیدا نشد.");
-  const defaultModel=modelOptions(eligible).defaultModel;
+  const defaultModel=modelOptions(eligible,profile).defaultModel;
   return {enabled_providers:["paasta"],model:"paasta/"+defaultModel,small_model:"paasta/"+defaultModel,
     provider:{paasta:{npm:"@ai-sdk/openai-compatible",name:"پاستا",options:{baseURL:origin+"/api/ai/v1",apiKey:key},
       models:Object.fromEntries(eligible.map(m=>[m.id,{name:m.name||m.id,toolcall:true,attachment:m.input_modalities?.some(v=>v==="image"||v==="file")||false,modalities:{input:["text",...(m.input_modalities||[]).filter(v=>["image","pdf"].includes(v)||v==="file").map(v=>v==="file"?"pdf":v)],output:["text"]},
@@ -41,12 +41,14 @@ export class CodeRuntime{
   constructor(workspace){this.workspace=resolve(workspace);this.process=null;this.url=null;this.password=randomBytes(32).toString("base64url");}
   async start(config,{proxy}={}){
     this.workspace=await realpath(this.workspace);
+    if(this.budgetBridge)config={...config,plugin:[...(config.plugin||[]),new URL('./task-budget-plugin.mjs',import.meta.url).href]};
     this.skillPaths=config.skills?.paths||[];
     if(this.skillPaths.length)config={...config,permission:{...config.permission,external_directory:{'*':'deny',...Object.fromEntries(this.skillPaths.flatMap(path=>[[path,'allow'],[path.replaceAll('\\','/')+'/**','allow']]))}}};
     const home=join(stateHome,"engine",this.identity||"local");await mkdir(home,{recursive:true,mode:0o700});
     this.proxy=await startOutboundProxy(proxy,config.provider?.paasta?.options?.baseURL);
     try{this.process=engineCommand(["serve","--hostname","127.0.0.1","--port","0"],{detached:process.platform!=="win32",cwd:this.workspace,stdio:["ignore","pipe","pipe"],env:{
       ...process.env,...this.proxy?.env,XDG_CONFIG_HOME:join(home,"config"),XDG_DATA_HOME:join(home,"data"),XDG_CACHE_HOME:join(home,"cache"),
+      PAASTA_TASK_BUDGET_BRIDGE:this.budgetBridge?.url||"",PAASTA_TASK_BUDGET_CAPABILITY:this.budgetBridge?.capability||"",
       OPENCODE_SERVER_PASSWORD:this.password,OPENCODE_CONFIG_CONTENT:JSON.stringify(config),
       OPENCODE_DISABLE_PROJECT_CONFIG:"true",OPENCODE_DISABLE_CLAUDE_CODE:"true",OPENCODE_DISABLE_AUTOUPDATE:"true"}});}catch{await this.stop();throw new Error("موتور کدنویسی شروع نشد.");}
     const engineProcess=this.process;

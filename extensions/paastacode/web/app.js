@@ -1,3 +1,4 @@
+import {taskBudgetLimit} from './task-budget.js';
 import {modelOptions,prioritizeDomesticModels} from "./model-policy.js";
 import {enhanceSelects,promptInput,labelDialog,icon} from "./components.js";
 import {deploymentUI} from "./deployment.js";
@@ -122,7 +123,13 @@ async function loadWorkflow(){
   if(!session||!state.features?.modelWorkflow)return;
   const id=session.id,value=await api("workflow?id="+encodeURIComponent(id));if(session?.id!==id||promptPending)return;
   if(workflowSession===id&&JSON.stringify(currentWorkflow)===JSON.stringify(value))return;
-  currentWorkflow=value;workflowSession=id;$("workflow-phase").value=state.features?.automaticWorkflow&&(value.automatic||state.workflowModels&&!value.planModel&&!value.buildModel)?"auto":value.phase;
+  currentWorkflow=value;workflowSession=id;
+  if(state.features?.taskBudgets){
+    const usage=value.budgetUsage,budget=value.taskBudget;
+    if(budget){const input=$('task-budget-limit');if(!input.matches(':focus')&&(input.dataset.task!==budget.id||input.value===input.dataset.received))input.value=String(budget.limitToman);input.dataset.task=budget.id;input.dataset.received=String(budget.limitToman);}
+    $('task-budget-status').textContent=value.budgetUnavailable?'وضعیت بودجه دریافت نشد؛ هزینه را پیش از ادامه دوباره بررسی کنید.':usage?.started?'مصرف قطعی: '+Math.max(0,usage.usedToman-usage.reservedToman).toLocaleString('fa-IR')+' تومان · رزرو / در انتظار تسویه: '+usage.reservedToman.toLocaleString('fa-IR')+' تومان':'';
+  }
+$("workflow-phase").value=state.features?.automaticWorkflow&&(value.automatic||state.workflowModels&&!value.planModel&&!value.buildModel)?"auto":value.phase;
   const selected=$("workflow-phase").value==="auto"?value.planModel:value.phase==="plan"?value.planModel:value.buildModel;
   if(state.models?.some(m=>m.id===selected))$("model").value=selected;
   else if(selected){$("model").value="";$("model").dataset.unavailable=selected;notice("مدل قبلی دیگر در پاستاکد قابل استفاده نیست. برای ادامه، یک مدل پولی انتخاب کنید؛ قیمت آن کنار ورودی آمده است.");}
@@ -163,6 +170,8 @@ function presetView(){
   $("preset-description").textContent=preset?.description||"مدل‌ها را خودتان انتخاب کنید؛ انتخاب ترکیب، درخواست تازه‌ای ارسال نمی‌کند.";
   const ids=phase==="auto"?[$("model").value,$("execution-model").value]:[$("model").value];
   $("model-cost-warning").hidden=!ids.some(id=>state.costWarnings?.[id]);
+  const quote=state.economicEstimate?.costs[$('model').value];
+  if($('economic-estimate'))$('economic-estimate').textContent=Number.isFinite(quote)?(state.economicEstimate?.basis==='recent_usage'?'برآورد هر فراخوانی با الگوی مصرف اخیر: ':'برآورد شروع بدون کش: ')+quote.toLocaleString('fa-IR')+' تومان؛ کش مدل تازه تضمین‌شده نیست.':'';
 }
 $("model-preset").onchange=()=>{
   if(sending||promptPending)return;
@@ -188,12 +197,12 @@ setInterval(()=>void refreshQuota(),15000);
 async function loadState(){
   state=await api("state");
   state.models=prioritizeDomesticModels(state.models||[]);
-  Object.assign(state,modelOptions(state.models||[]));
+  Object.assign(state,modelOptions(state.models||[],state.economicProfile));
   $("knowledge-open").disabled=!state.configured||!state.features?.projectKnowledge;
   $("knowledge-open").title=state.configured&&!state.features?.projectKnowledge?"برای دانش پروژه، اجرای فضای کار را به نسخهٔ جدید ارتقا دهید.":"دانش ماندگار همین پروژه";
   $("integrations-open").disabled=!state.configured||!state.features?.integrations;
   $("integrations-open").title=state.configured&&!state.features?.integrations?'پس از پایان کار، اجرای پروژه را به نسخهٔ جدید پاستاکد ارتقا دهید.':'';
-  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');state.models=prioritizeDomesticModels(state.models||[]);Object.assign(state,modelOptions(state.models||[]));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
+  if(state.connected&&!state.configured&&state.billingStatus?.active&&state.billingStatus.mode==='subscription'&&state.billingStatus.canConnectWithoutLimit){notice('اشتراک فعال است؛ در حال آماده‌سازی پروژه…');try{await api('connect','POST',{});state=await api('state');state.models=prioritizeDomesticModels(state.models||[]);Object.assign(state,modelOptions(state.models||[],state.economicProfile));notice('');}catch(error){if(!error.stale)notice(error.message,true);}}
   void refreshQuota();$("workspace-name").textContent=runtimeConnection?.kind==="cloud"?runtimeConnection.name:state.workspace;$("workspace-name").dir=runtimeConnection?.kind==="cloud"?"auto":"ltr";
   $("attach").hidden=!state.features?.promptAttachments;
   $("workflow-controls").hidden=!state.features?.modelWorkflow;$("import-open").hidden=!state.features?.projectImport;$("import-open").disabled=!state.configured;
@@ -210,6 +219,8 @@ async function loadState(){
   $("budget-form").hidden=!state.connected||state.configured||!!state.billingStatus;
   const onboarding=state.connected&&!state.configured&&!!state.billingStatus;$('subscription-onboarding').hidden=!onboarding;
   if(onboarding){for(const id of ['subscription-buy','subscription-wallet'])$(id).href=state.billingUrl;$('subscription-continue').hidden=!state.billingStatus.canConnectWithoutLimit;$('subscription-buy').hidden=!!state.billingStatus.canConnectWithoutLimit;$('subscription-heading').textContent=state.billingStatus.active?'اشتراک شما آماده است':'با اشتراک کدنویسی شروع کنید';$('subscription-description').textContent=state.billingStatus.mode==='paused'?'مصرف حساب متوقف است. برای ادامه، روش مصرف را در حساب پاستا انتخاب کنید.':'اشتراک و سهمیهٔ شما بین پاستاکد و ابزارهای کدنویسی مشترک است.';}
+  if($('task-budget-controls'))$('task-budget-controls').hidden=!state.features?.taskBudgets;
+  if(state.features?.taskBudgets&&!$('task-budget-limit').value)$('task-budget-limit').value=String(state.taskBudgetDefault||50000);
   $("onboarding").hidden=state.configured;$("conversation").hidden=!state.configured;$("composer").hidden=!state.configured;
   document.querySelector(".thread-heading").hidden=!state.configured;
   $("project-home").disabled=!state.configured;$("new").disabled=!state.configured;$("cloud-tab").disabled=!state.connected;
@@ -382,7 +393,7 @@ function submitPrompt(extra={}){
   renderAttachments();
   run($("send"),async()=>{
     if(!session)session=await api("sessions","POST");
-    const result=await api("prompt","POST",{id:session.id,text:extra.restart||extra.executePlan?"ادامهٔ درخواست":text.trim()?text:"پیوست‌ها را بررسی کن.",attachments:extra.restart||extra.executePlan?[]:attachments.map(({name,data})=>({name,data})),model:selection.model,...(state.features?.modelWorkflow?{phase:selection.phase,executionModel:selection.executionModel,...(state.features.automaticWorkflow?{autoExecute:automatic&&selection.phase==="plan"}:{})}:{}),...extra});
+    const result=await api("prompt","POST",{id:session.id,text:extra.restart||extra.executePlan?"ادامهٔ درخواست":text.trim()?text:"پیوست‌ها را بررسی کن.",attachments:extra.restart||extra.executePlan?[]:attachments.map(({name,data})=>({name,data})),model:selection.model,...(state.features?.taskBudgets?{budgetToman:taskBudgetLimit($('task-budget-limit').value)}:{}),...(state.features?.modelWorkflow?{phase:selection.phase,executionModel:selection.executionModel,...(state.features.automaticWorkflow?{autoExecute:automatic&&selection.phase==="plan"}:{})}:{}),...extra});
     if(result.workflow){currentWorkflow=result.workflow;workflowSession=session.id;$("workflow-phase").value=currentWorkflow.automatic?"auto":currentWorkflow.phase;if(extra.executePlan){$("workflow-phase").value="build";$("model").value=currentWorkflow.buildModel;price();}}
     accepted=true;
     if(!extra.restart&&!extra.executePlan){$("prompt").value="";clearAttachments();resizePrompt();}notice("");await sessions();

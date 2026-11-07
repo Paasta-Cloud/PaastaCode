@@ -88,6 +88,7 @@ jobs:
           node test/workbench-browser.mjs
           node test/background-activity-browser.mjs
           node test/redesign-browser.mjs
+          node test/model-presets-browser.mjs
           node test/workflow-browser.mjs
           node test/composer-browser.mjs
           node test/billing-browser.mjs

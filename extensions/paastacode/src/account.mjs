@@ -99,6 +99,11 @@ export class PaastaAccount {
     await writePrivate(this.path,this.credentials);
     return {dailyLimitToman:result.dailyLimitToman};
   }
+  async taskBudget(id){
+    const response=await fetch(new URL('/api/coding/task-budget?id='+encodeURIComponent(id),this.origin),{headers:{Authorization:'Bearer '+this.credentials.aiKey},signal:AbortSignal.timeout(10000)});
+    if(!response.ok)throw new Error('وضعیت بودجهٔ تسک دریافت نشد.');
+    return response.json();
+  }
   async context(){return this.request("/api/paastacode/connection");}
   async identity(){return this.request("/api/paastacode/identity");}
   async logout(){

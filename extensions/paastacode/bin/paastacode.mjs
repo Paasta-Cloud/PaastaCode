@@ -33,7 +33,7 @@ async function main(){
   if(["version","--version","-v"].includes(command)){console.log("PaastaCode "+version);return;}
   if(command==="mcp"){await import("./mcp.mjs");return;}
   if(["help","--help","-h"].includes(command)){
-    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode knowledge [--file=MARKDOWN] [--export=PATH] [--workspace=PATH]\n  paastacode review [--path=FILE] [--session=ID] [--workspace=PATH]\n  paastacode tools [--file=PATH|--skill=DIR|--browser=on|off|--auth=NAME|--install-browser]\n  paastacode billing [--check]\n  paastacode ask --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
+    console.log("PaastaCode "+version+" / پاستاکد\nPowered by OpenCode · MIT\nOpen-source fork: https://github.com/Paasta-Cloud/PaastaCode\n\n  paastacode web [--workspace=PATH] [--hosted] [--no-open]\n  paastacode login [--daily-limit=TOMAN]\n  paastacode cli [--workspace=PATH]\n  paastacode models\n  paastacode knowledge [--file=MARKDOWN] [--export=PATH] [--workspace=PATH]\n  paastacode review [--path=FILE] [--session=ID] [--workspace=PATH]\n  paastacode tools [--file=PATH|--skill=DIR|--browser=on|off|--auth=NAME|--install-browser]\n  paastacode billing [--check]\n  paastacode ask --budget=50000 --model=ID --text=TEXT [--phase=plan] [--auto] [--execution-model=ID] [--session=ID] [--restart|--execute-plan]\n  paastacode import --source=codex|claude|cursor [--file=PATH] [--no-rules] [--apply] [--workspace=PATH]\n  paastacode deploy-login\n  paastacode deploy [--name=NAME] [--plan=ID] [--region=ID]\n  paastacode mcp [--workspace=PATH]\n  paastacode stop [--workspace=PATH]\n  paastacode logout\n  paastacode update [--check]\n  paastacode --version\n\nورود و مدل‌ها از حساب پاستا؛ وب و CLI برای پوشهٔ یکسان یک موتور مشترک دارند.");return;
   }
   const workspace=await realpath(resolve(args.find(a=>a.startsWith("--workspace="))?.slice(12)||process.cwd()));
   const account=await new PaastaAccount().load();
@@ -85,11 +85,11 @@ async function main(){
     for(const path of paths){const info=await stat(path);attachmentBytes+=info.size;if(!info.isFile()||info.size>4*1024*1024||attachmentBytes>6*1024*1024)throw new Error("هر فایل حداکثر ۴ مگابایت و مجموع پیوست‌ها حداکثر ۶ مگابایت است.");attachments.push({name:basename(path),data:(await readFile(path)).toString("base64")});}
     const presetId=value("preset");
     if(presetId&&["model","execution-model","phase"].some(valueName=>value(valueName))||presetId&&["--auto","--restart","--execute-plan"].some(flag=>args.includes(flag)))throw new Error("ترکیب پیشنهادی را به‌تنهایی انتخاب کنید؛ با تنظیم دستی مدل یا ادامهٔ اجرا ترکیب نمی‌شود.");
-    const preset=presetId?modelOptions((await api("state")).models).modelPresets.find(p=>p.id===presetId):null;
+    const preset=presetId?(await api("state")).modelPresets.find(p=>p.id===presetId):null;
     if(presetId&&!preset)throw new Error("این ترکیب اکنون در دسترس نیست؛ paastacode models --presets را بررسی کنید.");
     if(!preset&&!value("model")||(!value("text")&&!attachments.length&&!args.includes("--restart")&&!args.includes("--execute-plan")))throw new Error("مدل و متن درخواست را مشخص کنید؛ paastacode help را ببینید.");
     const id=value("session")||(await api("sessions",{})).id;
-    const result=await api("prompt",{id,text:value("text")||(attachments.length?"پیوست‌ها را بررسی کن.":"ادامهٔ درخواست"),attachments,model:preset?(preset.phase==="auto"?preset.planModel:preset.buildModel):value("model"),phase:preset?(preset.phase==="auto"?"plan":"build"):args.includes("--auto")?"plan":value("phase")||"build",executionModel:preset?.phase==="auto"?preset.buildModel:value("execution-model"),autoExecute:preset?preset.phase==="auto":args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
+    const result=await api("prompt",{id,...(value("budget")!==undefined?{budgetToman:Number(value("budget"))}:{}),text:value("text")||(attachments.length?"پیوست‌ها را بررسی کن.":"ادامهٔ درخواست"),attachments,model:preset?(preset.phase==="auto"?preset.planModel:preset.buildModel):value("model"),phase:preset?(preset.phase==="auto"?"plan":"build"):args.includes("--auto")?"plan":value("phase")||"build",executionModel:preset?.phase==="auto"?preset.buildModel:value("execution-model"),autoExecute:preset?preset.phase==="auto":args.includes("--auto"),restart:args.includes("--restart"),executePlan:args.includes("--execute-plan")});
     console.log("درخواست پذیرفته شد: "+id+" · "+result.workflow.phase+"\nبرای مشاهدهٔ خروجی: paastacode cli یا paastacode web");return;
   }
   if(command==="login"){
@@ -110,7 +110,7 @@ async function main(){
   }
   if(command==="models"){
     const context=await account.context();
-    if(args.includes("--presets")){for(const p of modelOptions(context.models).modelPresets)console.log(p.id+" · "+p.title+"\n"+p.planModel+" → "+p.buildModel+"\n"+p.description+"\npaastacode ask --preset="+p.id+' --text="درخواست شما"');return;}
+    if(args.includes("--presets")){for(const p of modelOptions(context.models,context.economicProfile).modelPresets)console.log(p.id+" · "+p.title+"\n"+p.planModel+" → "+p.buildModel+"\n"+p.description+"\npaastacode ask --preset="+p.id+' --text="درخواست شما"');return;}
     for(const model of codingModels(context.models))console.log(model.id+" · "+model.name+" · "+Number(model.input_toman_per_million).toLocaleString("fa-IR")+" / "+Number(model.output_toman_per_million).toLocaleString("fa-IR")+" تومان برای هر میلیون توکن ورودی / خروجی");return;
   }
   if(command==="deploy-login"){

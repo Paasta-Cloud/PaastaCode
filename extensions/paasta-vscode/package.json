@@ -1,0 +1,353 @@
+{
+  "name": "paasta",
+  "displayName": "Paasta",
+  "description": "Paasta projects, deployment and the complete PaastaCode coding agent in one extension.",
+  "version": "0.8.6",
+  "publisher": "paasta-cloud",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Paasta-Cloud/paasta.git",
+    "directory": "extensions/paasta-vscode"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "paasta",
+    "deploy",
+    "paas",
+    "cloud",
+    "ai",
+    "coding-agent"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:paasta.actions",
+    "onView:paasta.account",
+    "onView:paasta.projects",
+    "onCommand:paastacode.open",
+    "onCommand:paastacode.update",
+    "onCommand:paastacode.billing",
+    "onView:paasta.code",
+    "onCommand:paastacode.openEditor",
+    "onUri",
+    "onCommand:paasta.tools.manage"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "paasta.openProject",
+        "title": "Paasta: بازکردن پروژه در محیط آنلاین",
+        "icon": "$(folder-opened)",
+        "enablement": "paasta.hosted"
+      },
+      {
+        "command": "paasta.importProject",
+        "title": "Paasta: دریافت سورس پروژه",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "paasta.publishGit",
+        "title": "Paasta: انتقال پروژه به Git",
+        "icon": "$(repo-push)"
+      },
+      {
+        "command": "paasta.signIn",
+        "title": "Paasta: ورود امن"
+      },
+      {
+        "command": "paasta.signOut",
+        "title": "Paasta: خروج"
+      },
+      {
+        "command": "paasta.openView",
+        "title": "Paasta: بازکردن پنل پاستا",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "paasta.refreshProjects",
+        "title": "Paasta: تازه‌سازی پروژه‌ها",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "paasta.deployWorkspace",
+        "title": "Paasta: استقرار پوشه فعلی"
+      },
+      {
+        "command": "paasta.previewCost",
+        "title": "Paasta: بررسی هزینه استقرار"
+      },
+      {
+        "command": "paasta.showStatus",
+        "title": "Paasta: وضعیت پروژه"
+      },
+      {
+        "command": "paasta.showLogs",
+        "title": "Paasta: مشاهده لاگ پروژه"
+      },
+      {
+        "command": "paasta.rollback",
+        "title": "Paasta: بازگردانی نسخه"
+      },
+      {
+        "command": "paasta.openConsole",
+        "title": "Paasta: بازکردن کنسول"
+      },
+      {
+        "command": "paasta.code.ask",
+        "title": "Paasta Code: ساخت یا تغییر پروژه با AI",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "paasta.code.openChat",
+        "title": "Paasta Code: بازکردن چت",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "paasta.code.selectModel",
+        "title": "Paasta Code: انتخاب مدل"
+      },
+      {
+        "command": "paastacode.open",
+        "title": "PaastaCode: باز کردن پاستاکد",
+        "icon": "media/paasta-mark.svg"
+      },
+      {
+        "command": "paastacode.update",
+        "title": "PaastaCode: بررسی و نصب به‌روزرسانی",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "paastacode.billing",
+        "title": "PaastaCode: مدیریت اشتراک و مصرف",
+        "icon": "$(credit-card)"
+      },
+      {
+        "command": "paastacode.openEditor",
+        "title": "PaastaCode: باز کردن در تب ویرایشگر",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "paasta.tools.manage",
+        "title": "Paasta: مدیریت Claude Code و Codex"
+      },
+      {
+        "command": "paasta.tools.status",
+        "title": "Paasta: وضعیت از مدیر ابزارها"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "paasta",
+          "title": "پاستا",
+          "icon": "media/paasta-mark.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "paasta-online",
+          "title": "پاستا",
+          "icon": "media/paasta-mark.svg"
+        }
+      ]
+    },
+    "views": {
+      "paasta": [
+        {
+          "id": "paasta.actions",
+          "name": "شروع",
+          "type": "webview",
+          "order": 1,
+          "initialSize": 10,
+          "visibility": "collapsed"
+        },
+        {
+          "id": "paasta.account",
+          "name": "حساب پاستا",
+          "order": 2,
+          "initialSize": 10,
+          "visibility": "collapsed"
+        },
+        {
+          "id": "paasta.projects",
+          "name": "پروژه‌ها",
+          "order": 3,
+          "initialSize": 10,
+          "visibility": "collapsed"
+        },
+        {
+          "id": "paasta.code",
+          "name": "پاستاکد",
+          "icon": "media/paasta-mark.svg",
+          "contextualTitle": "PaastaCode",
+          "type": "webview",
+          "order": 4,
+          "when": "!paasta.legacyExtension",
+          "initialSize": 80
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "paasta.account",
+        "contents": "برای ساخت با AI، مشاهده پروژه‌ها و مدیریت استقرارها، افزونه را به حساب پاستا وصل کنید.\n[ورود امن با مرورگر](command:paasta.signIn)\n[راهنمای ورود](https://paasta.cloud/docs/vscode#login)",
+        "when": "!paasta.signedIn"
+      },
+      {
+        "view": "paasta.projects",
+        "contents": "پروژه‌های فضای کاری فعال شما بعد از ورود اینجا نمایش داده می‌شوند.\n[ورود امن](command:paasta.signIn)",
+        "when": "!paasta.signedIn"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "paasta.gettingStarted",
+        "title": "شروع با پاستا",
+        "description": "حساب را وصل کنید، پوشه فعلی را منتشر کنید یا در یک چت مستقل با Paasta Code توسعه دهید.",
+        "steps": [
+          {
+            "id": "open",
+            "title": "پنل پاستا را باز کنید",
+            "description": "آیکن پاستا در Activity Bar همیشه در دسترس است.\n[بازکردن پنل](command:paasta.openView)",
+            "media": {
+              "markdown": "walkthrough/open.md"
+            },
+            "completionEvents": [
+              "onCommand:paasta.openView"
+            ]
+          },
+          {
+            "id": "login",
+            "title": "با مرورگر وارد شوید",
+            "description": "Token در SecretStorage خود VS Code نگه‌داری می‌شود.\n[ورود امن](command:paasta.signIn)",
+            "media": {
+              "markdown": "walkthrough/login.md"
+            },
+            "completionEvents": [
+              "onContext:paasta.signedIn"
+            ]
+          },
+          {
+            "id": "deploy",
+            "title": "پوشه فعلی را منتشر کنید",
+            "description": "پوشه پروژه را باز و از دکمه اصلی پنل پاستا مستقیم منتشر کنید. هزینه قبل از تأیید نمایش داده می‌شود.\n[انتشار روی پاستا](command:paasta.deployWorkspace)",
+            "media": {
+              "markdown": "walkthrough/deploy.md"
+            },
+            "completionEvents": [
+              "onCommand:paasta.deployWorkspace"
+            ]
+          },
+          {
+            "id": "build",
+            "title": "در چت Paasta Code توسعه دهید",
+            "description": "چت را در یک تب مستقل باز کنید، درخواستتان را بنویسید و Diff فایل‌ها را قبل از اعمال ببینید.\n[بازکردن Paasta Code](command:paasta.code.openChat)",
+            "media": {
+              "markdown": "walkthrough/build.md"
+            },
+            "completionEvents": [
+              "onCommand:paasta.code.openChat"
+            ]
+          }
+        ]
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "paasta.signOut",
+          "when": "view == paasta.account && paasta.signedIn && !paasta.hosted",
+          "group": "navigation"
+        },
+        {
+          "command": "paasta.refreshProjects",
+          "when": "view == paasta.projects",
+          "group": "navigation"
+        },
+        {
+          "command": "paastacode.openEditor",
+          "when": "view == paasta.code",
+          "group": "navigation"
+        },
+        {
+          "command": "paastacode.billing",
+          "when": "view == paasta.code",
+          "group": "paastacode@1"
+        },
+        {
+          "command": "paastacode.update",
+          "when": "view == paasta.code",
+          "group": "paastacode@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "paasta.showStatus",
+          "when": "view == paasta.projects && viewItem == paastaProject",
+          "group": "inline@1"
+        },
+        {
+          "command": "paasta.showLogs",
+          "when": "view == paasta.projects && viewItem == paastaProject",
+          "group": "inline@2"
+        },
+        {
+          "command": "paasta.rollback",
+          "when": "view == paasta.projects && viewItem == paastaProject",
+          "group": "paasta@3"
+        },
+        {
+          "command": "paasta.openConsole",
+          "when": "view == paasta.projects && viewItem == paastaProject",
+          "group": "paasta@4"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "paastacode.open",
+          "when": "workspaceFolderCount > 0",
+          "group": "navigation@99"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Paasta",
+      "properties": {
+        "paasta.server": {
+          "type": "string",
+          "scope": "application",
+          "default": "https://paasta.cloud",
+          "description": "نشانی کنسول پاستا. برای محیط توسعه قابل تغییر است."
+        },
+        "paasta.cliPath": {
+          "type": "string",
+          "scope": "application",
+          "default": "paasta",
+          "description": "مسیر فایل اجرایی Paasta CLI."
+        },
+        "paastacode.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "بررسی و نصب خودکار به‌روزرسانی افزونه از انتشار رسمی پاستا",
+          "scope": "machine"
+        },
+        "paastacode.clientPath": {
+          "type": "string",
+          "default": "",
+          "description": "مسیر کامل bin/paastacode.mjs از نسخهٔ نصب‌شدهٔ پاستاکد",
+          "scope": "machine"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test": "node test/contract.test.js && node test/project-workspace.test.mjs && node test/coding-tools.test.mjs"
+  }
+}

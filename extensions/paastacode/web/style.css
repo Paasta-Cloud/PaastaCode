@@ -163,3 +163,5 @@ html[data-mobile-app=true] .hosted-foot{display:none}
 .conversation:has(#project-tasks:not([hidden])) .empty h1{font-size:24px;margin-bottom:8px}
 .conversation:has(#project-tasks:not([hidden])) .empty p{font-size:13px;margin:8px 0}
 .conversation:has(#project-tasks:not([hidden])) .suggestions{margin-top:12px}
+
+.task-budget-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border,#45464b)}.task-budget-controls[hidden]{display:none}.task-budget-controls input{width:132px;max-width:100%;min-height:36px;font:inherit;background:var(--surface);color:inherit;border:1px solid var(--border,#45464b);border-radius:8px;padding:6px 8px}.task-budget-controls small{flex-basis:100%;color:var(--muted)}.task-budget-controls [role=status]{flex-basis:100%;overflow-wrap:anywhere}
